@@ -38,6 +38,24 @@ fn warm_test_targets_are_reused() {
     common::run(repo.agent_cargo("a").args(["test", "--workspace", "-q"])).ok();
 }
 
+/// macOS's default worktree directory (under `~/Library/Application
+/// Support`) contains a space; the harness's own `FERRY_HOME` never does.
+#[test]
+fn spawn_and_build_in_a_worktree_path_with_spaces() {
+    let repo = TestRepo::new();
+    repo.base();
+    let parent = repo.scratch().join("Application Support/wt");
+    let mut spawn = repo.ferry_cmd(["--json", "spawn", "a"]);
+    spawn.env("FERRY_WORKTREES", &parent);
+    let worktree = path_of(&common::run(&mut spawn).ok().json()["agent"]["worktree"]);
+    assert!(worktree.starts_with(&parent), "{}", worktree.display());
+    repo.build("a").assert_rebuilt(&[]);
+    repo.set_marker(&worktree, "EDITED");
+    repo.build("a").assert_rebuilt(&["leaf", "mid", "app"]);
+    assert_eq!(repo.app("a").marker, "EDITED");
+    common::run(repo.agent_cargo("a").args(["test", "--workspace", "-q"])).ok();
+}
+
 #[test]
 fn spawn_honours_path_and_branch_and_run_finds_the_agent_from_its_cwd() {
     let repo = TestRepo::new();
