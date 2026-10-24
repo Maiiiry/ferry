@@ -12,7 +12,7 @@ A quick manual check (it should print nothing and exit 0):
 unshare --user --map-root-user --mount true
 ```
 
-When they do not work, Ferry builds at host paths (dependency reuse only) and
+When they do not work, Ferry builds at host paths (crate-level reuse only) and
 `ferry base` warns:
 
 ```text
@@ -40,8 +40,9 @@ it in a file under `/etc/sysctl.d/`. Check your organisation's policy first:
 these settings exist to reduce the kernel attack surface.
 
 If you cannot or do not want to change the system, set `sandbox = "off"` (or
-`FERRY_SANDBOX=off`). Everything still works, with dependency reuse: the
-workspace's own crates rebuild once after spawn.
+`FERRY_SANDBOX=off`). Everything still works, with crate-level reuse: only
+crates that captured the base's absolute paths rebuild after spawn, and the
+first edit gets no incremental reuse.
 
 ### Containers
 
@@ -314,12 +315,15 @@ base keep that base alive.
   starts from a different commit than its base (`--from`), so crates using the
   changed files rebuild on the first build. Run `ferry base --rev <commit>` to
   have a base at that commit.
-- **The workspace's own crates rebuild after a spawn without the namespace
-  sandbox.** The agent builds at other absolute paths than its base, and any
-  local crate may have captured the base's (a build script writing
-  `CARGO_MANIFEST_DIR` into generated code, a proc macro reading it), so Ferry
-  makes them all rebuild once. Dependencies stay reused. Fix the namespace
-  sandbox (`ferry doctor`) to avoid it.
+- **`warning: N build units captured the base's absolute paths ...`** at a
+  spawn without the namespace sandbox. The agent builds at other absolute
+  paths than its base, and those crates recorded the base's: library code
+  reading `env!("CARGO_MANIFEST_DIR")`, a build script writing it into
+  generated code or a `rustc-env` value, users of a proc macro that reads it,
+  tests using `env!("CARGO_BIN_EXE_...")`. They rebuild once, with whatever
+  depends on them; everything else stays reused. Fix the namespace sandbox
+  (`ferry doctor`) to avoid it, or stop baking the path in (read it at run
+  time, or make it relative).
 - **A refresh is a cold build after a manifest change.** `ferry base` seeds
   only from a base whose `Cargo.toml`s, `Cargo.lock`s, Cargo configs,
   toolchain files and `RUSTFLAGS`-style variables are identical: a seeded

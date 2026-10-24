@@ -148,6 +148,7 @@ dependencies = [
  "anyhow",
  "clap",
  "libc",
+ "memchr",
  "rustix",
  "serde",
  "serde_json",

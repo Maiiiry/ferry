@@ -88,7 +88,8 @@ src/
   lock.rs        flock(2) wrapper
   fsutil.rs      atomic JSON writes, disk usage, forced removal
   toolchain.rs   rustc/cargo version detection per worktree
-  freshness.rs   stamping plan + application, freshness mode, relocation fixups
+  freshness.rs   stamping plan + application, freshness mode; relocation.rs:
+                 what a fork built at other paths must rebuild
   base.rs        build / list / gc of immutable bases
   agent.rs       spawn / rm / list / env, session and cargo exec, reaping
   shim.rs        the cargo shim (PATH entry → per-call agent resolution)
@@ -119,6 +120,7 @@ relative to what the base was built from.
     mnt/src  mnt/target            canonical mountpoints (empty on the host)
     bases/<commit>-<fp>/           immutable once base.json exists
       base.json  src/  target/
+      relocation.json              built without the sandbox: what forks remove from target/
     bases/<commit>-<fp>.lock
     agents/<name>/
       agent.json  lock
@@ -149,8 +151,9 @@ needs one writable-root entry for it plus the worktree (its working directory).
 3. `git worktree add --detach` the checkout and `git worktree lock` it. If a
    ready base with the same fingerprint and unit inputs exists at another
    commit (and `--cold` is not given), seed from it: clone its target (reflink
-   when possible) and stamp only files proven identical to its checkout,
-   exactly as for an agent, so the warm build only rebuilds what changed.
+   when possible), relocate the clone without the sandbox (see below), and
+   stamp only files proven identical to its checkout, exactly as for an
+   agent, so the warm build only rebuilds what changed.
    Otherwise stamp all tracked files and directories (the base is the
    reference, nothing to compare).
 4. Enter the sandbox (irreversible for this process; host paths stay
@@ -161,8 +164,9 @@ needs one writable-root entry for it plus the worktree (its working directory).
    and is recorded in `incomplete`. Clippy commands are left out (before the
    base id is computed) when `cargo clippy --version` fails.
 5. Record files the build wrote into the source tree (build scripts writing
-   outside `OUT_DIR`) as warnings; write `base.json`; set `current` before
-   releasing the base lock.
+   outside `OUT_DIR`) as warnings; without the sandbox, compute the
+   relocation plan and write `relocation.json` (see below); write
+   `base.json`; set `current` before releasing the base lock.
 
 ### `ferry spawn NAME [--from REF] [--path DIR] [--branch B]`
 
@@ -175,7 +179,7 @@ needs one writable-root entry for it plus the worktree (its working directory).
    (invariant 1), stamp, raise the mtimes of what was not stamped,
    `git update-index --refresh`.
 3. Select the backend, fork the base target, and when the agent runs without
-   the namespace sandbox, invalidate its local units (see below). Write
+   the namespace sandbox, apply the base's relocation plan (see below). Write
    `state: ready`. A failure rolls back only what this spawn created: the
    worktree if it added it, the branch if it still points at the starting
    commit, and the agent dir.
@@ -291,19 +295,94 @@ Without namespaces (macOS; Linux with `sandbox = off` or where user
 namespaces are blocked) builds run at host paths, and the first edit pays for
 rustc's incremental state being keyed on absolute paths. Cargo's own unit
 hashes survive the move (it hashes path packages relative to the workspace
-root), but units can capture the base's absolute *source* paths, and
-not always where Cargo looks: `env!("CARGO_MANIFEST_DIR")`, workspace-relative
-`include_str!` on Cargo <= 1.100 and absolute `rerun-if-changed` paths show up
-in dep-info, but a build script that writes its manifest dir into generated
-code, or a proc macro that reads it from the environment (the `rust-embed`
-and `include_dir` pattern), leaves no trace. Such a unit would stay "fresh"
-while pointing at the base. So spawn deletes the fork's fingerprints of every
-unit of every local package (those without a `source` in `Cargo.lock`), plus
-any other unit whose dep-info names the base's source root, and drops the
-nested workspaces' target dirs; registry and git dependencies keep their
-reuse. Captured `OUT_DIR` paths are left alone: they point into the base's
-immutable target dir, which outlives the agent. A seeded base refresh
-without the namespace does the same against its seed.
+root), but a unit can capture the base's absolute paths where Cargo never
+looks again: a build script writing its manifest dir into generated code or
+a `rustc-env` value, a proc macro reading it from the environment (the
+`rust-embed` pattern), a test that bakes in `env!("CARGO_BIN_EXE_app")`. Such
+a unit would stay "fresh" while pointing at the base. So the fork gets a
+*relocation plan* (`freshness::plan_relocation`): it keeps every unit unless
+something recorded in the target shows an old path, and removes the rest.
+
+| Rule | Reads | Flags a unit when |
+|---|---|---|
+| R1 | its `dep-*` and fingerprint JSON | they name any old path (a workspace file outside the package on Cargo <= 1.100, an absolute `rerun-if-changed`, the base checkout's git dir) |
+| R2 | rustc's dep-info | an `env!` value or an absolute input names a checkout path (a vendored crate, or a path package outside the workspace root, rebuilds anyway, because Cargo hashes its absolute source path) |
+| R3 | `env!` values in rustc's dep-info | one names a target path that is not exempt (`CARGO_BIN_EXE_*`, `CARGO_TARGET_TMPDIR`, a profile dir) |
+| R4 | a build script's directives | they name an old path other than its own `OUT_DIR` spelled as in `root-output`, the string Cargo rewrites when it replays them; or a link argument (an rpath) names a dead `OUT_DIR`, which the linker already baked into the package's binaries |
+| R5 | every file and symlink in an `OUT_DIR` | one names an old path that is not exempt, or cannot be read |
+| R6 | generated files outside `OUT_DIR`s that a compile included | one names an old path that is not exempt |
+| R7 | proc-macro libraries, local macros' sources | it can invoke a proc macro that may read a path from the environment |
+
+Old paths are found with one needle per root, the longest suffix of the store
+path and of the base checkout's git dir made only of bytes that no escaping
+rewrites (`[A-Za-z0-9._/-]`), so every spelling (Debug, JSON, Make, percent
+encoded) contains it; what follows the needle tells a checkout from a target
+dir, and `<base src>/.ferry-target` (remap mode) counts as the target.
+
+Whether a target path may stay depends on whether that target is *live*. A
+base built without the namespace is immutable and gc keeps it while an agent
+references it, so a unit may keep a path into the `OUT_DIR` of a build-script
+run it depends on: the base's bytes there equal the fork's until that run
+reruns, and then the unit rebuilds in the same build. Every other target path
+is *dead*: a namespace base's `mnt/target` (an empty mountpoint on the host),
+and the target of a seed, which gc may collect. A dead path is exempt only in
+a script's own directives other than link arguments, where Cargo rewrites the
+exact `root-output` string, and where a registry crate includes from its own
+`OUT_DIR` at compile time (serde's `include!(concat!(env!("OUT_DIR"), ...))`).
+
+A removed compile unit loses its fingerprint dir, so its dependents go stale
+in the same build. Every build-script run that depends on a removed unit (a
+build-dependency, a `links` upstream) is removed whole, run dir and `OUT_DIR`
+included, so it reruns from an empty `OUT_DIR` instead of over the base's
+state, and Cargo rebuilds what depends on it in the same build; removing only
+a run's fingerprint would leave its dependents one build behind. Nested
+workspaces' target dirs (`ferry-ws/`) are planned like the rest and kept.
+What cannot be read or parsed is removed, so a new Cargo fingerprint format
+costs a cold build, never a wrong one; a store path without a plain suffix of
+8 bytes empties the fork.
+
+`ferry base` computes the plan of a base built without the namespace before
+writing `base.json` and stores it as `relocation.json`, so a spawn only
+deletes what it lists (it recomputes the plan after a Ferry upgrade). Files
+are scanned a megabyte at a time, so a library of gigabytes in an `OUT_DIR`
+costs time, not memory. For a namespace base, spawn computes the plan on the
+base's target, with every target path dead. A seeded refresh without the
+namespace applies a dead plan to its clone of the seed's target before the
+warm build, so the new base never depends on the seed's.
+
+One rule is a heuristic. R7 assumes that a registry proc macro reading a path
+from the environment names the variable literally (`CARGO_MANIFEST_DIR`,
+`OUT_DIR`, `PWD` and the other path variables), which holds for every
+path-embedding crate surveyed (rust-embed, rstest, manifest-dir-macros).
+Crates on a small allowlist whose hits a human checked (`document-features`
+0.2.12, `xflags-macros` 0.3.2) are exempt, by exact version. A local proc
+macro also counts when its sources use the working directory, a subprocess or
+dynamic variable names. What the plan cannot see:
+
+- paths stored encoded: compressed, base64, hashed, UTF-16, or JSON with `\/`;
+- registry proc macros that derive a path from the working directory, a
+  subprocess (`cargo metadata`, `git rev-parse`) or a variable name built at
+  run time, without naming a listed variable;
+- behaviour that depends on location without recording a path: existence
+  checks, or reads through `../..` out of the worktree;
+- paths that a program derives at run time from an exempt live `OUT_DIR`
+  with `..`, such as `Path::new(env!("OUT_DIR")).join("../../../helper")`,
+  which leads to the base's binary instead of the agent's;
+- path variables outside the list read by proc macros, such as `[env]`
+  entries with `relative = true`;
+- a registry crate that includes from a dead `OUT_DIR` and also reads it at
+  run time;
+- writes outside `OUT_DIR` that no compile includes (`target/cxxbridge`
+  links, `$HOME`, `/tmp`); the source tree is reported as `dirtied`;
+- relative paths between the source and target trees, and absolute paths
+  outside the store and git dir that an agent would compute differently;
+- debuginfo, panic locations, cached diagnostics and doc output (cosmetic);
+- run-time writes through a live `OUT_DIR` path, which modify the base;
+- literals that a proc macro built with optimizations only compares against.
+
+Staleness that the namespace sandbox has too (a git hash baked in without
+`rerun-if-changed`, a macro reading a file Cargo does not track) is not
+relocation's to fix.
 
 The experimental remap mode (`[sandbox] remap-paths`, rustc 1.98+) recovers
 incremental reuse without namespaces: builds reach the target dir through a
