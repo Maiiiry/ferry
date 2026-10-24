@@ -161,16 +161,18 @@ Ferry is not a security sandbox: agents run with your user's full privileges
 | Platform | Fork | Builds run | First edit after spawn |
 |---|---|---|---|
 | Linux with unprivileged user namespaces | overlay, reflink or copy | in a namespace sandbox at canonical paths | incremental reuse |
-| Ubuntu 24.04 and later | as above, once the AppArmor profile from `ferry doctor --apparmor-profile` is loaded for a root-owned `ferry` binary | as above; without the profile, at host paths | incremental reuse with the profile; crate-level reuse without |
-| Containers (Docker's default seccomp blocks namespaces) | reflink or copy | at host paths | crate-level reuse |
-| macOS | `clonefile` (APFS) or copy | at host paths: no canonical path | crate-level reuse; incremental state is lost on the first edit. The experimental remap-paths mode reused 12 of 13 library codegen units after a fork on Linux, against 0 of 13 without; unverified on a real Mac |
+| Ubuntu 24.04 and later | as above, once the AppArmor profile from `ferry doctor --apparmor-profile` is loaded for a root-owned `ferry` binary | as above; without the profile, at host paths | incremental reuse with the profile; dependency reuse without |
+| Containers (Docker's default seccomp blocks namespaces) | reflink or copy | at host paths | dependency reuse |
+| macOS | `clonefile` (APFS) or copy | at host paths: no canonical path | dependency reuse; incremental state is lost on the first edit. The experimental remap-paths mode reused 12 of 13 library codegen units after a fork on Linux, against 0 of 13 without; unverified on a real Mac |
 | Windows | unsupported | | Ferry does not compile there (compile-time error) |
 
-Crate-level reuse means unchanged crates are not rebuilt; an edited crate
-recompiles from scratch on its first edit. Without the namespace sandbox,
-crates that captured the base's paths (`env!("CARGO_MANIFEST_DIR")`) and their
-dependents also rebuild once: 12 units on rust-analyzer. `ferry doctor` tells you which row
-you are in. [Platform support](https://patwrall.github.io/ferry/platforms.html).
+Incremental reuse means nothing unchanged is rebuilt and an edited crate
+recompiles only what changed. Dependency reuse means registry and git
+dependencies are not rebuilt, but the workspace's own crates rebuild once
+after spawn: without the namespace sandbox any of them may have captured the
+base's absolute paths where Cargo cannot see it (a build script or proc macro
+reading `CARGO_MANIFEST_DIR`). `ferry doctor` tells you which row you are in.
+[Platform support](https://patwrall.github.io/ferry/platforms.html).
 
 ## Comparison
 
@@ -181,7 +183,7 @@ you are in. [Platform support](https://patwrall.github.io/ferry/platforms.html).
 | Shared `CARGO_TARGET_DIR` | warm | depends on the other agents | builds wait on Cargo's lock; one agent can silently get another's code |
 | sccache | registry crates hit; workspace crates miss, because the key includes absolute paths | not incremental: sccache does not cache incremental units | correct, with a target dir per worktree |
 | kache 1.2.2 | warm: content-addressed `RUSTC_WRAPPER` with path-normalized keys | not incremental: restored artifacts carry no incremental state | correct, with a target dir per worktree |
-| **Ferry** | warm, 0 crates rebuilt | incremental on Linux with user namespaces; crate-level elsewhere | correct: each agent has its own fork |
+| **Ferry** | warm, 0 crates rebuilt | incremental on Linux with user namespaces; dependencies only elsewhere | correct: each agent has its own fork |
 
 kache is complementary rather than a competitor: it shares artifacts across
 machines, commits and CI through remote stores, which Ferry does not do at
@@ -217,7 +219,8 @@ more than the absolute times.
 
 - **The incremental win needs Linux user namespaces.** Where they are blocked
   (Ubuntu 24.04+ without the AppArmor profile, Docker's default seccomp
-  profile, hardened systems), agents get crate-level reuse only.
+  profile, hardened systems), agents reuse only dependencies: the workspace's
+  own crates rebuild once after spawn.
 - **Overlay copy-up costs disk.** An agent's first write to a file copies it
   into the agent's upper layer; relinked binaries and incremental session
   files make up most of it. On ext4 that is a full copy; on btrfs and XFS the

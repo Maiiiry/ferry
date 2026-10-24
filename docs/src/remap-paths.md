@@ -15,8 +15,10 @@ incremental cache is tied to absolute paths in two ways:
   unit that has debug info, so even a loaded cache is invalid.
 
 So the first edit of a crate in a new agent recompiles it from scratch. Cargo
-itself is fine with the move (it hashes workspace paths relatively), which is
-why crate-level reuse still works.
+itself is fine with the move (it hashes workspace paths relatively); Ferry
+still rebuilds the workspace's own crates once after spawn, because code can
+capture absolute paths where Cargo cannot see it (see
+[How it works](how-it-works.md#canonical-paths-keeping-incremental-state)).
 
 ## What it does
 
@@ -103,8 +105,9 @@ during Ferry's research; **it has not been verified on a real Mac.**
 - **Debuggers.** Debug info records `.` as the compilation directory, so run
   `gdb` or `lldb` from the worktree root, or map the path in the debugger.
 - **Paths captured by code** such as `env!("CARGO_MANIFEST_DIR")` keep the
-  real absolute path. Units that captured the base's paths are rebuilt at
-  spawn, as in the normal no-namespace mode.
+  real absolute path. As in the normal no-namespace mode, every local crate
+  rebuilds once after spawn; with remapping those rebuilds reuse the base's
+  incremental state.
 - **`.ferry-target`.** Ferry refuses to build if the source root contains a
   real file or directory with that name.
 - The approach relies on rustc hashing every path-dependent input into its

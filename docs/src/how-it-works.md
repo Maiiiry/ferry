@@ -40,7 +40,12 @@ they were forked from until you remove them.
 
 Refreshing is cheap: a new base for a later commit is seeded from the newest
 ready base with the same fingerprint, so only what changed between the two
-commits is rebuilt. `ferry base --cold` skips the seeding.
+commits is rebuilt. Seeding needs the two commits to have identical
+`Cargo.toml`s, `Cargo.lock`s, Cargo configs and toolchain files (and the same
+`RUSTFLAGS`-style variables): a seeded target also holds units from older
+commits, and a feature switched off and on again, or a dependency bump that
+was reverted, would select one of those as if it were fresh. After such a
+change the refresh is a cold build. `ferry base --cold` skips the seeding.
 
 ## Forks
 
@@ -96,14 +101,16 @@ process in the namespace exits. On the host, `<store>/mnt/src` and
 `<store>/mnt/target` are empty directories.
 
 Without namespaces (macOS, or Linux where they are blocked or `sandbox = "off"`),
-agents build at their own paths. Crate-level reuse still works; the first edit
-loses rustc's incremental state. Ferry also deletes the fingerprints of units
-that captured the base's absolute source paths (for example through
-`env!("CARGO_MANIFEST_DIR")`), so those rebuild instead of silently pointing at
-the base. That has a price on real workspaces: their dependents rebuild too. On
-rust-analyzer, `test-utils` and `xtask` read `CARGO_MANIFEST_DIR`, so the first
-build after a no-namespace spawn compiles 12 units instead of 0. The experimental [remap-paths mode](remap-paths.md) recovers most of
-the incremental reuse without namespaces.
+agents build at their own paths. A crate can capture the base's absolute
+paths in ways Cargo never sees: a build script that writes its
+`CARGO_MANIFEST_DIR` into generated code, or a proc macro that reads it from
+the environment (the `rust-embed` and `include_dir` pattern). Reusing such a
+crate would make the agent read the base's files. So the agent's first build
+recompiles every crate of the workspace and its path dependencies, while
+registry and git dependencies stay reused. The first edit also loses rustc's
+incremental state. The experimental [remap-paths mode](remap-paths.md)
+recovers most of the incremental reuse, which also makes those recompiles
+cheaper.
 
 ## Routing cargo: `ferry run` and the shim
 
@@ -136,6 +143,16 @@ so a `build.build-dir` in your Cargo config cannot redirect intermediates to a
 shared place. The base is read-only to every backend. Removing an agent
 removes its worktree and fork; the base stays until `ferry gc` finds it unused
 and not current.
+
+Each Cargo workspace gets its own target dir, because Cargo names a path
+crate's artifacts after its path relative to the workspace root: two
+workspaces sharing a target dir overwrite each other's crates of the same
+name. The workspace at the worktree root uses the fork itself; one nested at
+`<path>` (a `fuzz/` or `xtask/` workspace, say) uses `<fork>/ferry-ws/<path>`;
+and a workspace outside the worktree, such as
+`cargo test --manifest-path ../other-agent/Cargo.toml`, builds into its own
+target dir, as it would without Ferry. Base warm commands get the same
+mapping, so a nested workspace the base warmed is warm in agents too.
 
 ## Where things live
 

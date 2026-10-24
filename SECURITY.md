@@ -52,13 +52,24 @@ otherwise.
   `Makefile` or a `build.rs`, a `ferry.toml` in a repository you clone can run
   arbitrary commands when you build it. The `cargo` shim runs the next real
   `cargo` on your `PATH`.
+- **The shim directory.** The directory that goes first on agents' `PATH`
+  (`ferry shim`) is `$FERRY_HOME/bin` or `bin` in the platform cache dir. It
+  is deliberately not configurable from `ferry.toml`, so a repository cannot
+  choose what agents run as `cargo`.
 - **Git.** Ferry runs your `git`, so worktree creation runs your git hooks,
   filters and LFS configuration, exactly as `git worktree add` does.
-- **Files.** Ferry writes only under its store: `$FERRY_HOME`, the `[store]`
+- **Files.** Ferry writes only under its store (`$FERRY_HOME`, the `[store]`
   directory in `ferry.toml`, or by default `$XDG_CACHE_HOME/ferry` or
-  `~/.cache/ferry` (Linux) and `~/Library/Caches/ferry` (macOS), plus any
-  worktree path you pass with `--path`. Build outputs in the store can contain
-  anything your build embeds, the same as `target/`.
+  `~/.cache/ferry` on Linux and `~/Library/Caches/ferry` on macOS) and its
+  worktree directory (`FERRY_WORKTREES`, `[agent] worktree-dir`, or by default
+  `$XDG_DATA_HOME/ferry/worktrees` or `~/.local/share/ferry/worktrees` on
+  Linux and `~/Library/Application Support/ferry/worktrees` on macOS), plus
+  any worktree path you pass with `--path`. It creates the store, the shim
+  directory and the per-repository worktree directory readable only by you,
+  and refuses to use an existing one that you do not own or that others can
+  write to: whoever could write there could swap what a build or an agent
+  runs. Build outputs in the store can contain anything your build embeds, the
+  same as `target/`.
 
 ### The optional AppArmor profile (Ubuntu)
 
@@ -74,12 +85,15 @@ attack surface that the Ubuntu restriction exists to reduce. It is the same
 trade-off Ubuntu makes in the profiles it ships for `bwrap`, Chrome and
 `podman`. The profile matches the binary by path, so if that path is writable
 by your user (for example `~/.cargo/bin/ferry`), any process running as you can
-replace the binary and inherit the permission. Installing Ferry to a
-root-owned path such as `/usr/local/bin` limits the grant to the real binary.
+replace the binary and inherit the permission; `ferry doctor
+--apparmor-profile` warns when the binary or any directory above it is
+writable by a non-root user, and refuses paths with characters AppArmor would
+read as a pattern. Installing Ferry to a root-owned path such as
+`/usr/local/bin` limits the grant to the real binary.
 
 If you do not want this trade-off, leave the restriction on and set
-`sandbox = "off"`: builds then run at host paths, crate-level reuse still
-works, and only rustc's incremental reuse on the first edit is lost.
+`sandbox = "off"`: builds then run at host paths, dependencies are still
+reused, and the workspace's own crates rebuild once per agent.
 
 ### What counts as a vulnerability
 

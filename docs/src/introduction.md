@@ -60,7 +60,7 @@ the threat model.
 Ferry is pre-1.0. It runs on Linux and macOS; Windows is not supported. The
 full benefit (incremental reuse on an agent's first edit) needs unprivileged
 user namespaces on Linux. Everywhere else Ferry still gives every agent a warm,
-private target dir with crate-level reuse. See
+private target dir with its dependencies already built. See
 [Platform support](platforms.md).
 
 ## Where to go next

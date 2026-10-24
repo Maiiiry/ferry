@@ -5,12 +5,19 @@ varies is whether an agent's **first edit** can reuse rustc's incremental
 state, which needs the Linux namespace sandbox (or the experimental
 [remap-paths mode](remap-paths.md)).
 
-- **Crate-level reuse**: crates whose sources match the base are not rebuilt.
-  An edit rebuilds the edited crate and its dependents from scratch.
+- **Dependency reuse**: registry and git dependencies are not rebuilt; the
+  workspace's own crates (and path dependencies) rebuild once after spawn,
+  because without a canonical path any of them may have captured the base's
+  absolute paths where Cargo cannot see it.
+- **Crate-level reuse**: crates whose sources match the base are not rebuilt,
+  the workspace's included. An edit rebuilds the edited crate and its
+  dependents from scratch.
 - **Incremental reuse**: on top of that, rustc recompiles only the parts of an
   edited crate that changed. In the prototype on ripgrep (2 vCPU) the first
   edit after spawning took 1.75 s with incremental reuse and 5.3 s with
   crate-level reuse only.
+
+Agents in the namespace sandbox get both crate-level and incremental reuse.
 
 After an agent's first build, its own incremental state exists and later
 edits are incremental either way.
@@ -21,9 +28,9 @@ edits are incremental either way.
 |---|---|---|---|
 | Linux with unprivileged user namespaces (Debian, Fedora, Arch, NixOS, RHEL without STIG hardening, ...) | overlay, reflink, copy | namespace sandbox with canonical paths | incremental reuse |
 | Ubuntu 24.04 and later, with Ferry's AppArmor profile installed | overlay, reflink, copy | namespace sandbox | incremental reuse |
-| Ubuntu 24.04 and later, default policy | reflink, copy | none | crate-level reuse |
-| Docker, default seccomp profile | reflink, copy | none | crate-level reuse |
-| macOS (APFS) | reflink (`clonefile`), copy | none | crate-level reuse; experimental remap-paths mode |
+| Ubuntu 24.04 and later, default policy | reflink, copy | none | dependency reuse |
+| Docker, default seccomp profile | reflink, copy | none | dependency reuse |
+| macOS (APFS) | reflink (`clonefile`), copy | none | dependency reuse; experimental remap-paths mode |
 | Windows | not supported | | |
 
 Ferry does not build on Windows: compiling it there stops with a
@@ -55,7 +62,7 @@ mounting fail. Ferry detects this and either:
 - uses the namespace sandbox once you install the AppArmor profile from
   `ferry doctor --apparmor-profile` for a root-owned `ferry` binary (CI runs
   Ferry's sandbox tests on Ubuntu 24.04 this way), or
-- falls back to crate-level reuse.
+- falls back to dependency reuse.
 
 See [AppArmor on Ubuntu](troubleshooting.md#apparmor-on-ubuntu-2404-and-later).
 Ubuntu 23.10 ships the restriction switched off.
@@ -63,7 +70,7 @@ Ubuntu 23.10 ships the restriction switched off.
 ### Containers
 
 Docker's default seccomp profile allows `unshare` and `mount` only with
-`CAP_SYS_ADMIN`, so Ferry falls back to crate-level reuse inside Docker.
+`CAP_SYS_ADMIN`, so Ferry falls back to dependency reuse inside Docker.
 Rootless Podman's default profile allows them. If you run Ferry in a
 container with namespaces allowed, the store must not be on the container's
 overlay root filesystem, because overlayfs cannot use another overlayfs as its
@@ -91,8 +98,9 @@ rather than trusting this table.
 
 Agents fork the base's target dir with one `clonefile(2)` call on APFS (the
 `reflink` backend) and build at their own paths. macOS has no per-process
-mount namespaces, so there is no canonical path: crate-level reuse works, and
-the first edit of a crate loses its incremental state.
+mount namespaces, so there is no canonical path: dependencies are reused, the
+workspace's crates rebuild once after spawn, and the first edit of a crate
+loses its incremental state.
 
 The experimental [remap-paths mode](remap-paths.md) is designed for this
 case. On Linux it reuses 12 of 13 library codegen units after a fork to a new
@@ -130,7 +138,7 @@ The plan line reads like:
 or, without namespaces:
 
 ```text
-  → agents fork with reflink (btrfs supports copy-on-write clones) and build at their own paths (crate-level reuse only)
+  → agents fork with reflink (btrfs supports copy-on-write clones) and build at their own paths (dependencies reused; workspace crates rebuild once)
 ```
 
 `ferry --json doctor` adds the raw probe results and the sysctls that explain

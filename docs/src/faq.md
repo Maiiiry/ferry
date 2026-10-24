@@ -30,7 +30,7 @@ agents sharing one target dir wait for each other.
 | Shared `CARGO_TARGET_DIR` | warm | depends on the other agents | builds wait on Cargo's lock, and one agent can silently get another's code |
 | sccache | registry crates hit; workspace crates miss, because the key includes the working directory and absolute `CARGO_*` paths | not incremental: sccache does not cache incremental units | correct, with a target dir per worktree |
 | kache 1.2.2 | warm: a content-addressed `RUSTC_WRAPPER` with path-normalized keys restores artifacts | not incremental: restored artifacts carry no incremental state | correct, with a target dir per worktree |
-| Ferry | warm, nothing rebuilt | incremental on Linux with user namespaces; crate-level elsewhere | correct, each agent has its own fork |
+| Ferry | warm, nothing rebuilt | incremental on Linux with user namespaces; dependencies only elsewhere | correct, each agent has its own fork |
 
 kache and Ferry solve different parts of the problem and can be combined.
 kache shares artifacts across machines, commits and CI through remote stores,

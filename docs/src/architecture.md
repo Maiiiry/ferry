@@ -22,18 +22,33 @@ Each one is enforced in code (module named) and covered by tests.
    A tracked file's mtime is set to the fixed stamp time only if it is a
    regular file at merge stage 0, its mode and blob id equal the base
    commit's tree entry, its working-tree bytes equal the base checkout's
-   bytes, and its metadata did not change between verification and stamping.
-   A directory is stamped only if its entry names equal the base checkout's
-   directory, because Cargo's `rerun-if-changed=<dir>` takes the recursive max
-   mtime of the directory, its subdirectories and its files, and a deletion
-   is only visible as a directory mtime change. `StampPlan` can only be built
-   by the verifying function, so nothing else can stamp. Stamping happens once,
-   at spawn; a live agent tree is never re-stamped.
+   bytes, its metadata did not change between verification and stamping, and
+   Cargo cannot reach it through a symlink that resolves differently in the
+   agent and the base (both ends count: Cargo records a rustc input read
+   through a link by its canonical path, but follows a build script's
+   `rerun-if-changed` path through it). A directory is stamped only if its
+   entry names equal the base checkout's directory, because Cargo's
+   `rerun-if-changed=<dir>` takes the recursive max mtime of the directory,
+   its subdirectories and its files, and a deletion is only visible as a
+   directory mtime change. `StampPlan` can only be built by the verifying
+   function. The one other stamping function, `stamp_base_checkout`, stamps a
+   fresh, unseeded base checkout, which is the reference itself; only
+   `base::prepare` calls it. Every file and directory that is *not* stamped
+   gets an mtime no older than the base (`freshen_skipped`), so a hook that
+   restores commit times or a clock that went backwards cannot make it look
+   fresh. Stamping happens once, at spawn; a live agent tree is never
+   re-stamped.
 2. **Bases are immutable once built** (`base`). A base is keyed by commit plus
    a fingerprint of toolchain, warm commands and modes. `base.json` is written
    last, atomically, and doubles as the "ready" marker; nothing writes to a
    ready base. Refreshing builds a new base; `gc` removes a base only when it
-   is not current and no agent references it.
+   is not current and no agent references it. A refresh is seeded from an
+   earlier base only if both have the same *unit inputs*: every manifest,
+   lockfile, Cargo config and toolchain file of the commit, the Cargo configs
+   above the store, and Cargo's flag variables. A seeded target still holds
+   units from the seed's own seeds; with equal inputs the new build selects
+   none of them, so every unit it reuses was checked against the content
+   stamping compared.
 3. **Each agent owns its build state** (`fork`, `sandbox`, `agent`). Forks are
    reflink clones (new inodes), overlayfs upper layers (base is a read-only
    lower), or full copies. There is no hardlink backend: Cargo rewrites
@@ -42,7 +57,9 @@ Each one is enforced in code (module named) and covered by tests.
    gets `CARGO_TARGET_DIR` *and* `CARGO_BUILD_BUILD_DIR` pointing at the fork,
    so a user's `build.build-dir` (whose `{workspace-path-hash}` is identical for
    every agent under the canonical mount) cannot redirect intermediates into a
-   shared directory.
+   shared directory. Each Cargo workspace gets its own target dir: Cargo
+   hashes path packages by their path relative to the workspace root, so two
+   workspaces sharing one would overwrite each other's units (see the shim).
 4. **The agent is derived from the working directory, never from inherited
    environment** (`agent`, `shim`). Agent tools copy their session environment
    into sub-agents that work in other worktrees; an inherited
@@ -52,8 +69,10 @@ Each one is enforced in code (module named) and covered by tests.
 5. **Refuse unsafe states with a clear error** (everywhere): no base, base
    checkout or target missing (stamping cannot be verified), agent not fully
    created, overlay agent without a namespace, overlay upper dir still mounted
-   by an unjoinable namespace, store paths overlayfs cannot express, dirty
-   worktree on `rm`.
+   by an unjoinable namespace, store paths overlayfs cannot express, an agent
+   worktree inside the store or overlapping another agent's, and on `rm` a
+   dirty worktree, commits no ref reaches, running processes or an agent
+   nested inside.
 
 ## Module layout
 
@@ -102,7 +121,9 @@ relative to what the base was built from.
     bases/<commit>-<fp>.lock
     agents/<name>/
       agent.json  lock
+      busy.lock                    held shared by every process run for the agent
       target/                      reflink / copy backends
+        ferry-ws/<path>/           target dirs of workspaces nested at <path>
       upper/  work/                overlay backend
       mount.lock  ns.json          overlay: in-use lock and live namespace identity
 
@@ -125,16 +146,19 @@ needs one writable-root entry for it plus the worktree (its working directory).
 2. Compute the base id; take `bases/<id>.lock`. If `base.json` exists, make it
    current and stop. Otherwise discard any partial directory.
 3. `git worktree add --detach` the checkout and `git worktree lock` it. If a
-   ready base with the same fingerprint exists at another commit (and
-   `--cold` is not given), seed from it: clone its target (reflink when
-   possible) and stamp only files proven identical to its checkout, exactly as
-   for an agent, so the warm build only rebuilds what changed. Otherwise stamp all
-   tracked files and directories (the base is the reference, nothing to
-   compare).
+   ready base with the same fingerprint and unit inputs exists at another
+   commit (and `--cold` is not given), seed from it: clone its target (reflink
+   when possible) and stamp only files proven identical to its checkout,
+   exactly as for an agent, so the warm build only rebuilds what changed.
+   Otherwise stamp all tracked files and directories (the base is the
+   reference, nothing to compare).
 4. Enter the sandbox (irreversible for this process; host paths stay
-   reachable), run each warm command with `sh -c`, stdout redirected to stderr.
+   reachable), run each warm command with `sh -c`, stdout redirected to
+   stderr, the shim first on `PATH` so each workspace gets the target dir it
+   gets in agents.
 5. Record files the build wrote into the source tree (build scripts writing
-   outside `OUT_DIR`) as warnings; write `base.json`; set `current`.
+   outside `OUT_DIR`) as warnings; write `base.json`; set `current` before
+   releasing the base lock.
 
 ### `ferry spawn NAME [--from REF] [--path DIR] [--branch B]`
 
@@ -144,11 +168,13 @@ needs one writable-root entry for it plus the worktree (its working directory).
    lock.
 2. `git worktree add -b <prefix><name>`, copy the base's `Cargo.lock` if the
    repository does not track one, plan stamping against the base
-   (invariant 1), stamp, `git update-index --refresh`.
+   (invariant 1), stamp, raise the mtimes of what was not stamped,
+   `git update-index --refresh`.
 3. Select the backend, fork the base target, and when the agent runs without
-   the namespace sandbox, invalidate units whose dep-info embeds base paths
-   (see below). Write `state: ready`. Any failure rolls back worktree, branch
-   and agent dir.
+   the namespace sandbox, invalidate its local units (see below). Write
+   `state: ready`. A failure rolls back only what this spawn created: the
+   worktree if it added it, the branch if it still points at the starting
+   commit, and the agent dir.
 
 ### `ferry run [NAME] -- CMD` and the shim
 
@@ -159,26 +185,46 @@ inside the sandbox; agent tools that key state on their cwd (transcripts,
 memory) keep one entry per agent.
 
 The shim (`bin/cargo -> ferry`) is where builds are redirected. On every call
-it resolves the agent from the working directory: a host path inside an agent
-worktree, or a path under `mnt/src` whose mounted inode is an agent worktree.
-For an agent it enters (or confirms it is already in) that agent's sandbox,
-moves to the canonical path, sets `CARGO_TARGET_DIR` and
-`CARGO_BUILD_BUILD_DIR` and the freshness env, and execs the real cargo (the
-next `cargo` on `PATH` that is not ferry). Outside agent worktrees it execs the
-real cargo unchanged.
+it resolves the agent from the working directory's git worktree: its root
+must be exactly an agent's worktree (a host path, or `mnt/src` whose mounted
+inode is one), so a separate worktree nested inside an agent's is not that
+agent. For an agent it enters (or confirms it is already in) that agent's
+sandbox, moves to the canonical path, and finds the workspace the call
+selects (`cargo locate-project --workspace`, honouring `--manifest-path`;
+skipped for a call at the worktree root without one):
+
+| Workspace | Target dir |
+|---|---|
+| rooted at the worktree root | the fork |
+| rooted at `<path>` inside the worktree | `<fork>/ferry-ws/<path>` |
+| outside the worktree (`--manifest-path` into another agent's) | its own, as plain cargo; inherited target variables removed |
+
+It sets `CARGO_TARGET_DIR`, `CARGO_BUILD_BUILD_DIR` and the freshness env
+accordingly and execs the real cargo (the next `cargo` on `PATH` that is not
+ferry). Outside agent worktrees it execs the real cargo unchanged, except
+inside a base's warm commands, where `FERRY_WARM_SRC` and `FERRY_WARM_TARGET`
+apply the same table to the base checkout.
 
 ### `ferry rm NAME [--force]`
 
-Refuses if processes run in the agent's sandbox or the worktree is dirty
-(unless `--force`). Removes the worktree and fork; deletes the branch only if
-it still points at the agent's starting commit, otherwise keeps it and reports
-how many commits it carries.
+Refuses if processes still run for the agent (they hold `busy.lock`), if
+another agent's worktree is nested inside its worktree (even with
+`--force`), or, without `--force`, if the worktree has uncommitted changes or
+commits that no branch, tag or remote reaches. With `--force` such commits
+are kept under `refs/ferry/orphaned/<name>-<time>`. Removes the worktree and
+fork; deletes the branch only if it still points at the agent's starting
+commit and is not checked out elsewhere, otherwise keeps it and reports how
+many commits it carries.
 
 ### `ferry gc [--dry-run]`
 
-Reaps abandoned hook-created agents (clean, no new commits, idle, not
+Reaps abandoned hook-created agents (clean, no new commits, no commits only
+their worktree reaches, no ignored files beyond build output, idle, not
 `git worktree lock`ed by their tool), then deletes bases that are neither
-current nor referenced, skipping any base whose lock is held.
+current nor referenced, skipping any base whose lock is held. It never runs
+`git worktree prune`, which would also drop the user's own worktrees whose
+directories are temporarily missing; Ferry unregisters only the worktrees it
+removes.
 
 ## Fork backends
 
@@ -219,27 +265,45 @@ Two overlay mounts must never use the same upper dir at once: the kernel only
 warns, and the two views then diverge. Every process using an agent's overlay
 therefore holds a shared `flock` on `agents/<name>/mount.lock` through an
 inherited file descriptor. Under the agent lock, `enter` tries an exclusive
-lock on it: if that succeeds nothing uses the overlay, so it mounts a new one
-and records the namespace identity in `ns.json`; otherwise it `setns`es into a
-live process of the recorded namespace, and refuses if none can be joined.
+lock on it. A free lock is not proof that nothing uses the overlay: a process
+in a nested namespace (`unshare`, `bwrap`) may have closed its descriptor and
+still have the overlay mounted. So before mounting a new one, `enter` also
+scans every readable `/proc/<pid>/mountinfo` for an overlay on the agent's
+upper or work dir (one read per mount namespace and root, about 15 ms for 480
+processes). Only when both checks come up empty does it mount and record the
+namespace identity (and the upper and work dirs) in `ns.json`; otherwise it
+`setns`es into a live process of the recorded namespace. An exiting session
+holds the lock while the kernel unmounts its overlay, so `enter` re-checks
+with backoff for up to 10 s before refusing, naming the processes that still
+have the overlay mounted or hold the lock. `ferry list`, `rm` and gc count
+those processes as users too.
 Bind-mount-only sandboxes (reflink, copy) are safe to create per call.
 
 Without namespaces (macOS; Linux with `sandbox = off` or where user
-namespaces are blocked) builds run at host paths. Crate-level reuse still
-works; the first edit pays for rustc's incremental state being keyed on
-absolute paths. Units that captured the base's absolute *source* paths
-(`env!("CARGO_MANIFEST_DIR")`, workspace-relative `include_str!` on Cargo <=
-1.100, absolute `rerun-if-changed` paths) would otherwise stay "fresh" while
-pointing at the base, so spawn deletes the fork's fingerprints for exactly
-those units and Cargo rebuilds them. Captured `OUT_DIR` paths are left alone:
-they point into the base's immutable target dir, which outlives the agent.
+namespaces are blocked) builds run at host paths, and the first edit pays for
+rustc's incremental state being keyed on absolute paths. Cargo's own unit
+hashes survive the move (it hashes path packages relative to the workspace
+root), but units can capture the base's absolute *source* paths, and
+not always where Cargo looks: `env!("CARGO_MANIFEST_DIR")`, workspace-relative
+`include_str!` on Cargo <= 1.100 and absolute `rerun-if-changed` paths show up
+in dep-info, but a build script that writes its manifest dir into generated
+code, or a proc macro that reads it from the environment (the `rust-embed`
+and `include_dir` pattern), leaves no trace. Such a unit would stay "fresh"
+while pointing at the base. So spawn deletes the fork's fingerprints of every
+unit of every local package (those without a `source` in `Cargo.lock`), plus
+any other unit whose dep-info names the base's source root, and drops the
+nested workspaces' target dirs; registry and git dependencies keep their
+reuse. Captured `OUT_DIR` paths are left alone: they point into the base's
+immutable target dir, which outlives the agent. A seeded base refresh
+without the namespace does the same against its seed.
 
 The experimental remap mode (`[sandbox] remap-paths`, rustc 1.98+) recovers
 incremental reuse without namespaces: builds reach the target dir through a
 `.ferry-target` link inside the source root, and the `ferry-rustc`
 `RUSTC_WORKSPACE_WRAPPER` adds `-Zremap-cwd-prefix=.` (with `RUSTC_BOOTSTRAP=1`
-for workspace-member compiles only) and rewrites absolute worktree and target
-paths in rustc's arguments to relative ones.
+for workspace-member compiles only, and on non-nightly toolchains
+`-Zallow-features=` so that `#![feature]` stays an error) and rewrites
+absolute worktree and target paths in rustc's arguments to relative ones.
 
 ## Freshness modes
 
@@ -256,20 +320,25 @@ mtime-based.
 
 ## Concurrency
 
-Locks are `flock(2)` on files in the store and are never held while a build
-runs:
+Locks are `flock(2)` on files in the store. Exclusive locks are never held
+while an agent's build runs; the base lock is held for its own warm build:
 
 | Lock | Held by | Duration |
 |---|---|---|
 | `<store>/lock` | spawn (registry step), rm, gc, setting `current` | milliseconds to seconds |
-| `bases/<id>.lock` | `ferry base` for that id; gc skips held ones | the base build |
+| `bases/<id>.lock` | `ferry base` for that id (exclusive), a refresh seeded from it (shared); gc only try-locks | the base build |
 | `agents/<name>/lock` | spawn (whole), rm, sandbox entry for runs | spawn; ~1 ms per run |
+| `agents/<name>/busy.lock` | shared by every `ferry run`, `shell` and shim call through an inherited fd; rm, list and gc try it exclusively | the life of the process and its children |
+| `agents/<name>/mount.lock` | shared by every process using an overlay mount, as above | the life of the mount's users |
 
-Lock order is store, then agent, then base.
+Lock order is store, then agent, then base. `ferry base` also takes the
+store lock while holding a base lock (to set `current` before gc can see the
+new base unreferenced); that is safe because gc only ever try-locks bases.
 
 ## Errors and output
 
 Library code returns typed errors (`thiserror`); the CLI wraps them with
 `anyhow` and prints `error:`, `caused by:` and a `hint:` from
 `Error::hint()`. Data goes to stdout, progress to stderr, colour only on a
-terminal. Every read command and every mutating command accepts `--json`.
+terminal. Every read command and every mutating command accepts `--json`,
+including `doctor --apparmor-profile`.

@@ -49,12 +49,12 @@ error: no warm base exists for this repository
 with `caused by:` lines in between when there is an underlying error.
 
 `--json` is accepted by every command. It switches `init`, `base`, `spawn`,
-`env`, `list`, `rm`, `gc`, `doctor` and `shim` to a single JSON document on
-stdout; the shapes are listed under each command. Ferry is pre-1.0, so fields
-may still change between releases. `--json` has no effect on `run` and
-`shell`, which replace themselves with your command, on the `hook` handlers,
-which speak the agent tool's protocol, or on `doctor --apparmor-profile`,
-which prints the profile.
+`env`, `list`, `rm`, `gc`, `doctor` (also with `--apparmor-profile`) and
+`shim` to a single JSON document on stdout; the shapes are listed under each
+command. Ferry is pre-1.0, so fields may still change between releases.
+`--json` has no effect on `run` and `shell`, which replace themselves with
+your command, or on the `hook` handlers, which speak the agent tool's
+protocol.
 
 Exit status is 0 on success and 1 on error. `doctor` exits 1 when a check
 fails. `run` and `shell` exit with the status of the command they run.
@@ -95,18 +95,20 @@ Checks out the commit into the store, runs the [warm commands](configuration.md#
 and makes the base current, so new agents fork from it. If a base with the
 same commit and fingerprint already exists, it is made current without
 building. Otherwise, unless `--cold` is given, the new base is seeded from the
-newest ready base with the same fingerprint, so only what changed is
-rebuilt. Build output goes to stderr.
+newest ready base with the same fingerprint and the same manifests,
+lockfiles, Cargo configs, toolchain files and Cargo flag variables, so only
+what changed is rebuilt. Build output goes to stderr.
 
 Warnings are printed when the namespace sandbox is unavailable (builds then
-run without canonical paths) and when the warm commands wrote files into the
-source tree, which agents will not have (build scripts writing outside
-`OUT_DIR`).
+run without canonical paths), when a Cargo config above the repository (or an
+untracked one in it) will not apply to Ferry's builds, and when the warm
+commands wrote files into the source tree, which agents will not have (build
+scripts writing outside `OUT_DIR`).
 
 JSON: `{ "base": {...}, "reused": <bool>, "warnings": [...] }`, where `base`
 has `id`, `commit`, `created_unix`, `build_secs`, `freshness`, `isolation`,
-`toolchain`, `commands`, `ferry_version`, `dirtied`, `remap_paths` and
-`seeded_from`.
+`toolchain`, `commands`, `ferry_version`, `dirtied`, `remap_paths`,
+`unit_inputs` (the hash seeding compares) and `seeded_from`.
 
 ## `ferry spawn`
 
@@ -128,15 +130,16 @@ base, and forks the base's target dir. It never builds. The base is the
 current one if it is at `--from`, else any ready base at that commit, else the
 current base; files that differ from the chosen base are rebuilt on the first
 build. Fails if the agent, the branch or a non-empty worktree directory
-already exists, or if there is no base. Any failure rolls back the worktree,
-branch and fork.
+already exists, or if there is no base. A failure rolls back what the spawn
+created: the worktree, the branch if it still points at `--from`, and the
+fork.
 
 Without `--path`, the worktree goes in the worktree parent directory (see
 [Configuration](configuration.md#agent-worktrees-and-branches)), which is not
 inside the store unless you configured it that way. A relative `--path` is
 relative to the current directory. The directory must not exist or must be empty.
 
-JSON: `{ "agent": {...}, "backend_reason": <string>, "fork": { "files", "bytes", "elapsed" }, "elapsed_secs": <number>, "warnings": [...] }`,
+JSON: `{ "agent": {...}, "backend_reason": <string>, "fork": { "files", "bytes", "elapsed_secs" }, "elapsed_secs": <number>, "warnings": [...] }`,
 where `agent` has `name`, `state`, `base`, `from`, `branch`, `worktree`,
 `backend`, `isolation`, `freshness`, `created_unix`, `stamp` and `origin`.
 
@@ -231,7 +234,7 @@ or `idle`.
 JSON: `{ "bases": [...], "agents": [...] }`. A base has `id`, `ready`,
 `current`, `meta`, `agents` and `disk_bytes`; an agent has the `spawn` agent
 fields plus `base_is_current`, `worktree_exists`, `private_bytes` and
-`running` (PIDs).
+`busy` and `running` (PIDs).
 
 ## `ferry rm`
 
@@ -255,7 +258,9 @@ backend. The branch is deleted only if it still points at the
 commit the agent started from; otherwise Ferry keeps it and says how many
 commits it carries.
 
-JSON: `{ "name", "worktree", "branch", "branch_deleted", "branch_commits" }`.
+JSON: `{ "name", "worktree", "branch", "branch_deleted", "branch_commits", "rescued_ref" }`,
+where `rescued_ref` names the ref that keeps commits a `--force` removal
+found on no branch (otherwise `null`).
 
 ## `ferry gc`
 
@@ -277,7 +282,7 @@ ones left by interrupted builds, and skips bases that are being built.
 
 The human-readable output lists reaped agents and removed and skipped bases.
 
-JSON: `{ "removed": [...], "busy": [...], "kept": [...], "reaped_agents": [...], "freed_bytes": <number>, "dry_run": <bool> }`.
+JSON: `{ "removed": [...], "busy": [...], "kept": [...], "reaped_agents": [...], "warnings": [...], "freed_bytes": <number>, "dry_run": <bool> }`.
 
 ## `ferry doctor`
 
@@ -297,7 +302,9 @@ whether their first edit can reuse incremental state. See
 [Platform support](platforms.md#what-ferry-doctor-reports) for every check.
 
 `--apparmor-profile` prints the profile for the binary's resolved path, and
-warns on stderr if that path is writable by a non-root user. See
+warns on stderr if that path, or a directory above it, is writable by a
+non-root user; it refuses paths with characters AppArmor reads as patterns.
+With `--json` it prints `{ "binary", "profile", "warning" }`. See
 [AppArmor on Ubuntu](troubleshooting.md#apparmor-on-ubuntu-2404-and-later).
 
 JSON: `{ "checks": [{ "name", "status", "detail", "fix" }], "capabilities": {...}, "plan": {...} }`.

@@ -12,7 +12,7 @@ A quick manual check (it should print nothing and exit 0):
 unshare --user --map-root-user --mount true
 ```
 
-When they do not work, Ferry builds at host paths (crate-level reuse only) and
+When they do not work, Ferry builds at host paths (dependency reuse only) and
 `ferry base` warns:
 
 ```text
@@ -40,12 +40,13 @@ it in a file under `/etc/sysctl.d/`. Check your organisation's policy first:
 these settings exist to reduce the kernel attack surface.
 
 If you cannot or do not want to change the system, set `sandbox = "off"` (or
-`FERRY_SANDBOX=off`). Everything still works, with crate-level reuse.
+`FERRY_SANDBOX=off`). Everything still works, with dependency reuse: the
+workspace's own crates rebuild once after spawn.
 
 ### Containers
 
 Docker's default seccomp profile blocks `unshare` and `mount` for processes
-without `CAP_SYS_ADMIN`, so inside Docker Ferry falls back to crate-level
+without `CAP_SYS_ADMIN`, so inside Docker Ferry falls back to dependency
 reuse. Options:
 
 - Accept the fallback. Nothing else is needed.
@@ -185,6 +186,11 @@ base keep that base alive.
   Both are set because a `build-dir` template such as
   `{workspace-path-hash}` resolves to the same directory for every agent at
   the canonical path.
+- **A `.cargo/config.toml` above the repository, or an untracked one in it,
+  does not apply to Ferry's builds**, which run under the store where Cargo
+  never finds it. `ferry base` and `ferry doctor` name such files. Move their
+  settings into the repository's tracked `.cargo/config.toml` or into
+  `$CARGO_HOME/config.toml`.
 - **`--target-dir`, `--config build.target-dir=...` and
   `--config build.build-dir=...` on the command line beat the environment.**
   A build run that way leaves the agent's fork and can share state with other
@@ -206,10 +212,17 @@ base keep that base alive.
   starts from a different commit than its base (`--from`), so crates using the
   changed files rebuild on the first build. Run `ferry base --rev <commit>` to
   have a base at that commit.
-- **`warning: N unit(s) captured the base's absolute paths ...`** at spawn,
-  without the namespace sandbox: those units used, for example,
-  `env!("CARGO_MANIFEST_DIR")`, and would otherwise silently keep pointing at
-  the base's files. Ferry makes them rebuild.
+- **The workspace's own crates rebuild after a spawn without the namespace
+  sandbox.** The agent builds at other absolute paths than its base, and any
+  local crate may have captured the base's (a build script writing
+  `CARGO_MANIFEST_DIR` into generated code, a proc macro reading it), so Ferry
+  makes them all rebuild once. Dependencies stay reused. Fix the namespace
+  sandbox (`ferry doctor`) to avoid it.
+- **A refresh is a cold build after a manifest change.** `ferry base` seeds
+  only from a base whose `Cargo.toml`s, `Cargo.lock`s, Cargo configs,
+  toolchain files and `RUSTFLAGS`-style variables are identical: a seeded
+  target also holds units from older commits, which a reverted change could
+  otherwise select as fresh.
 - **`warning: the warm commands wrote N file(s) into the source tree ...`**
   from `ferry base`: a build script writes outside `OUT_DIR`. Agents do not get
   those files, so whatever reads them may rebuild or behave differently.
@@ -240,9 +253,16 @@ are byte-for-byte identical to the base; it never re-stamps a live worktree.
   spawning was interrupted. Remove it with `ferry rm <name>`.
 - **`base ... is missing or incomplete`**: run `ferry base` to rebuild it,
   then `ferry gc`.
-- **`the agent's overlay is still mounted by processes in nested namespaces`**:
+- **`the agent's overlay is still mounted by processes that cannot be joined (pids: ...)`**:
   processes started inside the agent's sandbox created their own namespaces
-  and still hold the overlay. Wait for them or stop them, then retry.
+  (`unshare`, `bwrap`, a container) and still have the agent's overlay
+  mounted after the agent's own sessions ended. A second mount of the same
+  overlay would corrupt it, so Ferry waits up to 10 seconds and then refuses.
+  Wait for those processes or stop them, then retry.
+- **`the agent's mount lock is still held by ...`**: a session that is
+  exiting still holds the agent's overlay while the kernel unmounts it,
+  which can take seconds under heavy disk writes. Retry; if it persists, the
+  named processes (or ones in another pid namespace) are still using it.
 - **Paths printed by cargo do not exist.** Inside the namespace sandbox, cargo
   prints canonical paths such as `<store>/mnt/target/debug/deps/app-...`.
   They exist only inside the sandbox; on the host those directories are empty.
