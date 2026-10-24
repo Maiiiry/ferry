@@ -838,14 +838,18 @@ pub fn exec_cargo(
     enter(ctx, meta, &plan)?;
     hold_busy_lock(&ctx.store.agent(&meta.name))?;
     let cwd = plan.map_cwd(host_cwd);
-    let err = std::process::Command::new(cargo)
+    let mut command = std::process::Command::new(cargo);
+    command
         .args(args)
         .current_dir(&cwd)
         .env("PWD", &cwd)
-        .envs(cargo_env(&plan, meta.freshness))
-        .env(shim::DEPTH_ENV, shim::next_depth())
-        .exec();
-    Err(exec_error(cargo.as_os_str(), err))
+        .env(shim::DEPTH_ENV, shim::next_depth());
+    let workspace = shim::workspace(cargo, args, &cwd, &[plan.build_src(), &plan.src]);
+    if workspace != shim::Workspace::Outside {
+        command.envs(cargo_env(&plan, meta.freshness));
+    }
+    shim::set_target(&mut command, workspace.target(&plan.build_target()));
+    Err(exec_error(cargo.as_os_str(), command.exec()))
 }
 
 /// Enters `meta`'s sandbox unless this process is already inside it.

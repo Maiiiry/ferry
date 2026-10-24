@@ -8,12 +8,13 @@
 //! safe for every process an agent tool starts, including sub-agents working
 //! in other worktrees, which is not true of exporting `CARGO_TARGET_DIR`.
 
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::io::Write;
+use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::os::unix::fs::MetadataExt;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
-use std::process::ExitCode;
+use std::process::{Command, ExitCode, Stdio};
 
 use crate::context::Context;
 use crate::error::{Error, IoContext, Result};
@@ -171,21 +172,159 @@ fn run(cargo: &Path, args: &[OsString]) -> Result<std::convert::Infallible> {
             None
         }
     };
-    match agent {
-        Some((ctx, meta)) => crate::agent::exec_cargo(&ctx, &meta, cargo, args, &cwd),
-        None => Err(exec_plain(cargo, args)),
+    if let Some((ctx, meta)) = agent {
+        return crate::agent::exec_cargo(&ctx, &meta, cargo, args, &cwd);
     }
+    let mut command = Command::new(cargo);
+    command.args(args).env(DEPTH_ENV, next_depth());
+    if let (Some(src), Some(target)) = (
+        std::env::var_os(WARM_SRC_ENV),
+        std::env::var_os(WARM_TARGET_ENV),
+    ) {
+        let src = PathBuf::from(src);
+        set_target(
+            &mut command,
+            workspace(cargo, args, &cwd, &[&src]).target(Path::new(&target)),
+        );
+    }
+    Err(exec_error(cargo, command.exec()))
 }
 
-fn exec_plain(cargo: &Path, args: &[OsString]) -> Error {
-    let source = std::process::Command::new(cargo)
-        .args(args)
-        .env(DEPTH_ENV, next_depth())
-        .exec();
+fn exec_error(cargo: &Path, source: std::io::Error) -> Error {
     Error::Sandbox(crate::sandbox::SandboxError::Exec {
         program: cargo.display().to_string(),
         source,
     })
+}
+
+/// Where in a target dir the target dirs of nested workspaces go.
+pub(crate) const NESTED_TARGETS: &str = "ferry-ws";
+
+/// Set for a base's warm commands: the checkout and target dir they build,
+/// so that their cargo calls get the same per-workspace target dirs as an
+/// agent's.
+pub(crate) const WARM_SRC_ENV: &str = "FERRY_WARM_SRC";
+pub(crate) const WARM_TARGET_ENV: &str = "FERRY_WARM_TARGET";
+
+/// Points `command` at `target`, or for a workspace with no target here,
+/// clears any inherited one so that it uses its own as plain cargo would.
+pub(crate) fn set_target(command: &mut Command, target: Option<PathBuf>) {
+    match target {
+        Some(target) => command
+            .env("CARGO_TARGET_DIR", &target)
+            .env("CARGO_BUILD_BUILD_DIR", &target),
+        None => command
+            .env_remove("CARGO_TARGET_DIR")
+            .env_remove("CARGO_BUILD_BUILD_DIR"),
+    };
+}
+
+/// The workspace a cargo invocation selects, relative to the checkout it
+/// runs for.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum Workspace {
+    /// Rooted at the checkout's root: the one the base warms by default.
+    Root,
+    /// Rooted at this path inside the checkout.
+    Nested(PathBuf),
+    /// Rooted outside the checkout, for example in another agent's worktree.
+    Outside,
+}
+
+impl Workspace {
+    /// Its target dir, given the checkout's.
+    pub(crate) fn target(&self, target: &Path) -> Option<PathBuf> {
+        match self {
+            Self::Root => Some(target.to_path_buf()),
+            // Cargo hashes path packages by their path relative to the
+            // workspace root, so two workspaces sharing a target dir would
+            // overwrite each other's units with the same names.
+            Self::Nested(rel) => Some(target.join(NESTED_TARGETS).join(rel)),
+            Self::Outside => None,
+        }
+    }
+}
+
+/// Finds the workspace `args` select when cargo runs in `cwd`. `checkout`
+/// lists the paths the checkout is reachable at.
+pub(crate) fn workspace(
+    cargo: &Path,
+    args: &[OsString],
+    cwd: &Path,
+    checkout: &[&Path],
+) -> Workspace {
+    let (globals, rest) = split_globals(args);
+    let manifest = manifest_path(rest);
+    if rest.is_empty() || (manifest.is_none() && checkout.iter().any(|c| same_dir(c, cwd))) {
+        return Workspace::Root;
+    }
+    let mut locate = Command::new(cargo);
+    locate
+        .args(globals)
+        .args(["locate-project", "--workspace", "--message-format", "plain"])
+        .current_dir(cwd)
+        .stdin(Stdio::null())
+        .stderr(Stdio::null());
+    if let Some(manifest) = manifest {
+        locate.arg("--manifest-path").arg(manifest);
+    }
+    let located = locate
+        .output()
+        .ok()
+        .filter(|out| out.status.success())
+        .map(|out| PathBuf::from(OsString::from_vec(out.stdout.trim_ascii_end().to_vec())));
+    // Without a workspace the command itself fails, or (`cargo new`) does not
+    // build anything.
+    let Some(root) = located
+        .as_deref()
+        .and_then(Path::parent)
+        .and_then(|r| std::fs::canonicalize(r).ok())
+    else {
+        return Workspace::Root;
+    };
+    for dir in checkout {
+        if let Some(rel) = std::fs::canonicalize(dir)
+            .ok()
+            .and_then(|dir| root.strip_prefix(dir).ok().map(Path::to_path_buf))
+        {
+            return if rel.as_os_str().is_empty() {
+                Workspace::Root
+            } else {
+                Workspace::Nested(rel)
+            };
+        }
+    }
+    Workspace::Outside
+}
+
+/// Splits off the options before cargo's subcommand (`+toolchain`, `-C dir`,
+/// `-Z flag`, `--config k=v`, ...), which `locate-project` needs as well.
+fn split_globals(args: &[OsString]) -> (&[OsString], &[OsString]) {
+    let mut i = 0;
+    while let Some(arg) = args.get(i) {
+        let arg = arg.as_bytes();
+        if (i == 0 && arg.starts_with(b"+")) || arg.starts_with(b"-") {
+            let takes_value =
+                matches!(arg, b"-C" | b"-Z" | b"--config" | b"--color" | b"--explain");
+            i += if takes_value { 2 } else { 1 };
+        } else {
+            break;
+        }
+    }
+    args.split_at(i.min(args.len()))
+}
+
+fn manifest_path(args: &[OsString]) -> Option<&OsStr> {
+    let mut args = args.iter().take_while(|a| *a != "--");
+    while let Some(arg) = args.next() {
+        if arg == "--manifest-path" {
+            return args.next().map(OsString::as_os_str);
+        }
+        if let Some(path) = arg.as_bytes().strip_prefix(b"--manifest-path=") {
+            return Some(OsStr::from_bytes(path));
+        }
+    }
+    None
 }
 
 fn same_dir(a: &Path, b: &Path) -> bool {
@@ -206,5 +345,56 @@ mod tests {
         std::os::unix::fs::symlink(&real, &link).unwrap();
         assert!(same_dir(&real, &link));
         assert!(!same_dir(&real, dir.path()));
+    }
+
+    fn os(args: &[&str]) -> Vec<OsString> {
+        args.iter().map(OsString::from).collect()
+    }
+
+    #[test]
+    fn global_options_are_split_from_the_subcommand() {
+        let args = os(&[
+            "+nightly",
+            "-Zunstable-options",
+            "-C",
+            "sub",
+            "--locked",
+            "build",
+            "-p",
+            "x",
+        ]);
+        let (globals, rest) = split_globals(&args);
+        assert_eq!(globals, &args[..5]);
+        assert_eq!(rest, &args[5..]);
+        let args = os(&["--config", "build.jobs=1", "test"]);
+        assert_eq!(split_globals(&args).1, os(&["test"]));
+        assert_eq!(split_globals(&os(&["-V"])).1, &[] as &[OsString]);
+        assert_eq!(split_globals(&os(&["-C"])).1, &[] as &[OsString]);
+    }
+
+    #[test]
+    fn manifest_path_stops_at_the_program_arguments() {
+        let path = |args: &[&str]| manifest_path(&os(args)).map(OsStr::to_owned);
+        assert_eq!(
+            path(&["build", "--manifest-path", "a/Cargo.toml"]),
+            Some("a/Cargo.toml".into())
+        );
+        assert_eq!(
+            path(&["build", "--manifest-path=b/Cargo.toml"]),
+            Some("b/Cargo.toml".into())
+        );
+        assert_eq!(path(&["run", "--", "--manifest-path", "c"]), None);
+        assert_eq!(path(&["build"]), None);
+    }
+
+    #[test]
+    fn nested_workspaces_get_their_own_target_dir() {
+        let target = Path::new("/t");
+        assert_eq!(Workspace::Root.target(target), Some(target.to_path_buf()));
+        assert_eq!(
+            Workspace::Nested("fuzz".into()).target(target),
+            Some("/t/ferry-ws/fuzz".into())
+        );
+        assert_eq!(Workspace::Outside.target(target), None);
     }
 }

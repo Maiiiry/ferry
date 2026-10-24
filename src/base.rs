@@ -581,8 +581,22 @@ fn build_plan(
 }
 
 fn run_warm_commands(plan: &Plan, freshness: FreshnessMode, commands: &[String]) -> Result<()> {
+    let shim_dir = crate::shim::ensure()?;
     sandbox::enter(plan)?;
-    let env = crate::agent::cargo_env(plan, freshness);
+    // The target dir variables stay set for cargo calls that bypass the shim;
+    // through it, each workspace gets the target dir it gets in an agent.
+    let mut env = crate::agent::cargo_env(plan, freshness);
+    env.extend([
+        ("PATH".into(), crate::shim::path_with(&shim_dir)),
+        (
+            crate::shim::WARM_SRC_ENV.into(),
+            plan.build_src().as_os_str().to_owned(),
+        ),
+        (
+            crate::shim::WARM_TARGET_ENV.into(),
+            plan.build_target().into_os_string(),
+        ),
+    ]);
     for cmd in commands {
         fsutil::note(&format!("running `{cmd}`"));
         // Build output goes to stderr so `--json` output on stdout stays
