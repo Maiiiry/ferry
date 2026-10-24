@@ -1,0 +1,22 @@
+# Replace the generated warm commands with your own. Each entry runs with
+# `sh -c` at the root of the base checkout, in order; the base build fails if
+# any of them fails. When `commands` is set, `targets`, `profiles` and
+# `cargo-args` are ignored.
+#
+# Ferry sets CARGO_TARGET_DIR and CARGO_BUILD_BUILD_DIR for these commands. Do
+# not pass --target-dir or --config build.target-dir/build.build-dir: command-
+# line options beat the environment, and the build would land outside the base.
+#
+# Warm exactly the commands agents will run: a unit is reused only if the
+# agent's cargo invocation selects the same features, profile and targets.
+# For example, add "cargo build -p my-cli --features full --locked" if agents
+# build that package with that feature.
+#
+# FERRY_BASE_COMMAND="..." replaces this whole list with one command for a
+# single `ferry base` run.
+
+[base]
+commands = [
+    "cargo build --workspace --all-targets --locked",
+    "cargo test --workspace --no-run --locked",
+]

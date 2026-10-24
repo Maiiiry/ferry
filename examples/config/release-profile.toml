@@ -1,0 +1,19 @@
+# Warm the dev and release profiles, for agents that run benchmarks or
+# release builds as well as tests.
+#
+# Generated warm commands (for each profile, each target):
+#   cargo build --workspace
+#   cargo test --no-run --workspace
+#   cargo build --release --workspace
+#   cargo test --no-run --release --workspace
+#
+# "dev" adds no flag (Cargo's default selection, so `cargo test` keeps using
+# the test profile), "release" adds --release, and any other name adds
+# --profile <name>, for example a custom [profile.ci] from Cargo.toml.
+# Each profile is a separate set of artifacts: expect the base to take about
+# twice the time and disk of a dev-only base.
+
+[base]
+targets = ["build", "test"]
+profiles = ["dev", "release"]
+cargo-args = ["--workspace"]

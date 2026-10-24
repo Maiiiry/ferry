@@ -1,0 +1,17 @@
+# For a repository whose Cargo workspace is not at the repository root, for
+# example a monorepo with the Rust code under rust/:
+#
+#   repo/
+#     ferry.toml        <- Ferry reads this from the main checkout's root
+#     rust/Cargo.toml   <- the workspace
+#     web/ ...
+#
+# Warm commands run at the root of the base checkout, so change into the
+# workspace first. Agents then run cargo from inside rust/ in their worktree,
+# as they normally would; the shim maps that directory into the sandbox.
+
+[base]
+commands = [
+    "cd rust && cargo build --workspace",
+    "cd rust && cargo test --workspace --no-run",
+]

@@ -1,0 +1,30 @@
+# One ferry.toml shared by Linux and macOS machines, with explicit choices
+# instead of "auto". Precedence, lowest to highest: built-in defaults, the
+# top-level tables, the [linux] or [macos] table for the running platform,
+# FERRY_* environment variables.
+
+[store]
+# Keep all build state on a fast local disk. A leading "~" is expanded, and a
+# relative path is relative to the main checkout. Agent worktrees then default
+# to <dir>/worktrees unless [agent] worktree-dir is set. Use a copy-on-write
+# filesystem (btrfs, XFS) if you can: forks and overlay copy-ups become
+# reflinks.
+dir = "/fast/disk/ferry"
+
+[agent]
+# Branches are <prefix><name>, e.g. agents/fix-parser.
+branch-prefix = "agents/"
+
+[fork]
+backend = "auto"
+
+[linux]
+# Require the namespace sandbox: spawning fails instead of silently losing
+# incremental reuse if user namespaces stop working.
+sandbox = "namespace"
+backend = "overlay"
+
+[macos]
+# macOS has no mount namespaces; clonefile(2) on APFS is the fast fork.
+sandbox = "off"
+backend = "reflink"

@@ -1,0 +1,16 @@
+# Warm everything a CI-style agent loop runs: check, clippy and the test
+# binaries, for every target in the workspace, with the lockfile enforced.
+#
+# Generated warm commands (one per target, in this order):
+#   cargo check --workspace --all-targets --locked
+#   cargo clippy --workspace --all-targets --locked
+#   cargo test --no-run --workspace --all-targets --locked
+#
+# check and clippy keep separate artifacts (clippy runs rustc through its own
+# driver), so warm both if agents run both. Agents then start with
+# `cargo clippy` and `cargo test` already fresh; only what they edit rebuilds.
+
+[base]
+targets = ["check", "clippy", "test"]
+profiles = ["dev"]
+cargo-args = ["--workspace", "--all-targets", "--locked"]
