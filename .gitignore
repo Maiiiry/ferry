@@ -1,0 +1,6 @@
+/target
+/docs/book
+/bench/work
+/bench/.cache
+*.swp
+.DS_Store

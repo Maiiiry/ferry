@@ -1,0 +1,80 @@
+[package]
+name = "ferry-rs"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+description = "Parallel AI agents, one warm build: forkable, isolated Cargo target dirs per git worktree"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/patwrall/ferry"
+homepage = "https://patwrall.github.io/ferry"
+documentation = "https://patwrall.github.io/ferry"
+readme = "README.md"
+keywords = ["cargo", "worktree", "agents", "build", "cache"]
+categories = ["development-tools::build-utils", "command-line-utilities"]
+include = [
+    "/src/**",
+    "/tests/**",
+    "/Cargo.toml",
+    "/Cargo.lock",
+    "/README.md",
+    "/CHANGELOG.md",
+    "/LICENSE-MIT",
+    "/LICENSE-APACHE",
+]
+
+[lib]
+name = "ferry"
+path = "src/lib.rs"
+
+[[bin]]
+name = "ferry"
+path = "src/main.rs"
+
+[dependencies]
+anstream = "1"
+anstyle = "1"
+anyhow = "1"
+clap = { version = "4.6", features = ["derive", "env", "wrap_help"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+toml = "1"
+
+[target.'cfg(unix)'.dependencies]
+rustix = { version = "1", features = ["fs", "process", "system"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+rustix = { version = "1", features = ["fs", "mount", "process", "system", "thread"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+libc = "0.2"
+
+[dev-dependencies]
+tempfile = "3"
+
+[lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+unused_qualifications = "warn"
+missing_debug_implementations = "warn"
+
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+module_name_repetitions = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+must_use_candidate = "allow"
+similar_names = "allow"
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+dbg_macro = "deny"
+todo = "warn"
+undocumented_unsafe_blocks = "deny"
+multiple_unsafe_ops_per_block = "deny"
+print_stderr = "allow"
+print_stdout = "allow"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "symbols"
