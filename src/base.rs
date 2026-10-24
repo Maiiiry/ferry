@@ -384,7 +384,7 @@ fn clone_seed_target(
     // Without the canonical mount the seed was built at its own checkout
     // path, which the new base's units must not keep pointing at.
     if isolation == Isolation::None {
-        freshness::invalidate_relocated_units(&paths.target, &[seed_paths.src])?;
+        freshness::relocate(&paths.target, &seed_paths.src, &seed_paths.src)?;
     }
     Ok(())
 }

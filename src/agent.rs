@@ -16,7 +16,7 @@ use std::fs;
 use std::os::unix::fs::MetadataExt;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
-use std::time::Instant;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 
@@ -335,10 +335,15 @@ fn populate(
         .filter(|(_, reason)| *reason != freshness::SkipReason::NotRegularFile)
         .count();
     meta.stamp = freshness::apply(&plan)?;
+    // Checkout gives differing files the current time, but a hook restoring
+    // commit times, or clock skew, can leave them older than the base's
+    // artifacts.
+    let after_base = UNIX_EPOCH + Duration::from_secs(base.created_unix + 1);
+    freshness::freshen_skipped(&plan, after_base.max(SystemTime::now()))?;
     git::refresh_index(&meta.worktree)?;
     if differing > 0 {
         warnings.push(format!(
-            "{differing} of {} tracked files differ from base {}; crates using them rebuild on the first build",
+            "{differing} of {} tracked files differ from base {} (or are reached through a symlink that changed); crates using them rebuild on the first build",
             meta.stamp.tracked,
             base.id.short()
         ));
@@ -359,12 +364,11 @@ fn populate(
             Isolation::Namespace => ctx.store.canonical_src(),
             Isolation::None => base_paths.src.clone(),
         };
-        let invalidated = freshness::invalidate_relocated_units(&paths.target, &[old_src])?;
-        if !invalidated.is_empty() {
-            warnings.push(format!(
-                "{} unit(s) captured the base's absolute paths (e.g. env!(\"CARGO_MANIFEST_DIR\")) and will rebuild",
-                invalidated.len()
-            ));
+        if freshness::relocate(&paths.target, &base_paths.src, &old_src)?.is_none() {
+            warnings.push(
+                "the base has no readable Cargo.lock, so this agent's first build is a full build"
+                    .into(),
+            );
         }
     }
 

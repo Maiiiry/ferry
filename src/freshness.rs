@@ -363,7 +363,7 @@ pub fn freshen_skipped(plan: &StampPlan, at_least: SystemTime) -> Result<usize> 
 /// build. Single-threaded: the caller enters a user namespace next, which
 /// requires that no other threads exist. Returns the number of files and
 /// directories stamped.
-pub fn stamp_base_checkout(base_src: &Path, index: &[Entry]) -> Result<usize> {
+pub(crate) fn stamp_base_checkout(base_src: &Path, index: &[Entry]) -> Result<usize> {
     let root = fs::canonicalize(base_src).at("resolve", base_src)?;
     for entry in index {
         check_relative(&entry.path)?;
@@ -425,6 +425,52 @@ pub fn cargo_env(mode: FreshnessMode) -> &'static [(&'static str, &'static str)]
         ],
         FreshnessMode::Mtime => &[],
     }
+}
+
+/// Prepares a forked `target` for builds at other absolute paths than the
+/// ones it was built at: `old_root`, by the checkout now at `checkout`.
+///
+/// Units can capture old paths where no dep-info records them: a build
+/// script writing `CARGO_MANIFEST_DIR` into generated code or a `rustc-env`
+/// value, or a proc macro reading it from the environment. So every unit of
+/// every local package (one without a `source` in `Cargo.lock`) rebuilds,
+/// and other workspaces' target dirs are dropped; registry and git
+/// dependencies keep their reuse. Without a readable lockfile nothing tells
+/// local units apart, and the whole target dir is cleared. Returns the
+/// number of units that rebuild, or `None` if the target was cleared.
+pub fn relocate(target: &Path, checkout: &Path, old_root: &Path) -> Result<Option<usize>> {
+    #[derive(Deserialize)]
+    struct Lockfile {
+        #[serde(default)]
+        package: Vec<Locked>,
+    }
+    #[derive(Deserialize)]
+    struct Locked {
+        name: String,
+        source: Option<String>,
+    }
+
+    crate::fsutil::remove_dir_all_force(&target.join(crate::shim::NESTED_TARGETS))?;
+    let lockfile = checkout.join("Cargo.lock");
+    let text = match fs::read_to_string(&lockfile) {
+        Ok(text) => Some(text),
+        Err(e) if e.kind() == ErrorKind::NotFound => None,
+        Err(e) => return Err(e).at("read", &lockfile),
+    };
+    let Some(lock) = text.and_then(|t| toml::from_str::<Lockfile>(&t).ok()) else {
+        crate::fsutil::remove_dir_all_force(target)?;
+        fs::create_dir_all(target).at("create directory", target)?;
+        return Ok(None);
+    };
+    let local: Vec<String> = lock
+        .package
+        .into_iter()
+        .filter(|p| p.source.is_none())
+        .map(|p| p.name)
+        .collect();
+    let rebuilt = invalidate_packages(target, &local)?.len()
+        + invalidate_relocated_units(target, &[old_root.to_path_buf()])?.len();
+    Ok(Some(rebuilt))
 }
 
 /// Forces Cargo to rebuild units of a forked target dir that captured

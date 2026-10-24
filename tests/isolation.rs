@@ -5,6 +5,7 @@
 mod common;
 
 use std::fs;
+use std::path::Path;
 
 use common::{TestRepo, path_of};
 use serde_json::Value;
@@ -80,4 +81,45 @@ fn configured_target_and_build_dirs_cannot_redirect_builds() {
         "a build wrote to {}",
         redirected.display()
     );
+}
+
+/// Without the namespace sandbox an agent builds at other paths than its
+/// base. A build script that writes its `CARGO_MANIFEST_DIR` into generated
+/// code leaves that path in no dep-info, so only rebuilding the agent's
+/// local units keeps it from reading the base's checkout.
+#[test]
+fn without_a_sandbox_generated_code_sees_the_agents_paths() {
+    let repo = TestRepo::with_env(&[("FERRY_SANDBOX", "off")]);
+    let embed = repo.root().join("embed");
+    let build_rs = fs::read_to_string(embed.join("build.rs")).unwrap().replacen(
+        "fn main() {",
+        "fn main() {\n    let dir = std::env::var(\"CARGO_MANIFEST_DIR\").unwrap();\n    \
+         let out = std::env::var(\"OUT_DIR\").unwrap();\n    \
+         fs::write(format!(\"{out}/dir.rs\"), format!(\"pub const DIR: &str = {dir:?};\")).unwrap();",
+        1,
+    );
+    repo.write(&embed.join("build.rs"), &build_rs);
+    let lib = fs::read_to_string(embed.join("src/lib.rs")).unwrap();
+    repo.write(
+        &embed.join("src/lib.rs"),
+        &format!("{lib}include!(concat!(env!(\"OUT_DIR\"), \"/dir.rs\"));\n"),
+    );
+    let main = repo.root().join("app/src/main.rs");
+    let app = fs::read_to_string(&main).unwrap().replacen(
+        "fn main() {",
+        "fn main() {\n    println!(\"dir={}\", embed::DIR);",
+        1,
+    );
+    repo.write(&main, &app);
+    repo.commit_all("embed records its manifest dir");
+    repo.base();
+
+    let worktree = repo.spawn("a");
+    let out = common::run(repo.agent_cargo("a").args(["run", "-q", "-p", "app"])).ok();
+    let dir = out
+        .stdout
+        .lines()
+        .find_map(|l| l.strip_prefix("dir="))
+        .unwrap();
+    assert_eq!(Path::new(dir), worktree.join("embed"), "{out}");
 }

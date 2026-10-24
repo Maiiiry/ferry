@@ -104,3 +104,26 @@ fn an_agent_can_start_from_an_older_commit_than_the_base() {
     repo.build("a").assert_rebuilt(&["leaf", "mid", "app"]);
     assert_eq!(repo.app("a").marker, common::BASE_MARKER);
 }
+
+/// A post-checkout hook that restores old mtimes (or a clock that went
+/// backwards) can leave a file that differs from the base older than the
+/// base's artifacts; spawn must still make Cargo see it as changed.
+#[test]
+fn a_differing_file_is_newer_than_the_base_whatever_checkout_left() {
+    let repo = TestRepo::new();
+    let main_branch = repo.git(repo.root(), ["branch", "--show-current"]);
+    repo.git(repo.root(), ["checkout", "-q", "-b", "feature"]);
+    repo.set_marker(repo.root(), "FEATURE");
+    repo.commit_all("feature");
+    repo.git(repo.root(), ["checkout", "-q", &main_branch]);
+    let hook = repo.root().join(".git/hooks/post-checkout");
+    repo.write(
+        &hook,
+        "#!/bin/sh\ngit ls-files -z | xargs -0 touch -h -d 2024-06-01T00:00:00\n",
+    );
+    fs::set_permissions(&hook, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
+    repo.base();
+
+    repo.ferry(["spawn", "a", "--from", "feature"]).ok();
+    assert_eq!(repo.app("a").marker, "FEATURE");
+}
