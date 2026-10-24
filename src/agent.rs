@@ -351,6 +351,13 @@ fn agent_isolation(
     if caps.userns.is_ok() {
         return Ok(Isolation::Namespace);
     }
+    if caps.userns.is_inconclusive() {
+        return Err(Error::Refused(
+            "could not tell whether the namespace sandbox works (the probe did not answer); \
+             retry, or set FERRY_SANDBOX=off to spawn without the sandbox on purpose"
+                .into(),
+        ));
+    }
     if ctx.settings.sandbox == SandboxMode::Namespace {
         return Err(Error::Sandbox(sandbox::SandboxError::Unsupported(
             "user namespaces are unavailable".into(),

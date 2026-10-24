@@ -10,7 +10,10 @@ use std::time::{Duration, Instant};
 use super::{Capabilities, FsInfo, Os, Probe, Sysctl};
 use crate::sandbox::linux::ProbeResult;
 
-const PROBE_TIMEOUT: Duration = Duration::from_secs(5);
+// Generous because under memory pressure (heavy swapping right after a large
+// target dir is deleted, say) fork + exec of the probe can stall for seconds;
+// a timeout is reported as inconclusive, never as "no namespaces".
+const PROBE_TIMEOUT: Duration = Duration::from_secs(30);
 
 const SYSCTLS: [&str; 5] = [
     "user.max_user_namespaces",

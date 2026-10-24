@@ -100,7 +100,9 @@ agents build at their own paths. Crate-level reuse still works; the first edit
 loses rustc's incremental state. Ferry also deletes the fingerprints of units
 that captured the base's absolute source paths (for example through
 `env!("CARGO_MANIFEST_DIR")`), so those rebuild instead of silently pointing at
-the base. The experimental [remap-paths mode](remap-paths.md) recovers most of
+the base. That has a price on real workspaces: their dependents rebuild too. On
+rust-analyzer, `test-utils` and `xtask` read `CARGO_MANIFEST_DIR`, so the first
+build after a no-namespace spawn compiles 12 units instead of 0. The experimental [remap-paths mode](remap-paths.md) recovers most of
 the incremental reuse without namespaces.
 
 ## Routing cargo: `ferry run` and the shim

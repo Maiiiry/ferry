@@ -167,7 +167,9 @@ Ferry is not a security sandbox: agents run with your user's full privileges
 | Windows | unsupported | | Ferry does not compile there (compile-time error) |
 
 Crate-level reuse means unchanged crates are not rebuilt; an edited crate
-recompiles from scratch on its first edit. `ferry doctor` tells you which row
+recompiles from scratch on its first edit. Without the namespace sandbox,
+crates that captured the base's paths (`env!("CARGO_MANIFEST_DIR")`) and their
+dependents also rebuild once: 12 units on rust-analyzer. `ferry doctor` tells you which row
 you are in. [Platform support](https://patwrall.github.io/ferry/platforms.html).
 
 ## Comparison

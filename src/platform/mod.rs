@@ -59,6 +59,12 @@ impl Probe {
     pub fn is_ok(&self) -> bool {
         matches!(self, Probe::Ok)
     }
+
+    /// True when the probe itself could not run or answer (e.g. it timed
+    /// out), which says nothing about whether the capability exists.
+    pub fn is_inconclusive(&self) -> bool {
+        matches!(self, Probe::Failed { stage, .. } if stage == "probe process")
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

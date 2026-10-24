@@ -403,6 +403,13 @@ fn resolve_isolation(ctx: &Context, warnings: &mut Vec<String>) -> Result<Isolat
         crate::platform::Probe::Unsupported { reason } => reason.clone(),
         crate::platform::Probe::Failed { stage, error } => format!("{stage}: {error}"),
     };
+    if caps.userns.is_inconclusive() {
+        return Err(Error::Refused(format!(
+            "could not tell whether the namespace sandbox works ({detail}), and building \
+             without it would silently cost every agent its incremental reuse; retry, or \
+             set FERRY_SANDBOX=off to build without the sandbox on purpose"
+        )));
+    }
     if ctx.settings.sandbox == SandboxMode::Namespace {
         return Err(Error::Sandbox(sandbox::SandboxError::Unsupported(detail)));
     }
