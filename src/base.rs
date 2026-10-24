@@ -99,6 +99,12 @@ pub fn build(ctx: &Context, rev: &str, cold: bool) -> Result<BuildReport> {
     let host_toolchain = Toolchain::detect(&ctx.repo.main_worktree)?;
     let freshness = freshness::resolve_mode(ctx.settings.freshness, &host_toolchain)?;
     let isolation = resolve_isolation(ctx, &mut warnings)?;
+    for config in unapplied_cargo_configs(ctx)? {
+        warnings.push(format!(
+            "{}; {CONFIG_ADVICE}",
+            unapplied_message(ctx, &config)
+        ));
+    }
     let remap = isolation == Isolation::None && ctx.settings.remap_paths && {
         match crate::remap::supported(&host_toolchain) {
             Ok(()) => true,
@@ -536,10 +542,54 @@ fn unit_inputs(ctx: &Context, commit: &CommitId) -> Result<String> {
     Ok(format!("{:016x}", fnv1a64(&input)))
 }
 
+/// Cargo configs that apply to builds in the main worktree but not to
+/// Ferry's: those in directories above it, and an untracked one inside it.
+/// Ferry's builds run under the store, so Cargo never finds them there.
+pub fn unapplied_cargo_configs(ctx: &Context) -> Result<Vec<std::path::PathBuf>> {
+    let cargo_home = cargo_home().and_then(|home| fs::canonicalize(home).ok());
+    let head = ctx.repo.resolve_commit("HEAD").ok();
+    let mut unapplied = Vec::new();
+    let root = &ctx.repo.main_worktree;
+    for dir in root.ancestors() {
+        let dot_cargo = dir.join(".cargo");
+        if cargo_home.is_some() && fs::canonicalize(&dot_cargo).ok() == cargo_home {
+            continue;
+        }
+        for file in ["config", "config.toml"] {
+            let path = dot_cargo.join(file);
+            if !path.is_file() {
+                continue;
+            }
+            let tracked = match &head {
+                Some(head) if dir == root => ctx
+                    .repo
+                    .show_file(head, &format!(".cargo/{file}"))?
+                    .is_some(),
+                _ => false,
+            };
+            if !tracked {
+                unapplied.push(path);
+            }
+        }
+    }
+    Ok(unapplied)
+}
+
 fn cargo_home() -> Option<std::path::PathBuf> {
     std::env::var_os("CARGO_HOME")
         .map(std::path::PathBuf::from)
         .or_else(|| std::env::var_os("HOME").map(|h| std::path::Path::new(&h).join(".cargo")))
+}
+
+pub const CONFIG_ADVICE: &str = "move its settings into the repository's tracked .cargo/config.toml or into $CARGO_HOME/config.toml";
+
+pub fn unapplied_message(ctx: &Context, config: &std::path::Path) -> String {
+    format!(
+        "{} applies to cargo in {} but not to Ferry's builds, which run under {}",
+        config.display(),
+        ctx.repo.main_worktree.display(),
+        ctx.store.root().display()
+    )
 }
 
 /// Environment variables that change unit hashes or compiler flags, minus

@@ -144,6 +144,16 @@ pub fn run(ctx: Result<&Context, String>) -> Report {
         ),
     });
     checks.extend(namespace_checks(&caps));
+    match crate::base::unapplied_cargo_configs(ctx) {
+        Ok(configs) => checks.extend(configs.iter().map(|config| {
+            warn(
+                "cargo config",
+                crate::base::unapplied_message(ctx, config),
+                Some(crate::base::CONFIG_ADVICE.into()),
+            )
+        })),
+        Err(e) => checks.push(warn("cargo config", e.to_string(), None)),
+    }
 
     let plan = plan(&ctx.settings, &caps, freshness);
     Report {

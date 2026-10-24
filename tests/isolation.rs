@@ -123,3 +123,39 @@ fn without_a_sandbox_generated_code_sees_the_agents_paths() {
         .unwrap();
     assert_eq!(Path::new(dir), worktree.join("embed"), "{out}");
 }
+
+/// Cargo reads `.cargo/config.toml` from every directory above the one it
+/// runs in. Ferry's builds run under the store, so a config above the
+/// repository (or an untracked one in it) silently stops applying.
+#[test]
+fn cargo_configs_that_ferry_builds_miss_are_reported() {
+    let repo = TestRepo::new();
+    let above = repo.scratch().join(".cargo/config.toml");
+    fs::create_dir_all(above.parent().unwrap()).unwrap();
+    repo.write(&above, "[build]\njobs = 2\n");
+    let untracked = repo.root().join(".cargo/config.toml");
+    fs::create_dir_all(untracked.parent().unwrap()).unwrap();
+    repo.write(&untracked, "[build]\njobs = 2\n");
+
+    let built = repo.ferry_json(["base"]);
+    let warnings = built["warnings"].to_string();
+    for config in [&above, &untracked] {
+        assert!(warnings.contains(config.to_str().unwrap()), "{built}");
+    }
+
+    repo.commit_all("track the repository's cargo config");
+    let doctor = repo.ferry_json(["doctor"]);
+    let reported: Vec<&Value> = doctor["checks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|c| c["name"] == "cargo config")
+        .collect();
+    assert_eq!(reported.len(), 1, "{doctor}");
+    assert!(
+        reported[0]["detail"]
+            .as_str()
+            .unwrap()
+            .contains(above.to_str().unwrap())
+    );
+}
