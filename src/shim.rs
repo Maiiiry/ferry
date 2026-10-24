@@ -30,22 +30,32 @@ pub fn invoked_as_cargo() -> bool {
 /// `<store parent>/bin`, creating it and (re)pointing the `cargo` symlink at
 /// the running ferry binary.
 pub fn ensure(ctx: &Context) -> Result<PathBuf> {
+    ensure_link(ctx, NAME)
+}
+
+/// `<store parent>/bin`, creating it and (re)pointing the `name` symlink at
+/// the running ferry binary.
+pub(crate) fn ensure_link(ctx: &Context, name: &str) -> Result<PathBuf> {
     let parent = ctx.settings.store_parent.clone().ok_or(Error::NoStoreDir)?;
     let dir = parent.join("bin");
     std::fs::create_dir_all(&dir).at("create directory", &dir)?;
     let exe = std::env::current_exe().at("locate", "the ferry binary")?;
     let exe = std::fs::canonicalize(&exe).unwrap_or(exe);
-    let link = dir.join(NAME);
-    if std::fs::read_link(&link).ok().as_deref() == Some(exe.as_path()) {
-        return Ok(dir);
-    }
-    // Replace atomically so a concurrent cargo call never finds the link
-    // missing.
-    let tmp = dir.join(format!(".{NAME}.tmp-{}", std::process::id()));
-    let _ = std::fs::remove_file(&tmp);
-    std::os::unix::fs::symlink(&exe, &tmp).at("create symlink", &tmp)?;
-    std::fs::rename(&tmp, &link).at("rename into place", &link)?;
+    symlink_atomic(&exe, &dir.join(name))?;
     Ok(dir)
+}
+
+/// Points the symlink `link` at `target`, replacing an existing one
+/// atomically so a concurrent reader never finds it missing.
+pub(crate) fn symlink_atomic(target: &Path, link: &Path) -> Result<()> {
+    if std::fs::read_link(link).ok().as_deref() == Some(target) {
+        return Ok(());
+    }
+    let name = link.file_name().unwrap_or_default().to_string_lossy();
+    let tmp = link.with_file_name(format!(".{name}.tmp-{}", std::process::id()));
+    let _ = std::fs::remove_file(&tmp);
+    std::os::unix::fs::symlink(target, &tmp).at("create symlink", &tmp)?;
+    std::fs::rename(&tmp, link).at("rename into place", link)
 }
 
 /// `PATH` with `shim_dir` first and any other occurrence removed.
