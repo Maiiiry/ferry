@@ -174,8 +174,20 @@ pub fn main() -> ExitCode {
             let hint = err
                 .downcast_ref::<crate::Error>()
                 .and_then(crate::Error::hint);
-            let causes: Vec<String> = err.chain().skip(1).map(ToString::to_string).collect();
-            output::error(&err.to_string(), &causes, hint.as_deref());
+            // Most messages already end with their source's text.
+            let message = err.to_string();
+            let mut shown = message.clone();
+            let causes: Vec<String> = err
+                .chain()
+                .skip(1)
+                .map(ToString::to_string)
+                .filter(|cause| {
+                    let new = !shown.contains(cause.as_str());
+                    shown.push_str(cause);
+                    new
+                })
+                .collect();
+            output::error(&message, &causes, hint.as_deref());
             ExitCode::FAILURE
         }
     }

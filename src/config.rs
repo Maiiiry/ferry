@@ -276,12 +276,16 @@ impl Config {
             },
         };
         let store_parent = explicit_store.or_else(crate::store::default_store_parent);
-        for (what, dir) in [("store", &store_parent), ("worktree", &worktree_parent)] {
+        // Only these variables can make either path relative.
+        for (var, dir) in [
+            ("FERRY_HOME", &store_parent),
+            ("FERRY_WORKTREES", &worktree_parent),
+        ] {
             if let Some(p) = dir
                 && !p.is_absolute()
             {
                 return Err(ConfigError::Invalid(format!(
-                    "{what} directory {} must be absolute",
+                    "{var} must be an absolute path, not `{}`",
                     p.display()
                 )));
             }

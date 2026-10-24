@@ -108,7 +108,7 @@ pub enum TargetSpec {
 pub struct ForkStats {
     pub files: u64,
     pub bytes: u64,
-    #[serde(with = "duration_secs")]
+    #[serde(rename = "elapsed_secs", with = "duration_secs")]
     pub elapsed: Duration,
 }
 

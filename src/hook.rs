@@ -163,10 +163,7 @@ fn agent_name(raw: &str) -> Result<AgentName> {
 fn read_input<T: for<'de> Deserialize<'de>>(stdin: &mut dyn Read) -> Result<T> {
     let mut buf = Vec::new();
     stdin.read_to_end(&mut buf).at("read", "stdin")?;
-    serde_json::from_slice(&buf).map_err(|source| Error::Metadata {
-        path: PathBuf::from("<hook input on stdin>"),
-        source,
-    })
+    serde_json::from_slice(&buf).map_err(Error::HookInput)
 }
 
 #[cfg(test)]

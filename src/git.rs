@@ -564,7 +564,15 @@ where
 }
 
 fn command_error<S: AsRef<str>>(args: &[S], output: &Output) -> GitError {
-    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_owned();
+    // git's own `hint:` lines suggest git commands, which mislead next to
+    // Ferry's hints.
+    let stderr = String::from_utf8_lossy(&output.stderr)
+        .lines()
+        .filter(|l| !l.starts_with("hint:"))
+        .collect::<Vec<_>>()
+        .join("\n")
+        .trim()
+        .to_owned();
     GitError::Command {
         args: args.iter().map(AsRef::as_ref).collect::<Vec<_>>().join(" "),
         stderr: if stderr.is_empty() {

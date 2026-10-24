@@ -64,6 +64,9 @@ pub enum Error {
     #[error("refusing to continue: {0}")]
     Refused(String),
 
+    #[error("the hook input on stdin is not what the agent tool should send: {0}")]
+    HookInput(#[source] serde_json::Error),
+
     #[error("could not determine a storage directory; set FERRY_HOME")]
     NoStoreDir,
 }
