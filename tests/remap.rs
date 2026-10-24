@@ -473,11 +473,7 @@ fn debug_info_survives_remapping() {
         // rust-lang/rust#132143: ld can drop an object's entry when its
         // DWARF has relative paths.
         let map = xcrun(&["dsymutil", "--dump-debug-map"], &bin, &root);
-        let objects: Vec<&str> = map
-            .lines()
-            .filter_map(|l| l.trim().strip_prefix("filename:"))
-            .map(|v| v.trim().trim_matches('\''))
-            .collect();
+        let objects = debug_map_objects(&map);
         assert!(
             objects.iter().any(|o| o.contains(LIB)),
             "{name}: no {LIB} object in the debug map:\n{map}"
@@ -548,6 +544,47 @@ fn debug_info_survives_remapping() {
             );
         }
     }
+}
+
+/// The object files listed in `dsymutil --dump-debug-map` output, a YAML
+/// document with one `- filename: '<path>'` item per object.
+fn debug_map_objects(map: &str) -> Vec<&str> {
+    map.lines()
+        .filter_map(|l| l.trim_start().strip_prefix("- filename:"))
+        .map(|v| v.trim().trim_matches('\''))
+        .collect()
+}
+
+#[test]
+fn debug_map_objects_reads_dsymutil_output() {
+    // What LLVM 21's `dsymutil --dump-debug-map` printed for an arm64 dylib
+    // linked from a binary crate's object and a library's rlib, with a
+    // shorter directory.
+    let map = "\
+---
+triple:          'arm64-apple-darwin'
+binary-path:     remapbin.dylib
+objects:
+  - filename:        '/private/var/t/with.target/debug/deps/remapbin-abc.remapbin.o'
+    timestamp:       0
+    type:            102
+    symbols:
+      - { sym: __RNvCsdtSMxSA38aw_7___rustc17rust_begin_unwind, objAddr: 0x0, binAddr: 0x508, size: 0x10 }
+      - { sym: _entry, objAddr: 0x10, binAddr: 0x518, size: 0x1C }
+  - filename:        '/private/var/t/with.target/debug/deps/libremaplib-abc.rlib(libremaplib-abc.remaplib.375bbbe60a926f9f-cgu.0.rcgu.o)'
+    timestamp:       0
+    type:            102
+    symbols:
+      - { sym: _remap_value, objAddr: 0x0, binAddr: 0x534, size: 0x6C }
+...
+";
+    assert_eq!(
+        debug_map_objects(map),
+        [
+            "/private/var/t/with.target/debug/deps/remapbin-abc.remapbin.o",
+            "/private/var/t/with.target/debug/deps/libremaplib-abc.rlib(libremaplib-abc.remaplib.375bbbe60a926f9f-cgu.0.rcgu.o)",
+        ]
+    );
 }
 
 /// Measured, not asserted in CI (it runs with continue-on-error there):
