@@ -14,6 +14,7 @@ use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
+use crate::config::Settings;
 use crate::context::Context;
 use crate::error::{Error, IoContext, Result};
 
@@ -29,14 +30,14 @@ pub fn invoked_as_cargo() -> bool {
 
 /// `<store parent>/bin`, creating it and (re)pointing the `cargo` symlink at
 /// the running ferry binary.
-pub fn ensure(ctx: &Context) -> Result<PathBuf> {
-    ensure_link(ctx, NAME)
+pub fn ensure(settings: &Settings) -> Result<PathBuf> {
+    ensure_link(settings, NAME)
 }
 
 /// `<store parent>/bin`, creating it and (re)pointing the `name` symlink at
 /// the running ferry binary.
-pub(crate) fn ensure_link(ctx: &Context, name: &str) -> Result<PathBuf> {
-    let parent = ctx.settings.store_parent.clone().ok_or(Error::NoStoreDir)?;
+pub(crate) fn ensure_link(settings: &Settings, name: &str) -> Result<PathBuf> {
+    let parent = settings.store_parent.clone().ok_or(Error::NoStoreDir)?;
     let dir = parent.join("bin");
     std::fs::create_dir_all(&dir).at("create directory", &dir)?;
     let exe = std::env::current_exe().at("locate", "the ferry binary")?;
@@ -107,10 +108,11 @@ pub fn main() -> ExitCode {
 
 fn run(cargo: &Path, args: &[OsString]) -> Result<std::convert::Infallible> {
     let cwd = std::env::current_dir().at("read", "current directory")?;
-    let agent = match Context::discover(&cwd) {
-        Ok(ctx) => crate::agent::find_by_dir(&ctx, &cwd)?.map(|meta| (ctx, meta)),
-        // Not a repository Ferry can manage: plain cargo is exactly right.
-        Err(Error::Git(_)) => None,
+    let agent = match Context::discover_existing(&cwd) {
+        Ok(Some(ctx)) => crate::agent::find_by_dir(&ctx, &cwd)?.map(|meta| (ctx, meta)),
+        // No store yet, or not a repository Ferry can manage: plain cargo is
+        // exactly right.
+        Ok(None) | Err(Error::Git(_)) => None,
         Err(e) => {
             // Plain cargo is still safe here: it builds into the checkout's
             // own target dir, never into another agent's.

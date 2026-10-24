@@ -105,12 +105,12 @@ pub fn claude_session_start(stdin: &mut dyn Read) -> Result<()> {
     let Some(env_file) = std::env::var_os("CLAUDE_ENV_FILE") else {
         return Ok(());
     };
-    let ctx = match Context::discover(&input.cwd) {
-        Ok(ctx) => ctx,
+    let settings = match crate::context::settings(&input.cwd) {
+        Ok(settings) => settings,
         Err(Error::Git(_)) => return Ok(()),
         Err(e) => return Err(e),
     };
-    let shim_dir = crate::shim::ensure(&ctx)?;
+    let shim_dir = crate::shim::ensure(&settings)?;
     let line = format!(
         "export PATH={}:\"$PATH\"\n",
         crate::config::shell_quote(&shim_dir.to_string_lossy())

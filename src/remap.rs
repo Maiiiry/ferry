@@ -53,7 +53,7 @@ pub fn supported(toolchain: &Toolchain) -> std::result::Result<(), String> {
 /// path must be stable: Cargo hashes the wrapper path into workspace members'
 /// artifact names.
 pub fn ensure_wrapper(ctx: &Context) -> Result<PathBuf> {
-    Ok(crate::shim::ensure_link(ctx, WRAPPER_NAME)?.join(WRAPPER_NAME))
+    Ok(crate::shim::ensure_link(&ctx.settings, WRAPPER_NAME)?.join(WRAPPER_NAME))
 }
 
 /// Creates `<src_root>/.ferry-target -> target` (hidden from `git status`)
