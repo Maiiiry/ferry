@@ -1,0 +1,26 @@
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+    # A week for compromised releases to be found and yanked before we pull them.
+    cooldown:
+      default-days: 7
+    groups:
+      cargo:
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    # dist generates release.yml and `dist plan` rejects any edit to it. Bump its
+    # pins in dist-workspace.toml [dist.github-action-commits], then `dist generate`.
+    exclude-paths:
+      - .github/workflows/release.yml
+    groups:
+      actions:
+        patterns: ["*"]
