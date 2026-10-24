@@ -73,6 +73,9 @@ impl Error {
     pub fn hint(&self) -> Option<String> {
         match self {
             Error::NoBase => Some("run `ferry base` to build one".into()),
+            Error::BaseBuildFailed { .. } => Some(
+                "fix the build, or set the warm commands in ferry.toml ([base] targets or commands)".into(),
+            ),
             Error::BaseMissing { .. } => {
                 Some("run `ferry base` to rebuild it, then `ferry gc` to clean up".into())
             }

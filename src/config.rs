@@ -64,9 +64,9 @@ pub struct BaseConfig {
 impl Default for BaseConfig {
     fn default() -> Self {
         Self {
-            targets: vec![WarmTarget::Build],
+            targets: vec![WarmTarget::Build, WarmTarget::Test],
             profiles: vec!["dev".into()],
-            cargo_args: vec!["--workspace".into(), "--all-targets".into()],
+            cargo_args: vec!["--workspace".into()],
             commands: None,
         }
     }
@@ -412,11 +412,11 @@ pub const TEMPLATE: &str = r#"# Ferry configuration: https://patwrall.github.io/
 
 [base]
 # Cargo subcommands that warm the base: "check", "build", "test" (--no-run), "clippy".
-targets = ["build"]
+targets = ["build", "test"]
 # Cargo profiles to warm. "dev" uses Cargo's default profile selection.
 profiles = ["dev"]
 # Extra arguments for every generated command.
-cargo-args = ["--workspace", "--all-targets"]
+cargo-args = ["--workspace"]
 # Replace the generated commands entirely; each entry runs with `sh -c`.
 # commands = ["cargo build --workspace --all-targets --locked"]
 
@@ -472,7 +472,7 @@ mod tests {
     fn default_warm_command() {
         assert_eq!(
             Config::default().warm_commands(),
-            vec!["cargo build --workspace --all-targets"]
+            vec!["cargo build --workspace", "cargo test --no-run --workspace"]
         );
     }
 

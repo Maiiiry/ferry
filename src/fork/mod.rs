@@ -180,9 +180,7 @@ pub fn select(
         Err("overlayfs needs the namespace sandbox, which is not in use".to_owned())
     } else {
         match &caps.overlay {
-            Probe::Ok => Ok(format!(
-                "overlayfs over the base inside the agent's namespace (on {fs})"
-            )),
+            Probe::Ok => Ok(format!("overlayfs works in the namespace sandbox on {fs}")),
             other => Err(format!("overlayfs unavailable ({})", probe_reason(other))),
         }
     };

@@ -102,7 +102,7 @@ pub fn run(ctx: Result<&Context, String>) -> Report {
         Ok(t) => {
             checks.push(ok(
                 "toolchain",
-                format!("rustc {} ({:?}), {}", t.release, t.channel, t.cargo_version),
+                format!("rustc {} ({}), {}", t.release, t.channel, t.cargo_version),
             ));
             freshness::resolve_mode(ctx.settings.freshness, t).ok()
         }

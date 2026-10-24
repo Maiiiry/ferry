@@ -39,6 +39,17 @@ pub struct Toolchain {
     pub cargo_version: String,
 }
 
+impl std::fmt::Display for Channel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Channel::Stable => "stable",
+            Channel::Beta => "beta",
+            Channel::Nightly => "nightly",
+            Channel::Dev => "dev",
+        })
+    }
+}
+
 impl Toolchain {
     pub fn detect(dir: &Path) -> Result<Self, ToolchainError> {
         let rustc_verbose = capture("rustc", &["-vV"], dir)?;

@@ -51,32 +51,35 @@ pub fn fields(rows: &[(&str, String)]) {
 
 /// Prints a left-aligned table with a dimmed header row.
 pub fn table(header: &[&str], rows: &[Vec<String>]) {
+    // Cells may carry ANSI styling, which takes no columns on screen.
+    let visible = |cell: &str| {
+        anstream::adapter::strip_str(cell)
+            .to_string()
+            .chars()
+            .count()
+    };
     let mut widths: Vec<usize> = header.iter().map(|h| h.len()).collect();
     for row in rows {
         for (w, cell) in widths.iter_mut().zip(row) {
-            *w = (*w).max(cell.chars().count());
+            *w = (*w).max(visible(cell));
         }
     }
-    let mut out = anstream::stdout().lock();
-    let line = |cells: Vec<String>| {
+    let line = |cells: &[String]| {
         let last = cells.len().saturating_sub(1);
-        cells
-            .iter()
-            .enumerate()
-            .map(|(i, c)| {
-                if i == last {
-                    c.clone()
-                } else {
-                    format!("{c:<w$}", w = widths[i])
-                }
-            })
-            .collect::<Vec<_>>()
-            .join("  ")
+        let mut out = String::new();
+        for (i, cell) in cells.iter().enumerate() {
+            out.push_str(cell);
+            if i != last {
+                out.push_str(&" ".repeat(widths[i] - visible(cell) + 2));
+            }
+        }
+        out
     };
-    let head = line(header.iter().map(|h| (*h).to_owned()).collect());
-    let _ = writeln!(out, "  {DIM}{head}{DIM:#}");
+    let mut out = anstream::stdout().lock();
+    let head: Vec<String> = header.iter().map(|h| (*h).to_owned()).collect();
+    let _ = writeln!(out, "  {DIM}{}{DIM:#}", line(&head));
     for row in rows {
-        let _ = writeln!(out, "  {}", line(row.clone()));
+        let _ = writeln!(out, "  {}", line(row));
     }
 }
 
