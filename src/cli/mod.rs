@@ -6,6 +6,7 @@ use std::ffi::OsString;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
+use anstream::{print, println};
 use anyhow::Context as _;
 use clap::{Parser, Subcommand};
 
@@ -57,6 +58,9 @@ pub enum Command {
         /// Commit to build (any git revision).
         #[arg(long, default_value = "HEAD")]
         rev: String,
+        /// Build from scratch instead of seeding from the newest compatible base.
+        #[arg(long)]
+        cold: bool,
     },
 
     /// Create an agent: a git worktree plus a forked warm target dir.
@@ -174,7 +178,7 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
     let discover = || Context::discover(&cwd);
     match cli.command {
         Command::Init { force } => init(&discover()?, force, json),
-        Command::Base { rev } => base_cmd(&discover()?, &rev, json),
+        Command::Base { rev, cold } => base_cmd(&discover()?, &rev, cold, json),
         Command::Spawn {
             name,
             from,
@@ -267,8 +271,8 @@ fn init(ctx: &Context, force: bool, json: bool) -> anyhow::Result<ExitCode> {
     Ok(ExitCode::SUCCESS)
 }
 
-fn base_cmd(ctx: &Context, rev: &str, json: bool) -> anyhow::Result<ExitCode> {
-    let report = base::build(ctx, rev)?;
+fn base_cmd(ctx: &Context, rev: &str, cold: bool, json: bool) -> anyhow::Result<ExitCode> {
+    let report = base::build(ctx, rev, cold)?;
     if json {
         output::json(&report)?;
         return Ok(ExitCode::SUCCESS);
@@ -283,8 +287,13 @@ fn base_cmd(ctx: &Context, rev: &str, json: bool) -> anyhow::Result<ExitCode> {
             b.id.short()
         ));
     } else {
+        let seeded = b
+            .seeded_from
+            .as_ref()
+            .map(|s| format!(", seeded from {}", s.short()))
+            .unwrap_or_default();
         output::success(&format!(
-            "base {} ready in {:.1}s ({} sandbox, {} freshness)",
+            "base {} ready in {:.1}s ({} sandbox, {} freshness{seeded})",
             b.id.short(),
             b.build_secs,
             b.isolation,

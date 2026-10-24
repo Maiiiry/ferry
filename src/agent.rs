@@ -292,7 +292,7 @@ fn populate(
 /// Gives the agent the base's `Cargo.lock` when the repository does not
 /// track one, so the agent resolves the same dependency versions the base
 /// was built with instead of re-resolving (and rebuilding) on first build.
-fn copy_untracked_lockfile(base_src: &Path, worktree: &Path) -> Result<()> {
+pub(crate) fn copy_untracked_lockfile(base_src: &Path, worktree: &Path) -> Result<()> {
     let (from, to) = (base_src.join("Cargo.lock"), worktree.join("Cargo.lock"));
     if !from.is_file() || to.exists() {
         return Ok(());

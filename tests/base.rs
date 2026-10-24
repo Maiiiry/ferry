@@ -102,3 +102,49 @@ fn a_new_base_leaves_live_agents_on_the_old_one_until_they_are_removed() {
 
     repo.build("new").assert_rebuilt(&[]);
 }
+
+/// Package names cargo compiled (not fresh) according to the JSON messages
+/// a warm command printed; `ferry base` sends build output to stderr.
+fn compiled_in_base_build(stderr: &str) -> Vec<String> {
+    let mut names: Vec<String> = stderr
+        .lines()
+        .filter_map(|l| serde_json::from_str::<Value>(l).ok())
+        .filter(|m| m["reason"] == "compiler-artifact" && m["fresh"] == false)
+        .map(|m| common::package_name(str_of(&m["package_id"])).to_owned())
+        .collect();
+    names.sort();
+    names.dedup();
+    names
+}
+
+#[test]
+fn a_refreshed_base_is_seeded_from_the_previous_one_and_rebuilds_only_changes() {
+    let json_build = [(
+        "FERRY_BASE_COMMAND",
+        "cargo build --workspace --message-format=json",
+    )];
+    let repo = TestRepo::with_env(&json_build);
+    let base1 = repo.base();
+    let before = Snapshot::of(&repo.base_dir(&base1));
+
+    repo.set_marker(repo.root(), "LEAF_V2");
+    repo.commit_all("v2");
+    let refresh = repo.ferry(["--json", "base"]).ok();
+    let report = refresh.json();
+    assert_eq!(report["base"]["seeded_from"], base1.as_str(), "{report}");
+    assert_eq!(
+        compiled_in_base_build(&refresh.stderr),
+        ["app", "leaf", "mid"]
+    );
+    before.assert_unchanged(&Snapshot::of(&repo.base_dir(&base1)));
+
+    repo.spawn("a");
+    repo.build("a").assert_rebuilt(&[]);
+    assert_eq!(repo.app("a").marker, "LEAF_V2");
+
+    repo.set_marker(repo.root(), "LEAF_V3");
+    repo.commit_all("v3");
+    let cold = repo.ferry(["--json", "base", "--cold"]).ok();
+    assert_eq!(cold.json()["base"]["seeded_from"], Value::Null);
+    assert!(compiled_in_base_build(&cold.stderr).len() >= common::ALL_PACKAGES.len());
+}

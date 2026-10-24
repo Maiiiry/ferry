@@ -342,6 +342,12 @@ impl BaseId {
         &self.0
     }
 
+    /// The fingerprint part of the id: equal for bases built with the same
+    /// toolchain, warm commands and modes.
+    pub fn fingerprint(&self) -> &str {
+        self.0.rsplit_once('-').map_or("", |(_, fp)| fp)
+    }
+
     pub fn commit(&self) -> &str {
         self.0.rsplit_once('-').map_or(&self.0, |(c, _)| c)
     }

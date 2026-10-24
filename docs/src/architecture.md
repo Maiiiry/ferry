@@ -124,7 +124,11 @@ needs one writable-root entry for it plus the worktree (its working directory).
    (probe user namespaces in a child process when `sandbox = auto`).
 2. Compute the base id; take `bases/<id>.lock`. If `base.json` exists, make it
    current and stop. Otherwise discard any partial directory.
-3. `git worktree add --detach` the checkout, `git worktree lock` it, stamp all
+3. `git worktree add --detach` the checkout and `git worktree lock` it. If a
+   ready base with the same fingerprint exists at another commit (and
+   `--cold` is not given), seed from it: clone its target (reflink when
+   possible) and stamp only files proven identical to its checkout, exactly as
+   for an agent, so the warm build only rebuilds what changed. Otherwise stamp all
    tracked files and directories (the base is the reference, nothing to
    compare).
 4. Enter the sandbox (irreversible for this process; host paths stay

@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 use crate::config::SandboxMode;
 use crate::context::Context;
 use crate::error::{Error, IoContext, Result};
-use crate::fork::TargetSpec;
+use crate::fork::{BackendKind, ForkPaths, TargetSpec};
 use crate::freshness::{self, FreshnessMode};
 use crate::fsutil;
 use crate::git::{self, CommitId};
@@ -46,6 +46,9 @@ pub struct BaseMeta {
     /// agents must use it too or rustc discards the incremental state.
     #[serde(default)]
     pub remap_paths: bool,
+    /// The earlier base whose target this one was seeded from.
+    #[serde(default)]
+    pub seeded_from: Option<BaseId>,
 }
 
 #[derive(Debug, Serialize)]
@@ -83,7 +86,7 @@ pub struct GcReport {
 ///
 /// The calling process enters the base's namespace sandbox to run the warm
 /// commands; that is irreversible, so call this at most once per process.
-pub fn build(ctx: &Context, rev: &str) -> Result<BuildReport> {
+pub fn build(ctx: &Context, rev: &str, cold: bool) -> Result<BuildReport> {
     let mut warnings = Vec::new();
     let commit = ctx.repo.resolve_commit(rev)?;
     let host_toolchain = Toolchain::detect(&ctx.repo.main_worktree)?;
@@ -116,24 +119,18 @@ pub fn build(ctx: &Context, rev: &str) -> Result<BuildReport> {
     discard(ctx, &paths)?;
 
     let started = Instant::now();
-    fs::create_dir_all(&paths.dir).at("create directory", &paths.dir)?;
-    ctx.repo.add_detached_worktree(&paths.src, &commit)?;
-    ctx.repo.lock_worktree(
-        &paths.src,
-        &format!("ferry base {} (immutable)", id.short()),
-    )?;
-    if remap {
-        // Before stamping, so the link is part of the root directory agents
-        // compare against.
-        crate::remap::prepare(&paths.src, &paths.target)?;
-    }
-    let index = git::ls_files(&paths.src)?;
-    freshness::stamp_base_checkout(&paths.src, &index)?;
-    let toolchain = Toolchain::detect(&paths.src)?;
-    fs::create_dir_all(&paths.target).at("create directory", &paths.target)?;
-    // Best effort: failing to exclude build output from backups is no
-    // reason to fail the build.
-    let _ = crate::platform::exclude_from_backups(&paths.target);
+    // Seeding from an earlier base with the same fingerprint turns a refresh
+    // into an incremental build: its target is cloned and only files proven
+    // identical to its checkout are stamped, exactly as for an agent.
+    let seed = if cold { None } else { seed_for(ctx, &id)? };
+    let _seed_lock = match &seed {
+        Some(seed) => Some(FileLock::shared(
+            &ctx.store.base(&seed.id).lock,
+            &format!("base {}", seed.id.short()),
+        )?),
+        None => None,
+    };
+    let toolchain = prepare(ctx, &paths, &commit, seed.as_ref(), isolation, remap)?;
 
     let remap_wrapper = if remap {
         Some(crate::remap::ensure_wrapper(ctx)?)
@@ -149,7 +146,12 @@ pub fn build(ctx: &Context, rev: &str) -> Result<BuildReport> {
         return Err(e);
     }
 
-    let dirtied = git::status_paths(&paths.src)?;
+    // Cargo writing (or updating) the lockfile is expected; agents get the
+    // base's copy when the repository does not track one.
+    let dirtied: Vec<String> = git::status_paths(&paths.src)?
+        .into_iter()
+        .filter(|p| p != "Cargo.lock")
+        .collect();
     if !dirtied.is_empty() {
         warnings.push(format!(
             "the warm commands wrote {} file(s) into the source tree (e.g. {}); agents will not have them",
@@ -169,6 +171,7 @@ pub fn build(ctx: &Context, rev: &str) -> Result<BuildReport> {
         ferry_version: env!("CARGO_PKG_VERSION").to_owned(),
         dirtied,
         remap_paths: remap,
+        seeded_from: seed.map(|s| s.id),
     };
     // Writing base.json is what makes the base ready (and immutable).
     fsutil::write_json_atomic(&paths.meta, &base)?;
@@ -278,6 +281,96 @@ pub fn gc(ctx: &Context, dry_run: bool) -> Result<GcReport> {
         ctx.repo.prune_worktrees()?;
     }
     Ok(report)
+}
+
+/// Creates the base's checkout and target dir: worktree, stamps, and either
+/// a clone of the seed's target or an empty dir. Returns the toolchain the
+/// checkout selects.
+fn prepare(
+    ctx: &Context,
+    paths: &BasePaths,
+    commit: &CommitId,
+    seed: Option<&BaseMeta>,
+    isolation: Isolation,
+    remap: bool,
+) -> Result<Toolchain> {
+    fs::create_dir_all(&paths.dir).at("create directory", &paths.dir)?;
+    ctx.repo.add_detached_worktree(&paths.src, commit)?;
+    let short = paths
+        .dir
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    ctx.repo
+        .lock_worktree(&paths.src, &format!("ferry base {short} (immutable)"))?;
+    if remap {
+        // Before stamping, so the link is part of the root directory agents
+        // compare against.
+        crate::remap::prepare(&paths.src, &paths.target)?;
+    }
+    if let Some(seed) = seed {
+        let seed_paths = ctx.store.base(&seed.id);
+        crate::agent::copy_untracked_lockfile(&seed_paths.src, &paths.src)?;
+        let index = git::ls_files(&paths.src)?;
+        let tree = ctx.repo.ls_tree(&seed.commit)?;
+        freshness::apply(&freshness::plan(
+            &tree,
+            &seed_paths.src,
+            &index,
+            &paths.src,
+        )?)?;
+    } else {
+        freshness::stamp_base_checkout(&paths.src, &git::ls_files(&paths.src)?)?;
+    }
+    let toolchain = Toolchain::detect(&paths.src)?;
+    match seed {
+        Some(seed) => clone_seed_target(ctx, seed, paths, isolation)?,
+        None => fs::create_dir_all(&paths.target).at("create directory", &paths.target)?,
+    }
+    // Best effort: failing to exclude build output from backups is no
+    // reason to fail the build.
+    let _ = crate::platform::exclude_from_backups(&paths.target);
+    Ok(toolchain)
+}
+
+/// The newest ready base, other than `id`, built with the same fingerprint
+/// (toolchain, warm commands, modes) and with its checkout and target intact.
+fn seed_for(ctx: &Context, id: &BaseId) -> Result<Option<BaseMeta>> {
+    Ok(ready_bases(ctx)?.into_iter().find(|b| {
+        let paths = ctx.store.base(&b.id);
+        &b.id != id
+            && b.id.fingerprint() == id.fingerprint()
+            && paths.src.is_dir()
+            && paths.target.is_dir()
+    }))
+}
+
+/// Clones the seed's target into the new base, by reflink when the store
+/// supports it.
+fn clone_seed_target(
+    ctx: &Context,
+    seed: &BaseMeta,
+    paths: &BasePaths,
+    isolation: Isolation,
+) -> Result<()> {
+    let seed_paths = ctx.store.base(&seed.id);
+    let kind = if crate::platform::probe_reflink(ctx.store.root()).is_ok() {
+        BackendKind::Reflink
+    } else {
+        BackendKind::Copy
+    };
+    crate::fork::backend(kind)?.fork(&ForkPaths {
+        base_target: seed_paths.target.clone(),
+        agent_target: paths.target.clone(),
+        upper: paths.dir.join("unused-upper"),
+        work: paths.dir.join("unused-work"),
+    })?;
+    // Without the canonical mount the seed was built at its own checkout
+    // path, which the new base's units must not keep pointing at.
+    if isolation == Isolation::None {
+        freshness::invalidate_relocated_units(&paths.target, &[seed_paths.src])?;
+    }
+    Ok(())
 }
 
 fn set_current(ctx: &Context, id: &BaseId) -> Result<()> {
