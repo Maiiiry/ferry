@@ -10,8 +10,8 @@
 //! holds older code.
 //!
 //! The cargo shim records the JSON messages of every warm cargo call
-//! ([`Log`]). [`Watch::used`] works out from them, and from the fingerprints
-//! Cargo wrote after a threshold, which units the build used; [`sweep`]
+//! (`Log`). `Watch::used` works out from them, and from the fingerprints
+//! Cargo wrote after a threshold, which units the build used; `sweep`
 //! deletes the rest. Whatever cannot be accounted for makes the observation
 //! incomplete, and the caller then rebuilds the base from scratch.
 
@@ -27,7 +27,7 @@ use serde::{Deserialize, Serialize};
 use crate::error::{Error, IoContext, Result};
 use crate::freshness::{files, is_real_dir, subdirs};
 
-/// What [`sweep`] deleted from a seeded target dir.
+/// What `sweep` deleted from a seeded target dir.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Pruned {
     pub units: u64,
