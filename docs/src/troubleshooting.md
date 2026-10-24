@@ -151,9 +151,12 @@ spawned again. See [`ferry setup apparmor`](cli.md#ferry-setup-apparmor) for
 its options and the cases where it refuses. Ferry's CI sets up its Ubuntu
 24.04 AppArmor job this way, with the restriction on.
 
-The profile persists across reboots. **After upgrading Ferry,** run `ferry
-setup apparmor` again: it installs the new binary and leaves the profile
-alone. **To undo it,** run `ferry setup apparmor --uninstall`, which unloads
+The profile persists across reboots. **After upgrading Ferry,** run the
+upgraded copy: after `cargo install`, that is `~/.cargo/bin/ferry setup
+apparmor`. It installs the new binary and leaves the profile alone. A bare
+`ferry` may still be the old `/usr/local/bin/ferry`, which reports that it is
+already set up and says when `~/.cargo/bin/ferry` is a different build. **To
+undo it,** run `ferry setup apparmor --uninstall`, which unloads
 and removes Ferry's profile files and leaves `/usr/local/bin/ferry` for you to
 remove.
 

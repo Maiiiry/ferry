@@ -379,9 +379,10 @@ the full profile, the root script and the exact `sudo` command. The steps,
 each listed only when needed:
 
 1. Install the running binary as `<bin-dir>/ferry`, owned by root with mode
-   0755, unless it already sits at a root-owned path a profile can name. Root
-   copies it from `/proc/<pid>/exe`, so nothing your user can write is
-   copied.
+   0755, unless it already sits at a root-owned path a profile can name or
+   `<bin-dir>/ferry` is already a root-owned copy of it. A copy your user
+   owns, or a symlink, is replaced. Root copies the binary from
+   `/proc/<pid>/exe`, so nothing your user can write is copied.
 2. Write `/etc/apparmor.d/<path with . for />` (for `/usr/local/bin/ferry`,
    `usr.local.bin.ferry`), check that it parses, and remove older Ferry
    profile files such as `/etc/apparmor.d/ferry`.
@@ -399,8 +400,12 @@ namespace, points the cargo shim at it, and warns if the first `ferry` on
 | `--json` without `--yes` | refuses, like stdin not being a terminal |
 | `--dry-run` | prints the plan and exits 0 |
 
-Running it again is the upgrade path: after you upgrade the ferry in your
-`PATH`, it installs the new binary and leaves the profile alone. With
+Running the upgraded copy is the upgrade path: after `cargo install`
+upgrades `~/.cargo/bin/ferry`, run `~/.cargo/bin/ferry setup apparmor`. It
+installs the new binary and leaves the profile alone. A bare `ferry setup
+apparmor` with `/usr/local/bin` first on `PATH` runs the old installed copy.
+That copy is set up already, so it reports `already-done` and says when
+`~/.cargo/bin/ferry` is a different build. With
 `--uninstall` it unloads and removes every Ferry profile file (one sudo call,
 same confirmation rules); it leaves the installed binary and any
 `/etc/apparmor.d/local/ferry` in place and says so.

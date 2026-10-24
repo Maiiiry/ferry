@@ -100,6 +100,9 @@ pub struct Facts {
     /// Files that are not Ferry's but define `ferry` or `unpriv_ferry`, or
     /// hold the name Ferry's profile file needs.
     pub foreign_files: Vec<PathBuf>,
+    /// `$CARGO_HOME/bin/ferry` when it is not the running binary and has
+    /// other bytes: often a `cargo install` upgrade the profiled copy lacks.
+    pub cargo_copy: Option<PathBuf>,
 }
 
 /// A profile file Ferry wrote.
@@ -131,6 +134,9 @@ impl Facts {
         let (bin_dir, bin_dir_problem) = check_bin_dir(bin_dir);
         let profile_dir = PathBuf::from(PROFILE_DIR);
         let (ferry_files, foreign_files) = scan(&profile_dir);
+        let cargo_copy = crate::base::cargo_home()
+            .and_then(|home| std::fs::canonicalize(home.join("bin/ferry")).ok())
+            .filter(|copy| *copy != exe && !same_bytes(copy, Path::new(SELF_EXE)));
         let mut facts = Facts {
             os: caps.os,
             euid: rustix::process::geteuid().as_raw(),
@@ -149,6 +155,7 @@ impl Facts {
             profile_dir,
             ferry_files,
             foreign_files,
+            cargo_copy,
         };
         let target = facts.target();
         let file = facts.profile_path(&target);
@@ -422,29 +429,43 @@ fn install_plan(f: &Facts, parser: &Path) -> Decision<InstallPlan> {
         .ferry_files
         .iter()
         .any(|p| p.path == profile_path && p.text == profile);
+    // Afterwards the target holds this binary's bytes, so a different cargo
+    // copy is a build the profile does not cover.
+    let upgrade = f.cargo_copy.as_ref().map(|copy| {
+        format!(
+            "{0} is a different build from this ferry ({1}); if it is an upgrade, run \
+             `{0} setup apparmor` to set it up",
+            copy.display(),
+            f.exe.display()
+        )
+    });
     if !install
         && current
         && remove.is_empty()
         && f.target_userns.as_ref().is_some_and(Probe::is_ok)
     {
+        let done = if target == f.exe {
+            format!(
+                "{} has its profile and can create user namespaces",
+                target.display()
+            )
+        } else {
+            format!(
+                "{} is installed with its profile and can create user namespaces; the \
+                 profile does not cover {}, which you ran: run {0} instead",
+                target.display(),
+                f.exe.display()
+            )
+        };
         return stop(
             Outcome::AlreadyDone,
-            if target == f.exe {
-                format!(
-                    "{} has its profile and can create user namespaces",
-                    target.display()
-                )
-            } else {
-                format!(
-                    "{} is installed with its profile and can create user namespaces; the \
-                     profile does not cover {}, which you ran: run {0} instead",
-                    target.display(),
-                    f.exe.display()
-                )
+            match upgrade {
+                Some(upgrade) => format!("{done}; {upgrade}"),
+                None => done,
             },
         );
     }
-    let mut warnings = Vec::new();
+    let mut warnings: Vec<String> = upgrade.into_iter().collect();
     if target.starts_with("/nix/store") {
         warnings.push(format!(
             "the profile names {}, a Nix store path that changes with every upgrade: run \
@@ -763,6 +784,7 @@ mod tests {
             profile_dir: PROFILE_DIR.into(),
             ferry_files: Vec::new(),
             foreign_files: Vec::new(),
+            cargo_copy: None,
         }
     }
 
@@ -1109,6 +1131,30 @@ mod tests {
         f.target_userns = Some(failed("setgroups"));
         let p = plan(decide(&f));
         assert!(!p.install);
+    }
+
+    #[test]
+    fn rerun_from_installed_copy_points_at_upgraded_cargo_copy() {
+        // `cargo install` upgraded ~/.cargo/bin/ferry, but /usr/local/bin
+        // comes first on PATH, so a bare `ferry` runs the old copy.
+        let mut f = ubuntu();
+        f.exe = "/usr/local/bin/ferry".into();
+        f.exe_problem = None;
+        f.caps.userns = Probe::Ok;
+        f.target_userns = Some(Probe::Ok);
+        f.ferry_files = vec![ferry_file("usr.local.bin.ferry", "/usr/local/bin/ferry")];
+        f.cargo_copy = Some(USER_EXE.into());
+        let hint = format!("run `{USER_EXE} setup apparmor`");
+        let (outcome, reason) = stopped(decide(&f));
+        assert_eq!(outcome, Outcome::AlreadyDone);
+        assert!(reason.contains(&hint), "{reason}");
+
+        f.target_userns = Some(failed("setgroups"));
+        let p = plan(decide(&f));
+        assert!(p.warnings.iter().any(|w| w.contains(&hint)), "{p:?}");
+
+        f.cargo_copy = None;
+        assert_eq!(plan(decide(&f)).warnings, Vec::<String>::new());
     }
 
     #[test]
