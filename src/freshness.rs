@@ -159,6 +159,13 @@ pub struct StampReport {
 }
 
 impl StampPlan {
+    pub fn skipped(&self) -> &[(PathBuf, SkipReason)] {
+        &self.skipped
+    }
+}
+
+#[cfg(test)]
+impl StampPlan {
     /// The agent worktree, canonicalized.
     pub fn root(&self) -> &Path {
         &self.root
@@ -166,10 +173,6 @@ impl StampPlan {
 
     pub fn identical(&self) -> impl Iterator<Item = &Path> {
         self.identical.iter().map(|v| v.path.as_path())
-    }
-
-    pub fn skipped(&self) -> &[(PathBuf, SkipReason)] {
-        &self.skipped
     }
 
     /// Directories whose entry names match the base; `""` is the root.

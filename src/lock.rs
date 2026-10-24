@@ -4,7 +4,7 @@
 //! namespace join/create). They are never held while an agent's build runs.
 
 use std::fs::{File, OpenOptions};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use rustix::fs::{FlockOperation, flock};
 use rustix::io::Errno;
@@ -14,7 +14,6 @@ use crate::error::{IoContext, Result};
 #[derive(Debug)]
 pub struct FileLock {
     _file: File,
-    path: PathBuf,
 }
 
 impl FileLock {
@@ -42,17 +41,10 @@ impl FileLock {
     pub fn try_exclusive(path: &Path) -> Result<Option<Self>> {
         let file = open_lock_file(path)?;
         match flock(&file, FlockOperation::NonBlockingLockExclusive) {
-            Ok(()) => Ok(Some(Self {
-                _file: file,
-                path: path.to_path_buf(),
-            })),
+            Ok(()) => Ok(Some(Self { _file: file })),
             Err(Errno::WOULDBLOCK) => Ok(None),
             Err(e) => Err(std::io::Error::from(e)).at("lock", path),
         }
-    }
-
-    pub fn path(&self) -> &Path {
-        &self.path
     }
 
     fn acquire(
@@ -74,10 +66,7 @@ impl FileLock {
             }
             Err(e) => return Err(std::io::Error::from(e)).at("lock", path),
         }
-        Ok(Self {
-            _file: file,
-            path: path.to_path_buf(),
-        })
+        Ok(Self { _file: file })
     }
 }
 

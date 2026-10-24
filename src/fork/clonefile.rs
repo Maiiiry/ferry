@@ -9,7 +9,7 @@ use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-use super::{Backend, BackendKind, ForkError, ForkPaths, ForkStats, TargetSpec, io_err, tree};
+use super::{Backend, ForkError, ForkPaths, ForkStats, TargetSpec, io_err, tree};
 
 // From <sys/clonefile.h>; the libc crate does not define them.
 const CLONE_NOFOLLOW: u32 = 0x1;
@@ -19,10 +19,6 @@ const CLONE_NOOWNERCOPY: u32 = 0x2;
 pub(super) struct Clonefile;
 
 impl Backend for Clonefile {
-    fn kind(&self) -> BackendKind {
-        BackendKind::Reflink
-    }
-
     fn fork(&self, paths: &ForkPaths) -> Result<ForkStats, ForkError> {
         let started = Instant::now();
         let (base, dst) = (paths.base_target.as_path(), paths.agent_target.as_path());

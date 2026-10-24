@@ -22,6 +22,7 @@ pub enum Os {
 }
 
 impl Os {
+    #[cfg(test)]
     pub fn current() -> Self {
         if cfg!(target_os = "macos") {
             Os::Macos
@@ -110,18 +111,6 @@ impl Capabilities {
             .iter()
             .find(|s| s.name == name)
             .map(|s| s.value.as_str())
-    }
-}
-
-/// Filesystem type of `path`.
-pub fn fs_info(path: &Path) -> FsInfo {
-    #[cfg(target_os = "linux")]
-    {
-        linux::fs_info(path)
-    }
-    #[cfg(target_os = "macos")]
-    {
-        macos::fs_info(path)
     }
 }
 

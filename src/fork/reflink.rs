@@ -5,16 +5,12 @@ use std::fs::{File, OpenOptions};
 use std::io;
 use std::path::Path;
 
-use super::{Backend, BackendKind, ForkError, ForkPaths, ForkStats, TargetSpec, tree};
+use super::{Backend, ForkError, ForkPaths, ForkStats, TargetSpec, tree};
 
 #[derive(Debug)]
 pub(super) struct Reflink;
 
 impl Backend for Reflink {
-    fn kind(&self) -> BackendKind {
-        BackendKind::Reflink
-    }
-
     fn fork(&self, paths: &ForkPaths) -> Result<ForkStats, ForkError> {
         tree::clone_tree(&paths.base_target, &paths.agent_target, clone_file)
     }

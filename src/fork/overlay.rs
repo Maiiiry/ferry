@@ -2,16 +2,12 @@
 //! each agent gets its own upper and work dirs. The mount itself happens in
 //! the agent's namespace sandbox (see `sandbox::linux`).
 
-use super::{Backend, BackendKind, ForkError, ForkPaths, ForkStats, TargetSpec, io_err};
+use super::{Backend, ForkError, ForkPaths, ForkStats, TargetSpec, io_err};
 
 #[derive(Debug)]
 pub(super) struct Overlay;
 
 impl Backend for Overlay {
-    fn kind(&self) -> BackendKind {
-        BackendKind::Overlay
-    }
-
     fn fork(&self, paths: &ForkPaths) -> Result<ForkStats, ForkError> {
         let started = std::time::Instant::now();
         for dir in [&paths.upper, &paths.work] {

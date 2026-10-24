@@ -1,15 +1,11 @@
 //! Full-copy backend: always available, costs a complete copy per agent.
 
-use super::{Backend, BackendKind, ForkError, ForkPaths, ForkStats, TargetSpec, tree};
+use super::{Backend, ForkError, ForkPaths, ForkStats, TargetSpec, tree};
 
 #[derive(Debug)]
 pub(super) struct Copy;
 
 impl Backend for Copy {
-    fn kind(&self) -> BackendKind {
-        BackendKind::Copy
-    }
-
     fn fork(&self, paths: &ForkPaths) -> Result<ForkStats, ForkError> {
         tree::clone_tree(&paths.base_target, &paths.agent_target, tree::copy_file)
     }

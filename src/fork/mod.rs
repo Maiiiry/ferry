@@ -113,8 +113,6 @@ pub struct ForkStats {
 }
 
 pub trait Backend: std::fmt::Debug {
-    fn kind(&self) -> BackendKind;
-
     /// Creates the agent's build state from `paths.base_target`. Must not
     /// modify anything under `base_target`, and must preserve mtimes, since
     /// Cargo's freshness check depends on them.

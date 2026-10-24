@@ -54,9 +54,6 @@ pub struct AgentPaths {
     pub dir: PathBuf,
     pub meta: PathBuf,
     pub lock: PathBuf,
-    /// Held (shared) by every process using the agent's overlay mount; see
-    /// `sandbox::linux`.
-    pub mount_lock: PathBuf,
     pub target: PathBuf,
     pub upper: PathBuf,
     pub work: PathBuf,
@@ -145,7 +142,6 @@ impl Store {
         AgentPaths {
             meta: dir.join("agent.json"),
             lock: dir.join("lock"),
-            mount_lock: dir.join("mount.lock"),
             target: dir.join("target"),
             upper: dir.join("upper"),
             work: dir.join("work"),
@@ -353,10 +349,6 @@ impl BaseId {
         self.0.rsplit_once('-').map_or("", |(_, fp)| fp)
     }
 
-    pub fn commit(&self) -> &str {
-        self.0.rsplit_once('-').map_or(&self.0, |(c, _)| c)
-    }
-
     /// Short form for human output: 12 hex digits of the commit plus the
     /// fingerprint.
     pub fn short(&self) -> String {
@@ -435,7 +427,6 @@ mod tests {
             id.as_str(),
             "0123456789abcdef0123456789abcdef01234567-deadbeef"
         );
-        assert_eq!(id.commit(), "0123456789abcdef0123456789abcdef01234567");
         assert_eq!(id.short(), "0123456789ab-deadbeef");
         assert_eq!(id.as_str().parse::<BaseId>().unwrap(), id);
         assert!("not-an-id".parse::<BaseId>().is_err());

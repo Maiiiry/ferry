@@ -10,7 +10,6 @@ use crate::store::{self, Store};
 #[derive(Debug, Clone)]
 pub struct Context {
     pub repo: Repo,
-    pub config: Config,
     pub settings: Settings,
     pub store: Store,
 }
@@ -23,11 +22,10 @@ impl Context {
     }
 
     pub fn discover_with_env(dir: &Path, env: &dyn Fn(&str) -> Option<String>) -> Result<Self> {
-        let (repo, config, settings, root) = resolve(dir, env)?;
+        let (repo, settings, root) = resolve(dir, env)?;
         let store = Store::open(root, &repo.main_worktree)?;
         Ok(Self {
             repo,
-            config,
             settings,
             store,
         })
@@ -39,24 +37,20 @@ impl Context {
     /// repository they pass through.
     pub fn discover_existing(dir: &Path) -> Result<Option<Self>> {
         let env = |k: &str| std::env::var(k).ok();
-        let (repo, config, settings, root) = resolve(dir, &env)?;
+        let (repo, settings, root) = resolve(dir, &env)?;
         if !root.join("store.json").is_file() {
             return Ok(None);
         }
         let store = Store::open(root, &repo.main_worktree)?;
         Ok(Some(Self {
             repo,
-            config,
             settings,
             store,
         }))
     }
 }
 
-fn resolve(
-    dir: &Path,
-    env: &dyn Fn(&str) -> Option<String>,
-) -> Result<(Repo, Config, Settings, PathBuf)> {
+fn resolve(dir: &Path, env: &dyn Fn(&str) -> Option<String>) -> Result<(Repo, Settings, PathBuf)> {
     let repo = Repo::discover(dir)?;
     let (config, config_path) = Config::load(&repo.main_worktree, env)?;
     let settings = config.resolve(&repo.main_worktree, config_path, env)?;
@@ -65,7 +59,7 @@ fn resolve(
     // finds the same store.
     let common_dir = std::fs::canonicalize(&repo.common_dir).at("resolve", &repo.common_dir)?;
     let root = parent.join(store::repo_key(&common_dir, &display_name(&common_dir)));
-    Ok((repo, config, settings, root))
+    Ok((repo, settings, root))
 }
 
 /// `proj` for `proj/.git` and for a bare `proj.git`. Taken from the common

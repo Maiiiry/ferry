@@ -55,10 +55,6 @@ impl CommitId {
     pub fn as_str(&self) -> &str {
         &self.0
     }
-
-    pub fn short(&self) -> &str {
-        &self.0[..self.0.len().min(12)]
-    }
 }
 
 impl fmt::Display for CommitId {
@@ -314,15 +310,6 @@ pub fn refresh_index(worktree: &Path) -> Result<()> {
         Some(0 | 1) => Ok(()),
         _ => Err(command_error(&["update-index", "-q", "--refresh"], &output)),
     }
-}
-
-/// True if the worktree has staged, unstaged or untracked changes.
-pub fn is_dirty(worktree: &Path) -> Result<bool> {
-    let out = run(
-        worktree,
-        ["status", "--porcelain=v1", "-z", "--untracked-files=normal"],
-    )?;
-    Ok(!out.is_empty())
 }
 
 /// Paths reported by `git status --porcelain` (changed, untracked).

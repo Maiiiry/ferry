@@ -230,7 +230,6 @@ removes.
 
 ```rust
 pub trait Backend {
-    fn kind(&self) -> BackendKind;
     fn fork(&self, paths: &ForkPaths) -> Result<ForkStats, ForkError>;
     fn target_spec(&self, paths: &ForkPaths) -> TargetSpec;
     fn private_bytes(&self, paths: &ForkPaths) -> Result<u64, ForkError>;
