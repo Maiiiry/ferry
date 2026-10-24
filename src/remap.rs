@@ -48,11 +48,25 @@ pub fn supported(toolchain: &Toolchain) -> std::result::Result<(), String> {
     }
 }
 
+/// Set for the wrapper when the toolchain accepts `#![feature]` by itself.
+const NIGHTLY_ENV: &str = "FERRY_REMAP_NIGHTLY";
+
+/// The wrapper as a build uses it.
+#[derive(Debug, Clone)]
+pub struct Wrapper {
+    pub path: PathBuf,
+    /// Whether the build's toolchain is a nightly one.
+    pub nightly: bool,
+}
+
 /// `<store parent>/bin/ferry-rustc`, (re)pointed at the running binary. The
 /// path must be stable: Cargo hashes the wrapper path into workspace members'
 /// artifact names.
-pub fn ensure_wrapper() -> Result<PathBuf> {
-    Ok(crate::shim::ensure_link(WRAPPER_NAME)?.join(WRAPPER_NAME))
+pub fn ensure_wrapper(toolchain: &Toolchain) -> Result<Wrapper> {
+    Ok(Wrapper {
+        path: crate::shim::ensure_link(WRAPPER_NAME)?.join(WRAPPER_NAME),
+        nightly: toolchain.is_nightly(),
+    })
 }
 
 /// Creates `<src_root>/.ferry-target -> target` (hidden from `git status`)
@@ -108,11 +122,15 @@ fn hide_from_git(src_root: &Path) -> Result<()> {
 }
 
 /// Extra cargo environment in remap mode.
-pub fn cargo_env(wrapper: &Path) -> Vec<(OsString, OsString)> {
-    vec![(
+pub fn cargo_env(wrapper: &Wrapper) -> Vec<(OsString, OsString)> {
+    let mut env = vec![(
         "RUSTC_WORKSPACE_WRAPPER".into(),
-        wrapper.as_os_str().to_owned(),
-    )]
+        wrapper.path.as_os_str().to_owned(),
+    )];
+    if wrapper.nightly {
+        env.push((NIGHTLY_ENV.into(), "1".into()));
+    }
+    env
 }
 
 /// True if the process was started through the wrapper symlink.
@@ -127,45 +145,72 @@ pub fn invoked_as_wrapper() -> bool {
 pub fn main() -> ExitCode {
     let mut args = std::env::args_os().skip(1);
     let Some(rustc) = args.next() else {
-        eprintln!("ferry-rustc: usage: ferry-rustc <rustc> [args...] (a RUSTC_WORKSPACE_WRAPPER)");
+        let _ = writeln!(
+            io::stderr(),
+            "ferry-rustc: usage: ferry-rustc <rustc> [args...] (a RUSTC_WORKSPACE_WRAPPER)"
+        );
         return ExitCode::from(2);
     };
     let args: Vec<OsString> = args.collect();
     let mut command = Command::new(&rustc);
-    match std::env::current_dir() {
+    match (std::env::current_dir(), incremental_crate(&args)) {
         // Everything else, notably Cargo's `-vV` and stdin probes, must pass
         // through unchanged: Cargo hashes their output into fingerprints.
-        Ok(cwd) if is_incremental_compile(&args) => {
+        (Ok(cwd), Some(crate_name)) => {
             command
                 .args(rewrite_args(&args, &Roots::new(cwd)))
-                .arg(REMAP_CWD)
-                .env("RUSTC_BOOTSTRAP", "1");
+                .arg(REMAP_CWD);
+            // RUSTC_BOOTSTRAP is only meant to unlock the -Z flag; a crate that
+            // could not use `#![feature]` without the wrapper must not with it.
+            let bootstrap = std::env::var_os("RUSTC_BOOTSTRAP");
+            let nightly = std::env::var_os(NIGHTLY_ENV).is_some();
+            if !features_allowed(nightly, bootstrap.as_deref(), crate_name) {
+                command.arg("-Zallow-features=");
+            }
+            command.env("RUSTC_BOOTSTRAP", "1");
         }
         _ => {
             command.args(&args);
         }
     }
     let err = command.exec();
-    eprintln!(
+    let _ = writeln!(
+        io::stderr(),
         "ferry-rustc: failed to run `{}`: {err}",
         rustc.to_string_lossy()
     );
     ExitCode::from(127)
 }
 
-fn is_incremental_compile(args: &[OsString]) -> bool {
-    let mut crate_name = false;
+/// The crate name, if `args` are an incremental compile of a crate.
+fn incremental_crate(args: &[OsString]) -> Option<&[u8]> {
+    let mut crate_name = None;
     let mut incremental = false;
     let mut prev: &[u8] = b"";
     for arg in args {
         let arg = arg.as_bytes();
-        crate_name |= arg == b"--crate-name" || arg.starts_with(b"--crate-name=");
+        if prev == b"--crate-name" {
+            crate_name = Some(arg);
+        } else if let Some(name) = arg.strip_prefix(b"--crate-name=") {
+            crate_name = Some(name);
+        }
         incremental |= arg.starts_with(b"-Cincremental=")
             || arg.starts_with(b"--codegen=incremental=")
             || (matches!(prev, b"-C" | b"--codegen") && arg.starts_with(b"incremental="));
         prev = arg;
     }
-    crate_name && incremental
+    crate_name.filter(|_| incremental)
+}
+
+/// Whether rustc would accept `#![feature]` in `crate_name` without the
+/// wrapper, by rustc's own reading of `RUSTC_BOOTSTRAP`.
+fn features_allowed(nightly: bool, bootstrap: Option<&OsStr>, crate_name: &[u8]) -> bool {
+    match bootstrap.map(OsStr::as_bytes) {
+        Some(b"1") => true,
+        Some(b"-1") => false,
+        Some(crates) if crates.split(|b| *b == b',').any(|c| c == crate_name) => true,
+        _ => nightly,
+    }
 }
 
 fn rewrite_args(args: &[OsString], roots: &Roots) -> Vec<OsString> {
@@ -300,18 +345,17 @@ mod tests {
             "-C",
             "incremental=/t/debug/incremental",
         ]);
-        assert!(is_incremental_compile(&cargo_compile));
-        assert!(is_incremental_compile(&os(&[
-            "--crate-name=lib",
-            "-Cincremental=/t"
-        ])));
-        assert!(is_incremental_compile(&os(&[
-            "--crate-name",
-            "lib",
-            "--codegen",
-            "incremental=/t"
-        ])));
-        assert!(!is_incremental_compile(&os(&["-vV"])));
+        let lib: Option<&[u8]> = Some(b"lib");
+        assert_eq!(incremental_crate(&cargo_compile), lib);
+        assert_eq!(
+            incremental_crate(&os(&["--crate-name=lib", "-Cincremental=/t"])),
+            lib
+        );
+        assert_eq!(
+            incremental_crate(&os(&["--crate-name", "lib", "--codegen", "incremental=/t"])),
+            lib
+        );
+        assert_eq!(incremental_crate(&os(&["-vV"])), None);
         let probe = os(&[
             "-",
             "--crate-name",
@@ -320,13 +364,25 @@ mod tests {
             "--crate-type",
             "bin",
         ]);
-        assert!(!is_incremental_compile(&probe));
-        assert!(!is_incremental_compile(&os(&[
-            "--crate-name",
-            "lib",
-            "-C",
-            "opt-level=3"
-        ])));
+        assert_eq!(incremental_crate(&probe), None);
+        assert_eq!(
+            incremental_crate(&os(&["--crate-name", "lib", "-C", "opt-level=3"])),
+            None
+        );
+    }
+
+    #[test]
+    fn features_follow_rustcs_own_rules() {
+        let allowed = |nightly, bootstrap: Option<&str>| {
+            features_allowed(nightly, bootstrap.map(OsStr::new), b"lib")
+        };
+        assert!(!allowed(false, None));
+        assert!(allowed(true, None));
+        assert!(allowed(false, Some("1")));
+        assert!(!allowed(true, Some("-1")));
+        assert!(allowed(false, Some("other,lib")));
+        assert!(!allowed(false, Some("other")));
+        assert!(allowed(true, Some("other")));
     }
 
     #[test]

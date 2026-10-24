@@ -107,10 +107,10 @@ pub struct Plan {
     /// concurrent runs join one mount instead of mounting the same upper dir
     /// twice (which overlayfs does not support).
     pub ns_record: Option<PathBuf>,
-    /// Experimental remap mode (no namespace): the `ferry-rustc` wrapper
-    /// path. Builds then reach the target dir through
-    /// `<src>/.ferry-target`; see `remap`.
-    pub remap_wrapper: Option<PathBuf>,
+    /// Experimental remap mode (no namespace): the `ferry-rustc` wrapper.
+    /// Builds then reach the target dir through `<src>/.ferry-target`; see
+    /// `remap`.
+    pub remap_wrapper: Option<crate::remap::Wrapper>,
 }
 
 impl Plan {

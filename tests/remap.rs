@@ -288,3 +288,58 @@ fn run(command: &mut Command) {
     let status = command.status().unwrap();
     assert!(status.success(), "{command:?} failed with {status}");
 }
+
+/// The wrapper needs `RUSTC_BOOTSTRAP` for its `-Z` flag; that must not let
+/// a crate use `#![feature]` on a toolchain that would refuse it.
+#[test]
+fn wrapper_keeps_feature_gates_on_stable() {
+    let rustc = Command::new("rustc").arg("-vV").output().unwrap();
+    let toolchain = Toolchain::parse(&String::from_utf8_lossy(&rustc.stdout), "");
+    if toolchain.is_nightly() || ferry::remap::supported(&toolchain).is_err() {
+        eprintln!("skipping the feature-gate test: it needs a stable or beta rustc 1.98+");
+        return;
+    }
+    let tmp = tempfile::tempdir().unwrap();
+    let root = fs::canonicalize(tmp.path()).unwrap();
+    let wrapper = wrapper_in(&root);
+    let krate = root.join("gated");
+    fs::create_dir_all(krate.join("src")).unwrap();
+    fs::write(
+        krate.join("Cargo.toml"),
+        "[package]\nname = \"gated\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+    )
+    .unwrap();
+    fs::write(
+        krate.join("src/lib.rs"),
+        "#![feature(never_type)]\npub fn none() -> Option<!> { None }\n",
+    )
+    .unwrap();
+    let build = |nightly: bool| {
+        let mut cargo = Command::new("cargo");
+        cargo
+            .args(["build", "--offline"])
+            .current_dir(&krate)
+            .env("CARGO_TARGET_DIR", root.join("target"))
+            .env("RUSTC_WORKSPACE_WRAPPER", &wrapper)
+            .env_remove("RUSTC_BOOTSTRAP")
+            .env_remove("FERRY_REMAP_NIGHTLY");
+        if nightly {
+            cargo.env("FERRY_REMAP_NIGHTLY", "1");
+        }
+        cargo.output().unwrap()
+    };
+
+    let refused = build(false);
+    let stderr = String::from_utf8_lossy(&refused.stderr);
+    assert!(!refused.status.success(), "{stderr}");
+    assert!(
+        stderr.contains("not in the list of allowed features"),
+        "{stderr}"
+    );
+    let nightly = build(true);
+    assert!(
+        nightly.status.success(),
+        "{}",
+        String::from_utf8_lossy(&nightly.stderr)
+    );
+}

@@ -758,7 +758,8 @@ pub fn plan(ctx: &Context, meta: &AgentMeta) -> Result<Plan> {
     let base_target = ctx.store.base(&meta.base).target;
     let fork_paths = fork_paths(&paths, &base_target);
     let target = fork::backend(meta.backend)?.target_spec(&fork_paths);
-    let remap = meta.isolation == Isolation::None && base::load(ctx, &meta.base)?.remap_paths;
+    let base = base::load(ctx, &meta.base)?;
+    let remap = meta.isolation == Isolation::None && base.remap_paths;
     Ok(Plan {
         isolation: meta.isolation,
         src: meta.worktree.clone(),
@@ -767,7 +768,7 @@ pub fn plan(ctx: &Context, meta: &AgentMeta) -> Result<Plan> {
         canonical_target: ctx.store.canonical_target(),
         ns_record: (meta.backend == BackendKind::Overlay).then(|| paths.ns_record.clone()),
         remap_wrapper: if remap {
-            Some(crate::remap::ensure_wrapper()?)
+            Some(crate::remap::ensure_wrapper(&base.toolchain)?)
         } else {
             None
         },

@@ -145,7 +145,7 @@ pub fn build(ctx: &Context, rev: &str, cold: bool) -> Result<BuildReport> {
     let toolchain = prepare(ctx, &paths, &commit, seed.as_ref(), isolation, remap)?;
 
     let remap_wrapper = if remap {
-        Some(crate::remap::ensure_wrapper()?)
+        Some(crate::remap::ensure_wrapper(&toolchain)?)
     } else {
         None
     };
@@ -567,7 +567,7 @@ fn build_plan(
     ctx: &Context,
     paths: &BasePaths,
     isolation: Isolation,
-    remap_wrapper: Option<std::path::PathBuf>,
+    remap_wrapper: Option<crate::remap::Wrapper>,
 ) -> Plan {
     Plan {
         isolation,
