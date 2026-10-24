@@ -1010,6 +1010,27 @@ fn peak_rss() -> u64 {
 #[test]
 fn large_files_are_scanned_in_bounded_memory() {
     const SIZE: u64 = 128 << 20;
+    // The peak is per process, and other tests run in this one: measure in
+    // a child that runs only this test.
+    const CHILD: &str = "FERRY_TEST_SCAN_MEMORY_CHILD";
+    if std::env::var_os(CHILD).is_none() {
+        let out = Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "freshness::relocation::tests::large_files_are_scanned_in_bounded_memory",
+                "--test-threads=1",
+            ])
+            .env(CHILD, "1")
+            .output()
+            .unwrap();
+        assert!(
+            out.status.success(),
+            "{}{}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        );
+        return;
+    }
     let s = Synth::new();
     let sparse = |rel: &str| {
         let path = s.target.join(rel);

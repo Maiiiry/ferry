@@ -357,7 +357,7 @@ fn sudo(argv: &[String], input: &[u8]) -> Result<bool, String> {
 /// What a failed root script may already have changed.
 fn after_failure(plan: &InstallPlan) -> String {
     let mut changed = Vec::new();
-    if plan.install && setup::same_bytes(&plan.target, Path::new(setup::SELF_EXE)) {
+    if plan.install && setup::holds_binary(&plan.target, Path::new(setup::SELF_EXE)) {
         changed.push(format!("{} is this ferry now", plan.target.display()));
     }
     if std::fs::read_to_string(&plan.profile_path).is_ok_and(|t| t == plan.profile) {
