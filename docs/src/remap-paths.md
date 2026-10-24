@@ -87,10 +87,13 @@ during Ferry's research; **it has not been verified on a real Mac.**
 A second test runs the same edit through Ferry itself: `ferry base` and
 `ferry spawn` with the sandbox off, the edit, then the agent's first build.
 On Linux with rustc 1.99.0 it reuses the same 12 of 13 library units (0 of 13
-without remapping). CI runs the whole test suite in remap mode on macOS 26,
-where the binary prediction above is asserted and a further test checks that
-debug info and backtraces survive remapping. Its results will replace the
-prediction here once CI has run them.
+without remapping). On macOS both tests also assert the binary prediction
+above, and a further test checks that debug info and backtraces survive
+remapping. They run on every macOS CI leg whose rustc can remap (1.98 or
+newer), including the required `test (macos-15, stable)` check, so a wrong
+prediction fails that check before a merge, not only the `remap-paths` leg
+on macOS 26 that runs the whole suite in remap mode. Their results will
+replace the prediction here once CI has run them.
 
 ## Limitations
 
