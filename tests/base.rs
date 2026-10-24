@@ -148,3 +148,36 @@ fn a_refreshed_base_is_seeded_from_the_previous_one_and_rebuilds_only_changes() 
     assert_eq!(cold.json()["base"]["seeded_from"], Value::Null);
     assert!(compiled_in_base_build(&cold.stderr).len() >= common::ALL_PACKAGES.len());
 }
+
+/// A seeded target also holds units from the seed's own seeds. When a
+/// manifest change selects one of those again (here a default feature turned
+/// off and back on), it was built from older sources than the ones stamping
+/// compared against, so the seed must not be used.
+#[test]
+fn a_base_is_not_seeded_across_manifest_changes() {
+    let repo = TestRepo::new();
+    let manifest = repo.root().join("leaf/Cargo.toml");
+    let plain = std::fs::read_to_string(&manifest).unwrap();
+    let with_feature = format!("{plain}\n[features]\ndefault = [\"x\"]\nx = []\n");
+
+    repo.write(&manifest, &with_feature);
+    repo.set_marker(repo.root(), "LEAF_A");
+    repo.commit_all("A: feature on");
+    let a = repo.base();
+
+    repo.write(&manifest, &plain);
+    repo.set_marker(repo.root(), "LEAF_B");
+    repo.commit_all("B: feature off");
+    // So that B, were it eligible, would be the newest seed for C.
+    std::thread::sleep(std::time::Duration::from_millis(1100));
+    let b = repo.ferry_json(["base"]);
+    assert_eq!(b["base"]["seeded_from"], Value::Null, "{b}");
+
+    repo.write(&manifest, &with_feature);
+    repo.commit_all("C: feature on again");
+    let c = repo.ferry_json(["base"]);
+    assert_eq!(c["base"]["seeded_from"], a.as_str(), "{c}");
+
+    repo.spawn("agent");
+    assert_eq!(repo.app("agent").marker, "LEAF_B");
+}

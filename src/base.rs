@@ -46,6 +46,10 @@ pub struct BaseMeta {
     /// agents must use it too or rustc discards the incremental state.
     #[serde(default)]
     pub remap_paths: bool,
+    /// See `unit_inputs`; only a base with the same value can seed this one's
+    /// successors.
+    #[serde(default)]
+    pub unit_inputs: String,
     /// The earlier base whose target this one was seeded from.
     #[serde(default)]
     pub seeded_from: Option<BaseId>,
@@ -125,7 +129,12 @@ pub fn build(ctx: &Context, rev: &str, cold: bool) -> Result<BuildReport> {
     // Seeding from an earlier base with the same fingerprint turns a refresh
     // into an incremental build: its target is cloned and only files proven
     // identical to its checkout are stamped, exactly as for an agent.
-    let seed = if cold { None } else { seed_for(ctx, &id)? };
+    let inputs = unit_inputs(ctx, &commit)?;
+    let seed = if cold {
+        None
+    } else {
+        seed_for(ctx, &id, &inputs)?
+    };
     let _seed_lock = match &seed {
         Some(seed) => Some(FileLock::shared(
             &ctx.store.base(&seed.id).lock,
@@ -174,6 +183,7 @@ pub fn build(ctx: &Context, rev: &str, cold: bool) -> Result<BuildReport> {
         ferry_version: env!("CARGO_PKG_VERSION").to_owned(),
         dirtied,
         remap_paths: remap,
+        unit_inputs: inputs,
         seeded_from: seed.map(|s| s.id),
     };
     // Writing base.json is what makes the base ready (and immutable).
@@ -218,7 +228,7 @@ pub fn ready_bases(ctx: &Context) -> Result<Vec<BaseMeta>> {
             bases.push(meta);
         }
     }
-    bases.sort_by_key(|b| std::cmp::Reverse(b.created_unix));
+    bases.sort_by(|a, b| (b.created_unix, &b.id).cmp(&(a.created_unix, &a.id)));
     Ok(bases)
 }
 
@@ -338,12 +348,14 @@ fn prepare(
 }
 
 /// The newest ready base, other than `id`, built with the same fingerprint
-/// (toolchain, warm commands, modes) and with its checkout and target intact.
-fn seed_for(ctx: &Context, id: &BaseId) -> Result<Option<BaseMeta>> {
+/// (toolchain, warm commands, modes) and unit inputs, and with its checkout
+/// and target intact.
+fn seed_for(ctx: &Context, id: &BaseId, inputs: &str) -> Result<Option<BaseMeta>> {
     Ok(ready_bases(ctx)?.into_iter().find(|b| {
         let paths = ctx.store.base(&b.id);
         &b.id != id
             && b.id.fingerprint() == id.fingerprint()
+            && b.unit_inputs == inputs
             && paths.src.is_dir()
             && paths.target.is_dir()
     }))
@@ -459,6 +471,98 @@ fn fingerprint(
     Ok(fnv1a64(&input))
 }
 
+/// Hash of what decides which units (feature sets, dependency versions,
+/// profiles, flags) a build of `commit` selects: the commit's manifests,
+/// lockfiles, Cargo configs and toolchain files, the Cargo configs above the
+/// store, and Cargo's flag variables. A seed's target still holds units left
+/// from the seeds before it, built from older sources than the ones stamping
+/// compares against; a build with the same inputs selects none of them.
+fn unit_inputs(ctx: &Context, commit: &CommitId) -> Result<String> {
+    use std::os::unix::ffi::OsStrExt;
+    let mut input = Vec::new();
+    for entry in ctx.repo.ls_tree(commit)? {
+        let name = entry.path.file_name().and_then(|n| n.to_str());
+        let in_dot_cargo = entry
+            .path
+            .parent()
+            .and_then(|p| p.file_name())
+            .is_some_and(|p| p == ".cargo");
+        let selects_units = match name {
+            Some("Cargo.toml" | "Cargo.lock" | "rust-toolchain" | "rust-toolchain.toml") => true,
+            Some("config" | "config.toml") => in_dot_cargo,
+            _ => false,
+        };
+        if !selects_units {
+            continue;
+        }
+        if !entry.is_regular_file() {
+            // A link's target is not part of the hash, so no seed can be
+            // proven to match.
+            return Ok(format!("unseedable-{commit}"));
+        }
+        input.extend_from_slice(entry.path.as_os_str().as_bytes());
+        input.push(0);
+        input.extend_from_slice(entry.oid.as_bytes());
+        input.push(0);
+    }
+
+    let config_dirs = ctx
+        .store
+        .root()
+        .ancestors()
+        .map(|dir| dir.join(".cargo"))
+        .chain(cargo_home());
+    for dir in config_dirs {
+        for file in ["config", "config.toml"] {
+            let path = dir.join(file);
+            match fs::read(&path) {
+                Ok(bytes) => input.extend_from_slice(&bytes),
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                Err(e) => return Err(e).at("read", &path),
+            }
+            input.push(0);
+        }
+    }
+    let mut vars: Vec<_> = std::env::vars_os()
+        .filter(|(name, _)| name.to_str().is_some_and(selects_units))
+        .collect();
+    vars.sort();
+    for (name, value) in vars {
+        input.extend_from_slice(name.as_bytes());
+        input.push(b'=');
+        input.extend_from_slice(value.as_bytes());
+        input.push(0);
+    }
+    Ok(format!("{:016x}", fnv1a64(&input)))
+}
+
+fn cargo_home() -> Option<std::path::PathBuf> {
+    std::env::var_os("CARGO_HOME")
+        .map(std::path::PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|h| std::path::Path::new(&h).join(".cargo")))
+}
+
+/// Environment variables that change unit hashes or compiler flags, minus
+/// the target and build dir, which Ferry sets itself.
+fn selects_units(name: &str) -> bool {
+    let cargo_config = [
+        "CARGO_BUILD_",
+        "CARGO_PROFILE_",
+        "CARGO_TARGET_",
+        "CARGO_UNSTABLE_",
+    ]
+    .iter()
+    .any(|prefix| name.starts_with(prefix));
+    matches!(
+        name,
+        "RUSTFLAGS" | "RUSTDOCFLAGS" | "CARGO_ENCODED_RUSTFLAGS" | "CARGO_ENCODED_RUSTDOCFLAGS"
+    ) || (cargo_config
+        && !matches!(
+            name,
+            "CARGO_TARGET_DIR" | "CARGO_BUILD_TARGET_DIR" | "CARGO_BUILD_BUILD_DIR"
+        ))
+}
+
 fn build_plan(
     ctx: &Context,
     paths: &BasePaths,
@@ -508,4 +612,32 @@ fn run_warm_commands(plan: &Plan, freshness: FreshnessMode, commands: &[String])
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn flag_variables_select_units_but_ferrys_own_do_not() {
+        for name in [
+            "RUSTFLAGS",
+            "CARGO_ENCODED_RUSTFLAGS",
+            "CARGO_PROFILE_DEV_DEBUG",
+            "CARGO_BUILD_TARGET",
+            "CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS",
+            "CARGO_UNSTABLE_CHECKSUM_FRESHNESS",
+        ] {
+            assert!(selects_units(name), "{name}");
+        }
+        for name in [
+            "CARGO_TARGET_DIR",
+            "CARGO_BUILD_BUILD_DIR",
+            "CARGO_HOME",
+            "CARGO_TERM_COLOR",
+            "RUSTUP_HOME",
+        ] {
+            assert!(!selects_units(name), "{name}");
+        }
+    }
 }
