@@ -155,7 +155,10 @@ needs one writable-root entry for it plus the worktree (its working directory).
 4. Enter the sandbox (irreversible for this process; host paths stay
    reachable), run each warm command with `sh -c`, stdout redirected to
    stderr, the shim first on `PATH` so each workspace gets the target dir it
-   gets in agents.
+   gets in agents, and `CARGO_BUILD_WARNINGS=warn`. A failing command
+   discards the base, except a generated clippy command, which only warns
+   and is recorded in `incomplete`. Clippy commands are left out (before the
+   base id is computed) when `cargo clippy --version` fails.
 5. Record files the build wrote into the source tree (build scripts writing
    outside `OUT_DIR`) as warnings; write `base.json`; set `current` before
    releasing the base lock.

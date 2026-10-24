@@ -259,8 +259,10 @@ seeded from the old one, new agents fork from it, and existing agents keep
 theirs.
 
 **Which cargo commands go through Ferry?** Every `cargo` that resolves to the
-shim, including `cargo clippy` and `cargo nextest`. Warm what your agents run:
-see [Configuration](https://patwrall.github.io/ferry/configuration.html).
+shim, including `cargo clippy` and `cargo nextest`. The default base warms
+`cargo build`, `cargo test`, `cargo check` and `cargo clippy`; to warm
+something else, see
+[Configuration](https://patwrall.github.io/ferry/configuration.html).
 
 More in the [FAQ](https://patwrall.github.io/ferry/faq.html) and
 [Troubleshooting](https://patwrall.github.io/ferry/troubleshooting.html).

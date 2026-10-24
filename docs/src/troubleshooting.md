@@ -198,7 +198,12 @@ base keep that base alive.
 - **Differences between the base and the agent rebuild everything.** Cargo
   hashes `RUSTFLAGS`, `RUSTC_WORKSPACE_WRAPPER`, features and profile settings
   into its fingerprints. If agents build with different values than the warm
-  commands, nothing is reused.
+  commands, nothing is reused. `RUSTFLAGS=-Dwarnings` is such a difference.
+- **`cargo clippy -- -D warnings` re-lints every workspace member** from
+  scratch, because the base warmed clippy without lint flags (dependencies
+  stay fresh). Use `CARGO_BUILD_WARNINGS=deny cargo clippy` instead
+  (Cargo 1.97+), which turns warnings into errors without touching any
+  fingerprint.
 - **`CARGO_INCREMENTAL=0`** (set by some CI images and agent tools) switches
   off incremental compilation, and with it Ferry's incremental reuse. Unset it.
 - **Build caches as `RUSTC_WRAPPER`.** kache strips Cargo's incremental

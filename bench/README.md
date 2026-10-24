@@ -110,8 +110,8 @@ sandbox entry is included), disk per agent right after spawn and after two
 edits, and N agents spawned, each with a different edit, building at once.
 `FERRY_BASE_COMMAND` is set to the measured build command (plus JSON output)
 so the base warms exactly what the scenarios build; Ferry's default warm
-commands also run `cargo test --no-run`, which would make `ferry base` slower
-than these numbers.
+commands also run `cargo test --no-run`, `cargo check` and `cargo clippy`,
+which would make `ferry base` slower than these numbers.
 
 **Disk**: `du` (allocated blocks, counting extents shared with the base) and,
 on btrfs, `btrfs filesystem du` exclusive bytes (blocks no other file shares),

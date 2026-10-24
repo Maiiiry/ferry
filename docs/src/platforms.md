@@ -122,6 +122,8 @@ caches.
 | `repository` | ok or fail | the main checkout Ferry will use; fails outside a git repository |
 | `config` | ok or info | the `ferry.toml` that was loaded, or that defaults are in use |
 | `toolchain` | ok or fail | the `rustc` and `cargo` the repository selects |
+| `clippy` | ok or info | whether `cargo clippy` works, when the warm commands include the generated clippy command; bases skip it when it does not |
+| `remap-paths` | info | with remap-paths on: `cargo clippy` runs are not remapped |
 | `freshness` | ok | `checksum freshness (content hashes)` or `mtime stamping of files proven identical to the base` |
 | `store` | ok or warn | the store path, its filesystem and free space; warns on NFS, CIFS and FUSE |
 | `reflink` | ok or info | whether copy-on-write clones work on the store's filesystem |
