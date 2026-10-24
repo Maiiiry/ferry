@@ -24,7 +24,7 @@ bench/run.sh --workspace https://github.com/BurntSushi/ripgrep --rev 6892bc2 \
   --edit crates/ignore/src/lib.rs --runs 5
 
 # A large workspace.
-bench/run.sh --workspace https://github.com/rust-lang/rust-analyzer --rev <commit> \
+bench/run.sh --workspace https://github.com/rust-lang/rust-analyzer --rev 0c4d74686b21 \
   --edit crates/ide-db/src/lib.rs --runs 5 --cold-runs 3
 
 # The chart, from any number of results.
@@ -148,8 +148,16 @@ count before trusting small differences.
   performance result: everything takes well under a second.
 - **ripgrep** at `6892bc2`, edit `crates/ignore/src/lib.rs`: the prototype's
   protocol. 44 units cold; the edit rebuilds `ignore` and `rg`.
-- **rust-analyzer**: a large workspace. The commit and edited crate are
-  recorded in its `results.json`.
+- **rust-analyzer** at `0c4d74686b21f2b3bd8872b6d3cf36ad2e740d49` (master on
+  2026-10-22, the newest commit at the time; it builds with stable 1.99),
+  edit `crates/ide-db/src/lib.rs`. 45 workspace members, 281 units cold, a
+  4.3 GiB debug target. `ide-db` sits mid-graph: an edit there rebuilds 9
+  units (`ide-db`, `ide-assists`, `ide-completion`, `ide-diagnostics`,
+  `ide-ssr`, `ide`, `load-cargo`, and the `rust-analyzer` lib and binary),
+  the shape of a typical feature change. A lower crate such as `hir-def`
+  would also rebuild `hir-ty`, `hir` and everything above them (12 crates,
+  a much larger share of the workspace's compile time); a crate near the top
+  such as `ide` rebuilds only itself and `rust-analyzer`.
 
 ## Caveats
 
