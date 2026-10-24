@@ -431,6 +431,10 @@ fn wrapper_keeps_feature_gates_on_stable() {
             .current_dir(&krate)
             .env("CARGO_TARGET_DIR", root.join("target"))
             .env("RUSTC_WORKSPACE_WRAPPER", &wrapper)
+            // The wrapper acts only on incremental compiles, which Cargo
+            // turns off by default when `CI` is set.
+            .env_remove("CI")
+            .env_remove("CARGO_INCREMENTAL")
             .env_remove("RUSTC_BOOTSTRAP")
             .env_remove("FERRY_REMAP_NIGHTLY");
         if nightly {

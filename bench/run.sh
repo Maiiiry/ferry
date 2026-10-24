@@ -108,8 +108,10 @@ B_KACHE=$B_ROOT/bench/.cache/kache-$KACHE_VERSION/bin/kache
 rm -rf "$B_LOGS" "$B_STATE" "$B_OUT/hyperfine"
 mkdir -p "$B_WORK/wt" "$B_LOGS" "$B_STATE/steps" "$B_OUT/hyperfine"
 
-# Nothing from the caller's environment may redirect or wrap the builds.
-unset CARGO_TARGET_DIR CARGO_BUILD_BUILD_DIR CARGO_BUILD_TARGET_DIR RUSTC_WRAPPER \
+# Nothing from the caller's environment may redirect or wrap the builds. CI is
+# included because Cargo 1.99 turns incremental off by default when it is set.
+B_CI=${CI:-}
+unset CI CARGO_TARGET_DIR CARGO_BUILD_BUILD_DIR CARGO_BUILD_TARGET_DIR RUSTC_WRAPPER \
   RUSTC_WORKSPACE_WRAPPER CARGO_BUILD_RUSTC_WRAPPER RUSTFLAGS CARGO_ENCODED_RUSTFLAGS \
   CARGO_INCREMENTAL CARGO_PROFILE_DEV_INCREMENTAL FERRY_HOME FERRY_WORKTREES FERRY_BACKEND \
   FERRY_SANDBOX FERRY_CONFIG FERRY_FRESHNESS FERRY_BASE_COMMAND FERRY_REMAP_PATHS FERRY_AGENT
@@ -241,7 +243,7 @@ platform_env() {
 # Set on shared CI runners, whose times must never be compared with a
 # dedicated machine's (results-md.jq and chart.py check this record).
 ci_env() {
-  if [[ -z ${CI:-} && ${GITHUB_ACTIONS:-} != true ]]; then
+  if [[ -z $B_CI && ${GITHUB_ACTIONS:-} != true ]]; then
     echo null
     return
   fi
