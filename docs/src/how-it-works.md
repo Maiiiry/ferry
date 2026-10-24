@@ -164,7 +164,10 @@ name. The workspace at the worktree root uses the fork itself; one nested at
 and a workspace outside the worktree, such as
 `cargo test --manifest-path ../other-agent/Cargo.toml`, builds into its own
 target dir, as it would without Ferry. Base warm commands get the same
-mapping, so a nested workspace the base warmed is warm in agents too.
+mapping, so a nested workspace the base warmed is warm in agents too. Without
+the namespace sandbox, a path package outside the nested workspace's root,
+and what depends on it, rebuilds once: Cargo hashes such a package by its
+absolute path.
 
 ## Where things live
 

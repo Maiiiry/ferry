@@ -339,9 +339,17 @@ fn a_nested_workspace_is_rebuilt_on_a_refresh_across_inputs() {
     let c = repo.ferry_json(["base"]);
     assert_eq!(c["base"]["seeded_from"], b.as_str(), "{c}");
 
-    repo.spawn("agent");
+    let spawned = repo.ferry_json(["spawn", "agent"]);
+    // Without the namespace sandbox the agent builds at its own path, and
+    // Cargo hashes a path package outside the workspace root (leaf, for
+    // fuzz) by its absolute path: leaf and fz are new units there.
+    let rebuilt: &[&str] = if spawned["agent"]["isolation"] == "namespace" {
+        &[]
+    } else {
+        &["fz", "leaf"]
+    };
     let nested = ["--manifest-path", "fuzz/Cargo.toml"];
-    Build::run(repo.agent_cargo("agent").arg("build").args(nested)).assert_rebuilt(&[]);
+    Build::run(repo.agent_cargo("agent").arg("build").args(nested)).assert_rebuilt(rebuilt);
     let out = common::run(repo.agent_cargo("agent").args(["run", "-q"]).args(nested)).ok();
     assert_eq!(out.stdout.trim(), "marker=LEAF_B", "{out}");
 }
