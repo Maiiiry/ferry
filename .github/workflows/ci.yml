@@ -104,7 +104,7 @@ jobs:
           FERRY_TEST_REMAP: ${{ matrix.remap && '1' || '' }}
         run: |
           unset CARGO_INCREMENTAL
-          cargo test --locked
+          cargo test --locked --no-fail-fast
       - name: lldb finds sources (measurement only)
         if: matrix.remap
         continue-on-error: true
@@ -195,7 +195,7 @@ jobs:
           FERRY_TEST_REQUIRE: userns,reflink,overlay,clippy
         run: |
           unset CARGO_INCREMENTAL
-          cargo test --locked
+          cargo test --locked --no-fail-fast
 
   rustdoc:
     name: rustdoc
