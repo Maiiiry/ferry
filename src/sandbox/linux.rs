@@ -480,9 +480,9 @@ fn legacy_options(lower: &Path, upper: &Path, work: &Path) -> Result<CString, Sa
     CString::new(options).map_err(|_| unusable(upper, "it contains a NUL byte"))
 }
 
-/// Empties overlayfs's work dir. Leftovers of an earlier mount (the kernel
-/// leaves `work/work` at mode 000) can make the new mount read-only; no other
-/// mount of this overlay exists when this runs (see [`enter_overlay`]).
+/// Empties overlayfs's work dir: leftovers of an earlier mount can make the
+/// next one fail (`work/work/incompat/volatile`) or come up read-only. No
+/// other mount of this overlay exists when this runs (see [`enter_overlay`]).
 fn clear_dir(dir: &Path) -> io::Result<()> {
     for entry in fs::read_dir(dir)? {
         let entry = entry?;
