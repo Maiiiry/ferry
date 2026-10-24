@@ -16,13 +16,16 @@
 //!    identical bytes (this catches smudge filters, `core.autocrlf`,
 //!    post-checkout hooks, and anything else that makes the working tree
 //!    differ from the blob), and
-//! 4. its metadata has not changed between verification and stamping.
+//! 4. its metadata has not changed between verification and stamping, and
+//! 5. Cargo cannot reach it through a symlink that leads elsewhere in the
+//!    agent than in the base (see `changed_link_regions`).
 //!
 //! A directory (any ancestor of a tracked path, up to and including the
 //! worktree root) is stamped only if its entry names equal those of the same
-//! directory in the base checkout. Cargo's `rerun-if-changed=<dir>` takes the
-//! recursive max mtime of the directory, its subdirectories and files, and a
-//! deleted file is only visible as its parent directory's mtime change.
+//! directory in the base checkout, and condition 5 holds for it. Cargo's
+//! `rerun-if-changed=<dir>` takes the recursive max mtime of the directory,
+//! its subdirectories and files, and a deleted file is only visible as its
+//! parent directory's mtime change.
 //!
 //! [`StampPlan`] can only be constructed by [`plan`], so code elsewhere cannot
 //! stamp an unverified path. Stamping happens once, when an agent is
@@ -64,6 +67,8 @@ const CHUNK: usize = 64 * 1024;
 /// Below this many files per thread, spawning threads costs more than it saves.
 const MIN_FILES_PER_THREAD: usize = 64;
 
+const SYMLINK_MODE: u32 = 0o120_000;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum FreshnessMode {
@@ -91,6 +96,9 @@ pub enum SkipReason {
     ContentDiffers,
     /// The file is missing from the agent or the base working tree.
     Missing,
+    /// Identical to the base, but Cargo may reach it through a symlink that
+    /// leads elsewhere in the agent than in the base.
+    ReachedThroughChangedSymlink,
 }
 
 /// Files and directories proven identical to the base, ready to stamp.
@@ -226,12 +234,42 @@ pub fn plan(
             Err(reason) => skipped.push((path.to_path_buf(), reason)),
         }
     }
+
+    // Symlinks of the base commit, and any in the agent's working tree at a
+    // tracked path or one of its directories.
+    let mut links: BTreeSet<&Path> = base_tree
+        .iter()
+        .filter(|e| e.mode == SYMLINK_MODE)
+        .map(|e| e.path.as_path())
+        .collect();
+    let unverified = skipped
+        .iter()
+        .map(|(path, _)| path.as_path())
+        .filter(|path| parent_is_dir(&dirs, path))
+        .chain(dirs.iter().filter_map(|(dir, state)| {
+            matches!(state, Err(SkipReason::NotRegularFile)).then_some(*dir)
+        }));
+    links.extend(unverified.filter(|path| is_symlink(&root.join(path))));
+    let regions = changed_link_regions(&root, &base_root, &links);
+    let (reached, identical): (Vec<_>, Vec<_>) = identical
+        .into_iter()
+        .partition(|file| within(&regions, &file.path));
+    skipped.extend(
+        reached
+            .into_iter()
+            .map(|file| (file.path, SkipReason::ReachedThroughChangedSymlink)),
+    );
     skipped.sort_by(|a, b| a.0.cmp(&b.0));
 
     let mut verified_dirs = Vec::new();
     let mut skipped_dirs = Vec::new();
     for (dir, state) in dirs {
-        match verify_dir(&root, &base_root, dir, state)? {
+        let verdict = if state.is_ok() && within(&regions, dir) {
+            Err(SkipReason::ReachedThroughChangedSymlink)
+        } else {
+            verify_dir(&root, &base_root, dir, state)?
+        };
+        match verdict {
             Ok(seen) => verified_dirs.push(Verified {
                 path: dir.to_path_buf(),
                 seen,
@@ -452,6 +490,116 @@ fn scan_dirs<'a>(
 fn parent_is_dir(dirs: &BTreeMap<&Path, Verdict<Metadata>>, path: &Path) -> bool {
     path.parent()
         .is_some_and(|p| matches!(dirs.get(p), Some(Ok(_))))
+}
+
+/// What a path leads to in one checkout.
+struct LinkEnd {
+    link: bool,
+    /// Relative to the checkout root; `None` if the path does not resolve to
+    /// anything inside it, so nothing stampable is reached through it there.
+    target: Option<PathBuf>,
+    dir: bool,
+}
+
+impl LinkEnd {
+    fn of(root: &Path, rel: &Path) -> Self {
+        let path = root.join(rel);
+        let target = fs::canonicalize(&path)
+            .ok()
+            .and_then(|t| t.strip_prefix(root).ok().map(Path::to_path_buf));
+        Self {
+            link: is_symlink(&path),
+            dir: target.as_ref().is_some_and(|t| under(root, t).is_dir()),
+            target,
+        }
+    }
+}
+
+/// The paths, each with everything beneath it, that Cargo may reach through
+/// one of `links` (symlinks in either checkout) that leads elsewhere in the
+/// agent than in the base.
+///
+/// Both targets count: Cargo records a rustc input (`include_str!`,
+/// `#[path]`) by its canonical path in the base, but follows a build
+/// script's `rerun-if-changed` path through the link in the agent. `..`
+/// after a link to a directory climbs out of it, so that region reaches up
+/// to where the two targets' ancestors meet. A symlink inside another link's
+/// region leads on to wherever it points, which the other checkout need not
+/// mirror, so unless that is a file inside the regions the whole tree is the
+/// region.
+fn changed_link_regions(root: &Path, base_root: &Path, links: &BTreeSet<&Path>) -> Vec<PathBuf> {
+    let ends: Vec<(&Path, [LinkEnd; 2])> = links
+        .iter()
+        .map(|&link| {
+            (
+                link,
+                [LinkEnd::of(root, link), LinkEnd::of(base_root, link)],
+            )
+        })
+        .collect();
+    let changed: Vec<(&Path, Vec<PathBuf>)> = ends
+        .iter()
+        .filter(|(_, [agent, base])| agent.target != base.target)
+        .map(|(link, [agent, base])| (*link, link_regions(agent, base)))
+        .collect();
+    let regions: Vec<PathBuf> = changed
+        .iter()
+        .flat_map(|(_, r)| r.iter().cloned())
+        .collect();
+    let escapes = ends.iter().any(|(link, pair)| {
+        changed
+            .iter()
+            .any(|(other, r)| other != link && within(r, link))
+            && pair.iter().any(|end| {
+                end.link
+                    && end
+                        .target
+                        .as_ref()
+                        .is_some_and(|t| end.dir || !within(&regions, t))
+            })
+    });
+    if escapes {
+        vec![PathBuf::new()]
+    } else {
+        regions
+    }
+}
+
+/// The regions of one link whose two ends lead to different places.
+fn link_regions(agent: &LinkEnd, base: &LinkEnd) -> Vec<PathBuf> {
+    [(agent, base), (base, agent)]
+        .into_iter()
+        .filter_map(|(end, other)| {
+            let target = end.target.as_deref()?;
+            let region = match other.target.as_deref() {
+                Some(other) if end.dir => divergence(target, other),
+                _ => target,
+            };
+            Some(region.to_path_buf())
+        })
+        .collect()
+}
+
+/// The highest ancestor of `path`, or `path` itself, that differs from the
+/// ancestor of `other` as many levels up; the root if they never meet.
+fn divergence<'a>(mut path: &'a Path, mut other: &Path) -> &'a Path {
+    let mut top = path;
+    while path != other {
+        top = path;
+        let (Some(up), Some(other_up)) = (path.parent(), other.parent()) else {
+            return Path::new("");
+        };
+        (path, other) = (up, other_up);
+    }
+    top
+}
+
+fn within(regions: &[PathBuf], path: &Path) -> bool {
+    regions.iter().any(|region| path.starts_with(region))
+}
+
+fn is_symlink(path: &Path) -> bool {
+    fs::symlink_metadata(path).is_ok_and(|meta| meta.is_symlink())
 }
 
 fn verify_dir(
@@ -1208,6 +1356,209 @@ mod tests {
         );
         assert_ne!(mtime(&fx.agent.join("src")), STAMPED);
         assert_eq!(mtime(&fx.agent.join("top.rs")), STAMPED);
+    }
+
+    /// Replaces the file or symlink `at` with a symlink to `target`.
+    fn relink(target: &str, at: &Path) {
+        fs::remove_file(at).unwrap();
+        symlink(target, at).unwrap();
+    }
+
+    #[test]
+    fn files_reached_through_a_changed_symlink_are_not_stamped() {
+        let files = [
+            ("a.txt", "a\n"),
+            ("b.txt", "b\n"),
+            ("c.txt", "c\n"),
+            ("d.txt", "d\n"),
+            ("e.txt", "e\n"),
+            ("f.txt", "f\n"),
+            ("lone.txt", "l\n"),
+            ("plain.txt", "p\n"),
+            ("untouched.txt", "u\n"),
+        ];
+        let fx = Fixture::with(&files, |fx| {
+            for (link, target) in [
+                ("retargeted", "a.txt"),
+                ("was_link", "d.txt"),
+                ("same", "e.txt"),
+                ("same_edited", "f.txt"),
+                ("out", "../outside1.txt"),
+            ] {
+                symlink(target, fx.repo.join(link)).unwrap();
+            }
+            fx.git(&fx.repo, &["add", "--all"]);
+        });
+        for outside in ["outside1.txt", "outside2.txt"] {
+            write(&fx.outside().join(outside), "o\n");
+        }
+        let agent = &fx.agent;
+        relink("b.txt", &agent.join("retargeted"));
+        relink("c.txt", &agent.join("plain.txt"));
+        relink("../outside2.txt", &agent.join("out"));
+        symlink("lone.txt", agent.join("fresh")).unwrap();
+        fs::remove_file(agent.join("was_link")).unwrap();
+        write(&agent.join("was_link"), "now a file\n");
+        write(&agent.join("f.txt"), "f edited\n");
+        fx.git(agent, &["add", "--all"]);
+
+        let plan = fx.plan();
+        let reached = SkipReason::ReachedThroughChangedSymlink;
+        assert_eq!(
+            reasons(plan.skipped()),
+            [
+                ("a.txt".into(), reached),
+                ("b.txt".into(), reached),
+                ("c.txt".into(), reached),
+                ("d.txt".into(), reached),
+                ("f.txt".into(), SkipReason::BlobDiffers),
+                ("fresh".into(), SkipReason::NotRegularFile),
+                ("lone.txt".into(), reached),
+                ("out".into(), SkipReason::NotRegularFile),
+                ("plain.txt".into(), SkipReason::NotRegularFile),
+                ("retargeted".into(), SkipReason::NotRegularFile),
+                ("same".into(), SkipReason::NotRegularFile),
+                ("same_edited".into(), SkipReason::NotRegularFile),
+                ("was_link".into(), SkipReason::ModeDiffers),
+            ]
+        );
+        assert_eq!(names(plan.identical()), ["e.txt", "untouched.txt"]);
+
+        apply(&plan).unwrap();
+        for rel in ["a.txt", "b.txt", "c.txt", "d.txt", "lone.txt"] {
+            assert_ne!(mtime(&agent.join(rel)), STAMPED, "{rel}");
+        }
+        assert_eq!(mtime(&agent.join("e.txt")), STAMPED);
+    }
+
+    #[test]
+    fn everything_reached_through_a_retargeted_directory_symlink_is_not_stamped() {
+        let files = [
+            ("v1/m.rs", "m\n"),
+            ("v1/sub/n.rs", "n\n"),
+            ("v2/m.rs", "m\n"),
+            ("v2/sub/n.rs", "n\n"),
+            ("rel/one/x/f.rs", "f\n"),
+            ("rel/one/VERSION", "1\n"),
+            ("rel/two/x/f.rs", "f\n"),
+            ("rel/two/VERSION", "2\n"),
+            ("top.rs", "t\n"),
+        ];
+        let fx = Fixture::with(&files, |fx| {
+            symlink("v1", fx.repo.join("impl")).unwrap();
+            symlink("rel/one/x", fx.repo.join("deep")).unwrap();
+            fx.git(&fx.repo, &["add", "--all"]);
+        });
+        relink("v2", &fx.agent.join("impl"));
+        relink("rel/two/x", &fx.agent.join("deep"));
+        fx.git(&fx.agent, &["add", "--all"]);
+
+        let plan = fx.plan();
+        let reached = SkipReason::ReachedThroughChangedSymlink;
+        let mut expected: Vec<(String, SkipReason)> = files[..8]
+            .iter()
+            .map(|(path, _)| ((*path).to_owned(), reached))
+            .collect();
+        expected.extend(["deep", "impl"].map(|l| (l.to_owned(), SkipReason::NotRegularFile)));
+        expected.sort_by(|a, b| a.0.cmp(&b.0));
+        assert_eq!(reasons(plan.skipped()), expected);
+        assert_eq!(names(plan.identical()), ["top.rs"]);
+        // `deep/../VERSION` reaches rel/one/VERSION in the base and
+        // rel/two/VERSION in the agent; rel/ itself is the same for both.
+        let dirs = [
+            "rel/one",
+            "rel/one/x",
+            "rel/two",
+            "rel/two/x",
+            "v1",
+            "v1/sub",
+            "v2",
+            "v2/sub",
+        ];
+        assert_eq!(
+            reasons(plan.skipped_dirs()),
+            dirs.map(|d| (d.to_owned(), reached))
+        );
+        assert_eq!(names(plan.dirs()), ["", "rel"]);
+    }
+
+    #[test]
+    fn a_symlink_leading_out_of_a_retargeted_directory_unstamps_everything() {
+        let files = [
+            ("v1/m.rs", "m\n"),
+            ("v2/m.rs", "m\n"),
+            ("shared/s.rs", "s\n"),
+            ("top.rs", "t\n"),
+        ];
+        let fx = Fixture::with(&files, |fx| {
+            symlink("v1", fx.repo.join("impl")).unwrap();
+            symlink("../shared", fx.repo.join("v1/data")).unwrap();
+            symlink("../shared", fx.repo.join("v2/data")).unwrap();
+            fx.git(&fx.repo, &["add", "--all"]);
+        });
+        relink("v2", &fx.agent.join("impl"));
+        fx.git(&fx.agent, &["add", "impl"]);
+
+        let plan = fx.plan();
+        assert_eq!(plan.identical().count(), 0);
+        assert_eq!(plan.dirs().count(), 0);
+        let reached = SkipReason::ReachedThroughChangedSymlink;
+        for (path, _) in files {
+            assert!(
+                plan.skipped().contains(&(PathBuf::from(path), reached)),
+                "{path}"
+            );
+        }
+        assert_eq!(
+            reasons(plan.skipped_dirs()),
+            ["", "shared", "v1", "v2"].map(|d| (d.to_owned(), reached))
+        );
+    }
+
+    #[test]
+    fn a_directory_replaced_by_a_symlink_into_the_tree_leaves_its_target_unstamped() {
+        let fx = Fixture::new(&[
+            ("src/lib.rs", "x\n"),
+            ("src_old/lib.rs", "x\n"),
+            ("top.rs", "t\n"),
+        ]);
+        fs::remove_dir_all(fx.agent.join("src")).unwrap();
+        symlink("src_old", fx.agent.join("src")).unwrap();
+
+        let plan = fx.plan();
+        let reached = SkipReason::ReachedThroughChangedSymlink;
+        assert_eq!(
+            reasons(plan.skipped()),
+            [
+                ("src/lib.rs".into(), SkipReason::Missing),
+                ("src_old/lib.rs".into(), reached),
+            ]
+        );
+        assert_eq!(
+            reasons(plan.skipped_dirs()),
+            [
+                ("src".into(), SkipReason::NotRegularFile),
+                ("src_old".into(), reached),
+            ]
+        );
+        assert_eq!(names(plan.identical()), ["top.rs"]);
+    }
+
+    #[test]
+    fn divergence_climbs_to_where_both_ancestors_meet() {
+        for (path, other, expected) in [
+            ("p/v2", "p/v1", "p/v2"),
+            ("q/a/b", "q/c/d", "q/a"),
+            ("x", "y", "x"),
+            ("d", "d/sub", ""),
+            ("x/y", "z", ""),
+        ] {
+            assert_eq!(
+                divergence(Path::new(path), Path::new(other)),
+                Path::new(expected),
+                "{path} vs {other}"
+            );
+        }
     }
 
     #[test]
