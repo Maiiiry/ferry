@@ -1076,7 +1076,7 @@ mod tests {
         fx.git(agent, &["add", "new.rs", "blob.rs", "mode.sh"]);
         // Same blob in the index, different working-tree bytes: what a smudge
         // filter or autocrlf produces.
-        write(&agent.join("bytes.rs"), "abd\n");
+        write(&agent.join("bytes.rs"), "acb\n");
         write(&agent.join("size.rs"), "size, longer\n");
         let mut tail_differs = big.clone();
         tail_differs.replace_range(big.len() - 1.., "y");
@@ -1480,7 +1480,7 @@ mod tests {
     #[test]
     fn old_layout_units_that_captured_old_paths_are_invalidated() {
         let r = Relocated::new();
-        let (os, ot) = (r.old_src.display(), r.old_target.display());
+        let (old_src, old_target) = (r.old_src.display(), r.old_target.display());
         let fp = r.target.join("debug/.fingerprint");
 
         // env!("CARGO_MANIFEST_DIR").
@@ -1488,7 +1488,7 @@ mod tests {
             &fp.join("app-1111/dep-bin-app"),
             b"\x01\0\0\0\0\x0b\0\0\0src/main.rs",
         );
-        let manifest_dir = format!("{os}/app");
+        let manifest_dir = format!("{old_src}/app");
         let env = [("CARGO_MANIFEST_DIR", manifest_dir.as_str())];
         r.rustc_d(
             "debug/deps/app-1111.d",
@@ -1506,12 +1506,12 @@ mod tests {
             &inputs,
             &[],
         );
-        let uplifted = format!("{ot}/debug/libplain.rlib: {os}/plain/src/lib.rs\n");
+        let uplifted = format!("{old_target}/debug/libplain.rlib: {old_src}/plain/src/lib.rs\n");
         put(&r.target.join("debug/libplain.d"), uplifted);
         // A workspace file outside the package, stored absolute by Cargo.
         let encoded = [
             b"\x02\0\0\0\0\x0a\0\0\0src/lib.rs\0\x01".as_slice(),
-            format!("{os}/wsrel/../x.txt").as_bytes(),
+            format!("{old_src}/wsrel/../x.txt").as_bytes(),
         ]
         .concat();
         put(&fp.join("wsrel-3333/dep-lib-wsrel"), encoded);
@@ -1526,7 +1526,7 @@ mod tests {
         put(
             &fp.join("absr-4444/run-build-script-build-script-build.json"),
             format!(
-                r#"{{"local":[{{"RerunIfChanged":{{"output":"o","paths":["{os}/x.txt"]}}}}]}}"#
+                r#"{{"local":[{{"RerunIfChanged":{{"output":"o","paths":["{old_src}/x.txt"]}}}}]}}"#
             ),
         );
         // An example: rustc's dep-info is clean, Cargo's uplifted one is not.
@@ -1538,12 +1538,12 @@ mod tests {
             &inputs,
             &[],
         );
-        let uplifted = format!("{ot}/debug/examples/ex: {os}/app/examples/ex.rs\n");
+        let uplifted = format!("{old_target}/debug/examples/ex: {old_src}/app/examples/ex.rs\n");
         put(&r.target.join("debug/examples/ex.d"), uplifted);
         // A sibling whose name extends the old root's.
         put(
             &fp.join("near-7777/dep-lib-near"),
-            format!("{os}2/near/lib.rs"),
+            format!("{old_src}2/near/lib.rs"),
         );
 
         let invalidated = r.invalidate();
@@ -1597,12 +1597,12 @@ mod tests {
     #[test]
     fn new_layout_units_that_captured_old_paths_are_invalidated() {
         let r = Relocated::new();
-        let (os, ot) = (r.old_src.display(), r.old_target.display());
+        let (old_src, old_target) = (r.old_src.display(), r.old_target.display());
         let debug = r.target.join("debug");
 
         // Cross-compiled: a library that captured OUT_DIR.
         let triple = "x86_64-unknown-linux-gnu/debug/build/leaf";
-        let out_dir = format!("{ot}/{triple}/9999/out");
+        let out_dir = format!("{old_target}/{triple}/9999/out");
         let generated = format!("{out_dir}/gen.rs");
         put(
             &r.target.join(triple).join("8888/fingerprint/dep-lib-leaf"),
@@ -1620,7 +1620,10 @@ mod tests {
             &run.join("fingerprint/run-build-script-build-script-build.json"),
             "{}",
         );
-        put(&run.join("out/cc.d"), format!("obj.o: {os}/leaf/c/x.c\n"));
+        put(
+            &run.join("out/cc.d"),
+            format!("obj.o: {old_src}/leaf/c/x.c\n"),
+        );
         // A clean unit, in a profile that also holds the old layout.
         put(
             &debug.join(".fingerprint/old-bbbb/dep-lib-old"),
@@ -1637,7 +1640,7 @@ mod tests {
         put(
             &debug.join("build/mid/cccc/fingerprint/run-build-script-build-script-build.json"),
             format!(
-                r#"{{"local":[{{"RerunIfChanged":{{"output":"o","paths":["{os}/m.txt"]}}}}]}}"#
+                r#"{{"local":[{{"RerunIfChanged":{{"output":"o","paths":["{old_src}/m.txt"]}}}}]}}"#
             ),
         );
 

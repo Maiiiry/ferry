@@ -704,7 +704,8 @@ mod tests {
         assert_eq!(users(&record).unwrap(), Vec::<u32>::new(), "no lock file");
         let lock = mount_lock_path(&record);
         drop(FileLock::exclusive(&lock, "test").unwrap());
-        assert_eq!(users(&record).unwrap(), Vec::<u32>::new(), "free lock");
+        let free = || users(&record).is_ok_and(|u| u.is_empty());
+        assert!(crate::lock::tests::eventually(free), "free lock");
 
         let held = FileLock::shared(&lock, "test").unwrap();
         assert_eq!(users(&record).unwrap(), vec![std::process::id()]);
@@ -721,7 +722,7 @@ mod tests {
         .unwrap();
         assert_eq!(users(&record).unwrap(), vec![std::process::id()]);
         drop(held);
-        assert_eq!(users(&record).unwrap(), Vec::<u32>::new());
+        assert!(crate::lock::tests::eventually(free));
     }
 
     #[test]

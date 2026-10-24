@@ -90,8 +90,22 @@ fn open_lock_file(path: &Path) -> Result<File> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
+
+    /// Retries `check` for up to two seconds. Other test threads fork
+    /// children, and until such a child execs it shares this process's open
+    /// file descriptions, so a dropped lock can stay held for a moment.
+    pub(crate) fn eventually(mut check: impl FnMut() -> bool) -> bool {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        while !check() {
+            if std::time::Instant::now() > deadline {
+                return false;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        true
+    }
 
     #[test]
     fn exclusive_excludes_and_releases_on_drop() {
@@ -100,6 +114,8 @@ mod tests {
         let held = FileLock::exclusive(&path, "test").unwrap();
         assert!(FileLock::try_exclusive(&path).unwrap().is_none());
         drop(held);
-        assert!(FileLock::try_exclusive(&path).unwrap().is_some());
+        assert!(eventually(|| FileLock::try_exclusive(&path)
+            .unwrap()
+            .is_some()));
     }
 }

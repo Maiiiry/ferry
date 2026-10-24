@@ -1,6 +1,6 @@
 //! Detecting what the running system can do: filesystem type, reflinks,
 //! unprivileged user namespaces, overlayfs inside them, and the knobs that
-//! restrict them (Ubuntu's AppArmor userns restriction, Debian's sysctl).
+//! restrict them (Ubuntu's `AppArmor` userns restriction, Debian's sysctl).
 //!
 //! Namespace probes run in a child process (`ferry __probe-sandbox`), because
 //! entering a user namespace is irreversible for the calling process.
@@ -48,7 +48,7 @@ pub enum Probe {
         reason: String,
     },
     /// Supported in principle but failed here; `stage` names the step
-    /// (e.g. "unshare", "uid_map", "mount overlay").
+    /// (e.g. `unshare`, `uid_map`, `mount overlay`).
     Failed {
         stage: String,
         error: String,
