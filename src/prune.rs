@@ -322,7 +322,14 @@ impl Watch {
                 Ok(since) => *since,
                 Err(why) => return Err(Gap::Incomplete(why.clone())),
             };
-            used(target, &read_records(&self.dir)?, since)
+            let records = read_records(&self.dir)?;
+            // The warm commands may leave directories Ferry cannot read (a
+            // test's mode-000 scratch dir, say), and units it cannot see
+            // cannot be accounted for.
+            used(target, &records.units, records.failed, since).map_err(|gap| match gap {
+                Gap::Failed(e) => Gap::Incomplete(format!("cannot read the target dir: {e}")),
+                incomplete @ Gap::Incomplete(_) => incomplete,
+            })
         };
         match check() {
             Ok(used) => Ok(Observation::Used(used)),
@@ -414,11 +421,21 @@ fn incomplete<T>(why: String) -> Check<T> {
     Err(Gap::Incomplete(why))
 }
 
-/// The unit records of calls that built into the base's own target dir.
+/// What the calls that built into the base's own target dir recorded.
 /// Nested workspaces' target dirs are emptied before a build that sweeps,
 /// so whatever is in them was built by it.
-fn read_records(dir: &Path) -> Check<Vec<UnitRecord>> {
-    let mut units = Vec::new();
+#[derive(Debug)]
+struct Records {
+    units: Vec<UnitRecord>,
+    /// One of them exited non-zero.
+    failed: bool,
+}
+
+fn read_records(dir: &Path) -> Check<Records> {
+    let mut records = Records {
+        units: Vec::new(),
+        failed: false,
+    };
     for path in record_files(dir)? {
         let text = fs::read(&path).at("read", &path)?;
         let (mut root, mut ended) = (None, false);
@@ -426,19 +443,23 @@ fn read_records(dir: &Path) -> Check<Vec<UnitRecord>> {
             let Ok(record) = serde_json::from_slice::<Record>(line) else {
                 return incomplete(format!("{} is unreadable", path.display()));
             };
+            let own_target = root.as_deref() == Some(Path::new(""));
             match record {
                 Record::Unobservable { why } => return incomplete(why),
                 Record::Start { root: r } => root = Some(r),
-                Record::Unit(unit) if root.as_deref() == Some(Path::new("")) => units.push(unit),
+                Record::Unit(unit) if own_target => records.units.push(unit),
                 Record::Unit(_) => {}
-                Record::End { .. } => ended = true,
+                Record::End { status } => {
+                    ended = true;
+                    records.failed |= own_target && status != 0;
+                }
             }
         }
         if !ended {
             return incomplete("a cargo call did not finish".into());
         }
     }
-    Ok(units)
+    Ok(records)
 }
 
 /// A unit in a profile dir: everything named by its hash.
@@ -462,7 +483,17 @@ struct Unit {
 /// The units of each profile dir (relative to the target dir), by hash.
 type Profiles = BTreeMap<PathBuf, BTreeMap<String, Unit>>;
 
-fn used(target: &Path, records: &[UnitRecord], since: SystemTime) -> Check<Used> {
+/// Which units of `target` the build used. A unit Cargo wrote but never
+/// reported was either built by a call Ferry did not see or, after a call
+/// that failed, one that failed to build: Cargo writes a failing unit's
+/// fingerprint dir (and empties its hash, so nothing finds it fresh) but
+/// sends no message for it.
+fn used(
+    target: &Path,
+    records: &[UnitRecord],
+    a_call_failed: bool,
+    since: SystemTime,
+) -> Check<Used> {
     let mut profiles = Profiles::new();
     for dir in profile_dirs(target)? {
         let rel = dir.strip_prefix(target).unwrap_or(&dir).to_path_buf();
@@ -475,7 +506,7 @@ fn used(target: &Path, records: &[UnitRecord], since: SystemTime) -> Check<Used>
     for units in profiles.into_values() {
         for unit in units.into_values() {
             match (unit.written, unit.claimed) {
-                (true, false) => {
+                (true, false) if !a_call_failed => {
                     return incomplete(format!(
                         "{} was built by a cargo call Ferry did not see",
                         unit.paths
@@ -483,11 +514,11 @@ fn used(target: &Path, records: &[UnitRecord], since: SystemTime) -> Check<Used>
                             .map_or_else(String::new, |p| p.display().to_string())
                     ));
                 }
-                (false, false) => {
+                (_, false) => {
                     used.units += 1;
                     used.unused.extend(unit.paths);
                 }
-                _ => {}
+                (_, true) => {}
             }
         }
     }
@@ -704,13 +735,18 @@ fn candidates<'a>(profiles: &'a mut Profiles, record: &UnitRecord) -> Vec<&'a mu
     let mut doc = false;
     let mut in_profiles = Vec::new();
     for file in &record.files {
-        let first_two: Vec<_> = file.path.components().take(2).collect();
-        doc |= first_two.iter().any(|c| c.as_os_str() == "doc");
         if let Some((profile, rel)) = locate(profiles, &file.path) {
             example |= rel.starts_with("examples");
             if !in_profiles.iter().any(|p| p == profile) {
                 in_profiles.push(profile.to_path_buf());
             }
+        } else {
+            // `doc/` or `<triple>/doc/`; `debug/doc` is a binary.
+            doc |= file
+                .path
+                .components()
+                .take(2)
+                .any(|c| c.as_os_str() == "doc");
         }
     }
     let kind = if example {
@@ -891,7 +927,16 @@ mod tests {
 
         /// The unused paths, relative and sorted, or why they are unknown.
         fn unused(&self, records: &[UnitRecord]) -> std::result::Result<Vec<String>, String> {
-            match used(&self.target, records, self.since) {
+            self.unused_after(records, false)
+        }
+
+        /// [`Self::unused`] when `a_call_failed` or not.
+        fn unused_after(
+            &self,
+            records: &[UnitRecord],
+            a_call_failed: bool,
+        ) -> std::result::Result<Vec<String>, String> {
+            match used(&self.target, records, a_call_failed, self.since) {
                 Ok(used) => {
                     let mut paths: Vec<String> = used
                         .unused
@@ -944,7 +989,7 @@ mod tests {
             ]
         );
 
-        let Ok(nothing_used) = used(&t.target, &[], t.since) else {
+        let Ok(nothing_used) = used(&t.target, &[], false, t.since) else {
             panic!("incomplete")
         };
         assert_eq!(sweep(&nothing_used).unwrap().units, 3);
@@ -1005,6 +1050,27 @@ mod tests {
             t.unused(&[app(&t)]).unwrap(),
             [format!("debug/deps/app-{H2}")]
         );
+    }
+
+    /// `debug/doc` is a binary named `doc`, not documentation, which lies
+    /// outside every profile dir.
+    #[test]
+    fn binaries_and_examples_named_doc_are_not_documentation() {
+        let t = Tree::new();
+        t.fingerprint("debug", &format!("app-{H1}"), &["bin-doc"]);
+        t.old(&format!("debug/deps/doc-{H1}"), "");
+        t.link(&format!("debug/deps/doc-{H1}"), "debug/doc");
+        t.fingerprint("debug", &format!("app-{H2}"), &["example-doc"]);
+        t.old(&format!("debug/examples/doc-{H2}"), "");
+        t.link(&format!("debug/examples/doc-{H2}"), "debug/examples/doc");
+        t.fingerprint("debug", &format!("doc-{H3}"), &["doc-lib-doc"]);
+        t.old("doc/doc/index.html", "");
+        let records = [
+            t.unit("app", "bin", "doc", Some(true), &["debug/doc"]),
+            t.unit("app", "example", "doc", Some(true), &["debug/examples/doc"]),
+            t.unit("doc", "lib", "doc", Some(true), &["doc/doc/index.html"]),
+        ];
+        assert_eq!(t.unused(&records).unwrap(), Vec::<String>::new());
     }
 
     #[test]
@@ -1075,6 +1141,50 @@ mod tests {
         ];
         let why = t.unused(&missing).unwrap_err();
         assert!(why.contains("no fingerprint"), "{why}");
+    }
+
+    /// Under `--keep-going`, Cargo writes the fingerprint dir of a unit that
+    /// fails to compile (`invoked.timestamp`, `output-*`) and reports nothing
+    /// for it. After a failed call that is expected, not a sign of a call
+    /// Ferry did not see, and the unit is as good as unused.
+    #[test]
+    fn units_a_failed_call_wrote_but_never_reported_are_unused() {
+        let t = Tree::new();
+        let failed = format!("debug/.fingerprint/app-{H1}");
+        t.new_file(&format!("{failed}/invoked.timestamp"));
+        t.new_file(&format!("{failed}/output-example-broken"));
+        t.fingerprint("debug", &format!("leaf-{H2}"), &["lib-leaf"]);
+        let rmeta = format!("debug/deps/libleaf-{H2}.rmeta");
+        t.old(&rmeta, "");
+        let leaf = |t: &Tree| t.unit("leaf", "lib", "leaf", Some(true), &[&rmeta]);
+
+        let why = t.unused(&[leaf(&t)]).unwrap_err();
+        assert!(why.contains("did not see"), "{why}");
+        assert_eq!(t.unused_after(&[leaf(&t)], true).unwrap(), [failed]);
+    }
+
+    /// A directory the warm commands left unreadable (a test's mode-000
+    /// scratch dir under `target/tmp`, say) may hide a profile dir, so Ferry
+    /// cannot tell what is in the target; that is no reason to fail the base.
+    #[test]
+    fn an_unreadable_directory_makes_the_observation_incomplete() {
+        use std::os::unix::fs::PermissionsExt as _;
+        let t = Tree::new();
+        let locked = t.target.join("tmp/locked");
+        fs::create_dir_all(&locked).unwrap();
+        fs::set_permissions(&locked, fs::Permissions::from_mode(0o000)).unwrap();
+        let readable_anyway = fs::read_dir(&locked).is_ok();
+        let watch = Watch::start(&t.target.parent().unwrap().join("records"), None).unwrap();
+        let observed = watch.used(&t.target);
+        fs::set_permissions(&locked, fs::Permissions::from_mode(0o700)).unwrap();
+        if readable_anyway {
+            // Running as root.
+            return;
+        }
+        match observed {
+            Ok(Observation::Incomplete(why)) => assert!(why.contains("tmp/locked"), "{why}"),
+            other => panic!("{other:?}"),
+        }
     }
 
     #[test]
@@ -1154,9 +1264,10 @@ mod tests {
                 .unwrap()
         );
         log.end(0).unwrap();
-        let Ok(units) = read_records(&records) else {
+        let Ok(Records { units, failed }) = read_records(&records) else {
             panic!("incomplete")
         };
+        assert!(!failed);
         assert_eq!(units.len(), 1);
         assert_eq!(units[0].package, "leaf");
         let paths: Vec<&Path> = units[0].files.iter().map(|f| f.path.as_path()).collect();
@@ -1164,6 +1275,22 @@ mod tests {
             paths,
             [PathBuf::from(format!("debug/deps/libleaf-{H1}.rmeta"))]
         );
+
+        // A nested workspace's call does not build into the observed target.
+        let nested = Log::start(&records, &t.target, Path::new("ferry-ws/fuzz")).unwrap();
+        nested.end(101).unwrap();
+        assert!(matches!(
+            read_records(&records),
+            Ok(Records { failed: false, .. })
+        ));
+        Log::start(&records, &t.target, Path::new(""))
+            .unwrap()
+            .end(101)
+            .unwrap();
+        assert!(matches!(
+            read_records(&records),
+            Ok(Records { failed: true, .. })
+        ));
 
         drop(Log::start(&records, &t.target, Path::new("")).unwrap());
         let unfinished = read_records(&records);

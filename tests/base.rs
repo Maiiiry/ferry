@@ -201,6 +201,23 @@ fn a_feature_switched_off_and_on_is_rebuilt_not_reused_without_the_sandbox() {
     feature_switched_off_and_on(&TestRepo::with_env(&[("FERRY_SANDBOX", "off")]));
 }
 
+/// Under `--keep-going` Cargo writes the fingerprint dir of a unit that fails
+/// to compile but reports nothing for it. After a failed call that is no
+/// sign of a cargo call Ferry did not see: the lineage stays observed and
+/// seeded across inputs, and the failed unit is swept like an unused one.
+#[test]
+fn a_unit_that_fails_under_keep_going_does_not_stop_seeding() {
+    let repo = TestRepo::with_env(&[(
+        "FERRY_BASE_COMMAND",
+        "cargo build --workspace && { cargo build --workspace --examples --keep-going || true; }",
+    )]);
+    let example = repo.root().join("app/examples/broken.rs");
+    std::fs::create_dir_all(example.parent().unwrap()).unwrap();
+    repo.write(&example, "this is not rust\n");
+    repo.commit_all("a broken example");
+    feature_switched_off_and_on(&repo);
+}
+
 fn feature_switched_off_and_on(repo: &TestRepo) {
     let manifest = repo.root().join("leaf/Cargo.toml");
     let plain = std::fs::read_to_string(&manifest).unwrap();

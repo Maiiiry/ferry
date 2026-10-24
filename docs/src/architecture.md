@@ -186,7 +186,11 @@ needs one writable-root entry for it plus the worktree (its working directory).
    incomplete if a call was unobservable or did not finish, a message
    matches no unit or several, a rebuilt unit's fingerprint predates the
    threshold, a written unit was reported by no message (a cargo call that
-   bypassed the shim), or a profile dir has an unknown layout.
+   bypassed the shim) although every call succeeded, a directory in the
+   target cannot be read, or a profile dir has an unknown layout. After a
+   call that failed, a written unit no message reported is one that failed
+   to build (Cargo writes its fingerprint dir, with an empty hash, and
+   reports nothing), and it counts as unused.
 7. With other unit inputs than the seed: if the observation is complete,
    delete every unused unit (fingerprint, build dir, hash-named outputs, and
    hash-named outputs without a fingerprint), leaving uplifted files, `doc/`
