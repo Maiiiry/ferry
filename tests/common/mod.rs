@@ -66,6 +66,8 @@ pub struct TestRepo {
 }
 
 impl TestRepo {
+    /// [`TestRepo::with_env`] with no extra variables, so it ignores any
+    /// `ferry.toml` too.
     pub fn new() -> Self {
         Self::with_env(&[])
     }
@@ -74,6 +76,11 @@ impl TestRepo {
     /// the scrubbed environment, e.g. `FERRY_BACKEND`. Its bases warm only
     /// `build` and `test`: the default `check` and `clippy` commands double
     /// the time of every base and are covered by `tests/warm.rs`.
+    ///
+    /// That is done by setting `FERRY_CONFIG`, which Ferry reads instead of
+    /// the repository's `ferry.toml`: a `ferry.toml` a test writes is
+    /// silently ignored. Tests that need one use
+    /// [`TestRepo::with_default_config`].
     pub fn with_env(env: &[(&str, &str)]) -> Self {
         let mut repo = Self::with_default_config(env);
         let config = repo.scratch.join("ferry-test.toml");
