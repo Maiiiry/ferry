@@ -321,15 +321,34 @@ pub fn apparmor_profile(binary: &Path) -> String {
 /// exemption.
 pub fn apparmor_path_problem(binary: &Path) -> Option<String> {
     use std::os::unix::fs::MetadataExt;
-    let meta = std::fs::metadata(binary).ok()?;
-    let dir_meta = binary.parent().and_then(|d| std::fs::metadata(d).ok())?;
-    let user_writable = |m: &std::fs::Metadata| m.uid() != 0 || m.mode() & 0o022 != 0;
-    (user_writable(&meta) || user_writable(&dir_meta)).then(|| {
+    // A sticky directory keeps others from renaming the root-owned entry
+    // inside it.
+    let user_writable = |path: &Path| {
+        std::fs::metadata(path).map_or(true, |m| {
+            m.uid() != 0 || (m.mode() & 0o022 != 0 && m.mode() & 0o1000 == 0)
+        })
+    };
+    let writable = binary.ancestors().find(|p| user_writable(p))?;
+    Some(format!(
+        "{} is writable by a non-root user, so any process could replace ferry and \
+         create user namespaces; install ferry to a root-owned path first, e.g. \
+         `sudo install -m 755 {} /usr/local/bin/ferry`, then run \
+         `/usr/local/bin/ferry doctor --apparmor-profile`",
+        writable.display(),
+        binary.display()
+    ))
+}
+
+/// Why `binary` cannot be named in a profile: the profile's attachment is
+/// read as a glob, so `*`, `{`, quotes and the like would make it match
+/// other binaries or not parse.
+pub fn apparmor_path_unusable(binary: &Path) -> Option<String> {
+    let path = binary.to_str()?;
+    let safe = |c: char| c.is_ascii_alphanumeric() || matches!(c, '/' | '.' | '_' | '-' | '+');
+    (!path.chars().all(safe)).then(|| {
         format!(
-            "{} is writable by a non-root user; install ferry to a root-owned path first, e.g. \
-             `sudo install -m 755 {} /usr/local/bin/ferry`, then run `/usr/local/bin/ferry doctor --apparmor-profile`",
-            binary.display(),
-            binary.display()
+            "{path} contains characters an AppArmor profile path cannot hold safely; \
+             install ferry to a plain path such as /usr/local/bin/ferry"
         )
     })
 }
@@ -401,6 +420,26 @@ mod tests {
         let bin = dir.path().join("ferry");
         std::fs::write(&bin, b"").unwrap();
         assert!(apparmor_path_problem(&bin).is_some());
+    }
+
+    #[test]
+    fn glob_characters_cannot_name_a_profile() {
+        assert_eq!(
+            apparmor_path_unusable(Path::new("/usr/local/bin/ferry")),
+            None
+        );
+        assert_eq!(
+            apparmor_path_unusable(Path::new("/opt/ferry-1.0+x/ferry")),
+            None
+        );
+        for bad in [
+            "/home/*/ferry",
+            "/opt/my ferry/ferry",
+            "/opt/{a,b}/ferry",
+            "/x\"/ferry",
+        ] {
+            assert!(apparmor_path_unusable(Path::new(bad)).is_some(), "{bad}");
+        }
     }
 
     #[test]

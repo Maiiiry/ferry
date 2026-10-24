@@ -522,10 +522,23 @@ fn doctor_cmd(
     if apparmor_profile {
         let exe = std::env::current_exe().context("cannot locate the ferry binary")?;
         let exe = std::fs::canonicalize(&exe).unwrap_or(exe);
-        if let Some(problem) = doctor::apparmor_path_problem(&exe) {
-            output::warning(&problem);
+        if let Some(unusable) = doctor::apparmor_path_unusable(&exe) {
+            anyhow::bail!(unusable);
         }
-        print!("{}", doctor::apparmor_profile(&exe));
+        let warning = doctor::apparmor_path_problem(&exe);
+        let profile = doctor::apparmor_profile(&exe);
+        if json {
+            output::json(&serde_json::json!({
+                "binary": exe,
+                "profile": profile,
+                "warning": warning,
+            }))?;
+        } else {
+            if let Some(warning) = &warning {
+                output::warning(warning);
+            }
+            print!("{profile}");
+        }
         return Ok(ExitCode::SUCCESS);
     }
     let ctx = Context::discover(cwd);
