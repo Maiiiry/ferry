@@ -60,10 +60,15 @@ pub enum SandboxError {
     },
 
     #[error(
-        "the agent's overlay is still mounted by processes in nested namespaces \
-         (pids: {pids}) and no process in the agent's own namespace is left to join"
+        "the agent's overlay is still mounted by processes that cannot be joined (pids: {pids})"
     )]
     OrphanedOverlay { pids: String },
+
+    #[error(
+        "the agent's mount lock is still held by {holders}, and no process using its overlay \
+         can be joined"
+    )]
+    LockedOverlay { holders: String },
 
     #[error("path {} cannot be used in an overlayfs mount: {reason}", path.display())]
     UnusablePath { path: PathBuf, reason: &'static str },
@@ -86,7 +91,7 @@ impl SandboxError {
             SandboxError::UnusablePath { .. } => {
                 Some("set FERRY_HOME to a path without ',', ':' or '\\'".into())
             }
-            SandboxError::OrphanedOverlay { .. } => {
+            SandboxError::OrphanedOverlay { .. } | SandboxError::LockedOverlay { .. } => {
                 Some("wait for those processes to exit or kill them, then retry".into())
             }
             _ => None,

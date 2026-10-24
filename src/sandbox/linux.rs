@@ -5,10 +5,13 @@
 //! namespace the kernel only warns about it, so Ferry guarantees one mount per
 //! agent: the namespace holding it is recorded in `ns.json`, and every process
 //! that can use the mount holds `mount.lock` shared. A new mount is created
-//! only when that lock is free and no process is left in the recorded
-//! namespace; otherwise the caller joins it.
+//! only when that lock is free, no process is left in the recorded namespace,
+//! and no visible process still has the overlay in its mount table (a process
+//! in a nested namespace that closed its descriptor keeps the mount alive);
+//! otherwise the caller joins the recorded namespace or is refused.
 
-use std::ffi::CString;
+use std::collections::HashMap;
+use std::ffi::{CString, OsStr};
 use std::fs::{self, File};
 use std::io::{self, Write};
 use std::mem::ManuallyDrop;
@@ -32,10 +35,15 @@ use super::{Entered, Plan, SandboxError};
 use crate::fork::TargetSpec;
 use crate::platform::Probe;
 
-/// How long transient states may take to clear: a joined thread still listed
-/// in `/proc/self/task`, or `mount.lock` briefly held by [`users`].
+/// How long a joined thread may stay listed in `/proc/self/task`.
 const SETTLE: Duration = Duration::from_millis(100);
 const POLL: Duration = Duration::from_millis(5);
+/// How long an overlay that cannot be joined may take to go away before
+/// entering is refused. Its holders are usually just exiting, and an exiting
+/// process keeps `mount.lock` while the kernel unmounts the overlay, which
+/// syncs the upper filesystem.
+const RELEASE_WAIT: Duration = Duration::from_secs(10);
+const MAX_POLL: Duration = Duration::from_millis(100);
 
 /// `mount(2)` copies at most one page of options; 4 KiB is the smallest page
 /// size Linux runs with.
@@ -49,7 +57,7 @@ pub struct ProbeResult {
 }
 
 /// Device and inode of a file; for `/proc/<pid>/ns/*` the namespace identity.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 struct FileId {
     dev: u64,
     ino: u64,
@@ -80,6 +88,10 @@ struct NsRecord {
     /// membership is confirmed by what a process sees at that path.
     canonical_src: PathBuf,
     src: FileId,
+    /// The overlay's upper and work dirs, which identify it in other
+    /// processes' mount tables.
+    upper: PathBuf,
+    work: PathBuf,
 }
 
 impl NsRecord {
@@ -100,15 +112,139 @@ impl NsRecord {
 
     /// Live processes in the recorded mount namespace, the creator first.
     fn members(&self) -> impl Iterator<Item = u32> + '_ {
-        let others = fs::read_dir("/proc")
-            .into_iter()
-            .flatten()
-            .flatten()
-            .filter_map(|entry| entry.file_name().to_str()?.parse::<u32>().ok())
-            .filter(|&pid| pid != self.pid);
+        let others = pids().filter(|&pid| pid != self.pid);
         std::iter::once(self.pid)
             .chain(others)
             .filter(|&pid| self.is_member(pid))
+    }
+}
+
+/// Every process visible in `/proc`.
+fn pids() -> impl Iterator<Item = u32> {
+    fs::read_dir("/proc")
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter_map(|entry| entry.file_name().to_str()?.parse::<u32>().ok())
+}
+
+/// Visible processes with an overlay on `upper` or `work` in their mount
+/// table, whatever their namespace and whether or not they hold
+/// `mount.lock`: each keeps that overlay's superblock alive. Processes whose
+/// table cannot be read (exited, or exiting) are skipped.
+fn overlay_mounters(upper: &Path, work: &Path) -> Vec<u32> {
+    // The kernel shows a layer path as given to mount(2), or resolved when
+    // passed as a descriptor.
+    let mut dirs = Vec::new();
+    for dir in [upper, work] {
+        dirs.push(dir.to_path_buf());
+        dirs.extend(fs::canonicalize(dir).ok());
+    }
+    // Generating a mount table costs about 0.1 ms, and most processes share
+    // one: it depends only on the mount namespace and the root it is seen
+    // from, so it is read once per pair where both can be identified.
+    let mut known = HashMap::new();
+    let mut mounters = Vec::new();
+    for pid in pids() {
+        let proc = PathBuf::from(format!("/proc/{pid}"));
+        let read = || {
+            fs::read(proc.join("mountinfo"))
+                .ok()
+                .map(|mountinfo| has_overlay_on(&mountinfo, &dirs))
+        };
+        let key = FileId::of_path(proc.join("ns/mnt"))
+            .and_then(|ns| Ok((ns, FileId::of_path(proc.join("root"))?)));
+        let found = match key {
+            Ok(key) => match known.get(&key) {
+                Some(&found) => found,
+                // Remembered only if readable: a process that has just
+                // exited says nothing about the others.
+                None => {
+                    read().inspect(|&found| {
+                        known.insert(key, found);
+                    }) == Some(true)
+                }
+            },
+            // Usually another user's process. Kernel threads, most of these,
+            // all use the initial mount namespace.
+            Err(_) => !is_kernel_thread(&proc) && read() == Some(true),
+        };
+        if found {
+            mounters.push(pid);
+        }
+    }
+    mounters
+}
+
+/// Whether `PF_KTHREAD` is set in `<proc>/stat`.
+fn is_kernel_thread(proc: &Path) -> bool {
+    const PF_KTHREAD: u64 = 0x0020_0000;
+    let Ok(stat) = fs::read(proc.join("stat")) else {
+        return false;
+    };
+    // The flags are the seventh field after the command name, which is in
+    // parentheses and may contain anything.
+    let flags = stat
+        .iter()
+        .rposition(|&b| b == b')')
+        .and_then(|end| std::str::from_utf8(&stat[end + 1..]).ok())
+        .and_then(|fields| fields.split_whitespace().nth(6)?.parse::<u64>().ok());
+    flags.is_some_and(|flags| flags & PF_KTHREAD != 0)
+}
+
+/// Whether a mountinfo listing has an overlayfs mount whose `upperdir` or
+/// `workdir` is one of `dirs`.
+fn has_overlay_on(mountinfo: &[u8], dirs: &[PathBuf]) -> bool {
+    mountinfo.split(|&b| b == b'\n').any(|line| {
+        // Six fixed fields, optional ones up to a lone "-", then the
+        // filesystem type, the source and the superblock options.
+        let mut fields = line
+            .split(|&b| b == b' ')
+            .skip(6)
+            .skip_while(|&field| field != b"-")
+            .skip(1);
+        let (Some(b"overlay"), Some(_), Some(options)) =
+            (fields.next(), fields.next(), fields.next())
+        else {
+            return false;
+        };
+        options.split(|&b| b == b',').any(|option| {
+            let Some(dir) = option
+                .strip_prefix(b"upperdir=")
+                .or_else(|| option.strip_prefix(b"workdir="))
+            else {
+                return false;
+            };
+            let dir = unescape(dir);
+            let dir = Path::new(OsStr::from_bytes(&dir));
+            dirs.iter().any(|d| d == dir)
+        })
+    })
+}
+
+/// Undoes mountinfo's octal escapes (`\040` for a space), which the kernel
+/// uses for spaces, tabs, newlines, backslashes and, in options, commas.
+fn unescape(field: &[u8]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(field.len());
+    let mut rest = field;
+    loop {
+        rest = match rest {
+            [
+                b'\\',
+                a @ b'0'..=b'3',
+                b @ b'0'..=b'7',
+                c @ b'0'..=b'7',
+                tail @ ..,
+            ] => {
+                out.push(((a - b'0') << 6) | ((b - b'0') << 3) | (c - b'0'));
+                tail
+            }
+            [byte, tail @ ..] => {
+                out.push(*byte);
+                tail
+            }
+            [] => return out,
+        };
     }
 }
 
@@ -120,7 +256,9 @@ pub fn enter(plan: &Plan) -> Result<Entered, SandboxError> {
     ensure_single_threaded()?;
     match (&plan.target, &plan.ns_record) {
         (TargetSpec::Dir(_), _) => create(plan).map(|()| Entered::Created),
-        (TargetSpec::Overlay { .. }, Some(record)) => enter_overlay(plan, record),
+        (TargetSpec::Overlay { upper, work, .. }, Some(record)) => {
+            enter_overlay(plan, upper, work, record)
+        }
         (TargetSpec::Overlay { .. }, None) => Err(SandboxError::Setup {
             stage: "mount overlay",
             source: io::Error::new(
@@ -132,14 +270,14 @@ pub fn enter(plan: &Plan) -> Result<Entered, SandboxError> {
 }
 
 /// PIDs of processes using the overlay sandbox recorded at `ns_record`: the
-/// live members of its mount namespace and, while `mount.lock` is held, the
-/// lock's live holders. Empty when there is no `mount.lock` (bind-only
-/// agents, or never entered).
+/// live members of its mount namespace, every visible process that still has
+/// its overlay mounted (nested namespaces included) and, while `mount.lock`
+/// is held, the lock's live holders. Empty when there is no `mount.lock`
+/// (bind-only agents, or never entered).
 ///
-/// When the lock is held but no holder can be attributed (they are in other
-/// pid namespaces, or exited leaving descendants in nested namespaces), this
-/// returns the recorded pid even if it is stale, so callers treat the agent
-/// as busy.
+/// When the lock is held but no holder can be identified (for example they
+/// are in another pid namespace), this returns the recorded pid even if it
+/// is stale, so callers treat the agent as busy.
 pub fn users(ns_record: &Path) -> Result<Vec<u32>, SandboxError> {
     let lock_path = mount_lock_path(ns_record);
     let held = match File::open(&lock_path) {
@@ -156,8 +294,8 @@ pub fn users(ns_record: &Path) -> Result<Vec<u32>, SandboxError> {
     if held && pids.is_empty() {
         return match record {
             Some(record) => Ok(vec![record.pid]),
-            None => Err(SandboxError::OrphanedOverlay {
-                pids: join_pids(&[]),
+            None => Err(SandboxError::LockedOverlay {
+                holders: describe_holders(&[]),
             }),
         };
     }
@@ -243,7 +381,12 @@ fn ensure_single_threaded() -> Result<(), SandboxError> {
     }
 }
 
-fn enter_overlay(plan: &Plan, record_path: &Path) -> Result<Entered, SandboxError> {
+fn enter_overlay(
+    plan: &Plan,
+    upper: &Path,
+    work: &Path,
+    record_path: &Path,
+) -> Result<Entered, SandboxError> {
     let lock_path = mount_lock_path(record_path);
     // Never closed and deliberately not O_CLOEXEC: the command this process
     // execs and all of its descendants inherit the descriptor, so the lock is
@@ -256,7 +399,8 @@ fn enter_overlay(plan: &Plan, record_path: &Path) -> Result<Entered, SandboxErro
         )
         .map_err(failed("mount lock", None))?,
     );
-    let deadline = Instant::now() + SETTLE;
+    let deadline = Instant::now() + RELEASE_WAIT;
+    let mut poll = POLL;
     loop {
         let exclusive = match flock(&*lock, FlockOperation::NonBlockingLockExclusive) {
             Ok(()) => true,
@@ -273,19 +417,39 @@ fn enter_overlay(plan: &Plan, record_path: &Path) -> Result<Entered, SandboxErro
             return Ok(Entered::Joined { pid });
         }
         if exclusive {
-            create(plan)?;
-            let record = current_record(plan).map_err(failed("namespace record", None))?;
-            crate::fsutil::write_json_atomic(record_path, &record)
-                .map_err(|e| failed("namespace record", None)(io::Error::other(e)))?;
-            lock_shared(&lock)?;
-            return Ok(Entered::Created);
+            // A free lock does not prove the overlay is gone: a process in a
+            // nested namespace may have closed its descriptor.
+            if overlay_mounters(upper, work).is_empty() {
+                create(plan)?;
+                let record =
+                    current_record(plan, upper, work).map_err(failed("namespace record", None))?;
+                crate::fsutil::write_json_atomic(record_path, &record)
+                    .map_err(|e| failed("namespace record", None)(io::Error::other(e)))?;
+                lock_shared(&lock)?;
+                return Ok(Entered::Created);
+            }
+            flock(&*lock, FlockOperation::Unlock).map_err(failed("mount lock", None))?;
         }
         if Instant::now() >= deadline {
-            return Err(SandboxError::OrphanedOverlay {
-                pids: join_pids(&in_use_by(record.as_ref(), &lock_path, true)),
-            });
+            return Err(refusal(upper, work, &lock_path));
         }
-        std::thread::sleep(POLL);
+        std::thread::sleep(poll);
+        poll = (poll * 2).min(MAX_POLL);
+    }
+}
+
+/// Why an overlay that is still in use cannot be entered: who has it mounted
+/// or, failing that, who holds `mount.lock`.
+fn refusal(upper: &Path, work: &Path, lock_path: &Path) -> SandboxError {
+    let mounters = overlay_mounters(upper, work);
+    if mounters.is_empty() {
+        SandboxError::LockedOverlay {
+            holders: describe_holders(&lock_holders(lock_path)),
+        }
+    } else {
+        SandboxError::OrphanedOverlay {
+            pids: join_pids(&mounters),
+        }
     }
 }
 
@@ -296,13 +460,15 @@ fn lock_shared(lock: &OwnedFd) -> Result<(), SandboxError> {
     flock(lock, FlockOperation::LockShared).map_err(failed("mount lock", None))
 }
 
-fn current_record(plan: &Plan) -> io::Result<NsRecord> {
+fn current_record(plan: &Plan, upper: &Path, work: &Path) -> io::Result<NsRecord> {
     Ok(NsRecord {
         pid: std::process::id(),
         mnt: FileId::of_path("/proc/self/ns/mnt")?,
         user: FileId::of_path("/proc/self/ns/user")?,
         canonical_src: plan.canonical_src.clone(),
         src: FileId::of_path(&plan.canonical_src)?,
+        upper: upper.to_path_buf(),
+        work: work.to_path_buf(),
     })
 }
 
@@ -549,10 +715,15 @@ fn mount_lock_path(ns_record: &Path) -> PathBuf {
     ns_record.with_file_name("mount.lock")
 }
 
-/// Members of the recorded namespace, plus the live lock holders if the
-/// lock is held; sorted and deduplicated.
+/// Members of the recorded namespace and processes that still have its
+/// overlay mounted, plus the live lock holders if the lock is held; sorted
+/// and deduplicated.
 fn in_use_by(record: Option<&NsRecord>, lock_path: &Path, held: bool) -> Vec<u32> {
-    let mut pids: Vec<u32> = record.into_iter().flat_map(NsRecord::members).collect();
+    let mut pids = Vec::new();
+    if let Some(record) = record {
+        pids.extend(record.members());
+        pids.extend(overlay_mounters(&record.upper, &record.work));
+    }
     if held {
         pids.extend(lock_holders(lock_path));
     }
@@ -626,13 +797,20 @@ fn flock_holders(locks: &str, dev: (u32, u32), ino: u64) -> Vec<u32> {
 }
 
 fn join_pids(pids: &[u32]) -> String {
-    if pids.is_empty() {
-        return "unknown".into();
-    }
     pids.iter()
         .map(u32::to_string)
         .collect::<Vec<_>>()
         .join(", ")
+}
+
+/// Who holds `mount.lock`, for [`SandboxError::LockedOverlay`]. `/proc/locks`
+/// does not list holders outside this pid namespace.
+fn describe_holders(holders: &[u32]) -> String {
+    if holders.is_empty() {
+        "processes not visible from here (for example in another pid namespace)".into()
+    } else {
+        format!("pids {}", join_pids(holders))
+    }
 }
 
 #[cfg(test)]
@@ -644,7 +822,8 @@ mod tests {
     fn ns_record_parses() {
         let json = r#"{"pid": 42, "mnt": {"dev": 4, "ino": 4026532871},
             "user": {"dev": 4, "ino": 4026532870},
-            "canonical_src": "/s/mnt/src", "src": {"dev": 50, "ino": 256}}"#;
+            "canonical_src": "/s/mnt/src", "src": {"dev": 50, "ino": 256},
+            "upper": "/s/agents/a/upper", "work": "/s/agents/a/work"}"#;
         let record: NsRecord = serde_json::from_str(json).unwrap();
         assert_eq!(record.pid, 42);
         assert_eq!(
@@ -717,12 +896,53 @@ mod tests {
                 user: FileId { dev: 0, ino: 1 },
                 canonical_src: dir.path().join("mnt/src"),
                 src: FileId { dev: 0, ino: 1 },
+                upper: dir.path().join("upper"),
+                work: dir.path().join("work"),
             },
         )
         .unwrap();
         assert_eq!(users(&record).unwrap(), vec![std::process::id()]);
         drop(held);
         assert!(crate::lock::tests::eventually(free));
+    }
+
+    #[test]
+    fn has_overlay_on_matches_unescaped_layer_dirs() {
+        let mountinfo = b"\
+22 1 0:21 / /proc rw,nosuid shared:5 - proc proc rw
+90 80 0:60 / /s/mnt/target rw,relatime - overlay none rw,lowerdir+=/s/b/t,\
+upperdir=/s/my\\040agent/upper,workdir=/s/my\\040agent/work,userxattr
+91 80 0:61 / /x rw shared:7 master:1 - overlay overlay rw,lowerdir=/l,upperdir=/u\\054v,workdir=/w
+";
+        let dirs = |paths: &[&str]| paths.iter().map(PathBuf::from).collect::<Vec<_>>();
+        assert!(has_overlay_on(mountinfo, &dirs(&["/s/my agent/upper"])));
+        assert!(has_overlay_on(
+            mountinfo,
+            &dirs(&["/elsewhere", "/s/my agent/work/"])
+        ));
+        assert!(has_overlay_on(mountinfo, &dirs(&["/u,v"])));
+        assert!(!has_overlay_on(
+            mountinfo,
+            &dirs(&["/s/my agent", "/s/b/t", "/l", "/u"])
+        ));
+        assert!(!has_overlay_on(
+            b"92 1 0:9 / /m rw - ext4 /dev/x rw,upperdir=/u\n",
+            &dirs(&["/u"])
+        ));
+        assert!(!has_overlay_on(b"garbage\n\n", &dirs(&["/u"])));
+    }
+
+    #[test]
+    fn unescape_decodes_octal_escapes_only() {
+        assert_eq!(unescape(b"/a\\040b\\011c\\012d\\134e"), b"/a b\tc\nd\\e");
+        assert_eq!(unescape(b"/a\\08\\777\\"), b"/a\\08\\777\\");
+    }
+
+    #[test]
+    fn overlay_mounters_skips_unrelated_processes() {
+        let dir = tempfile::tempdir().unwrap();
+        let (upper, work) = (dir.path().join("upper"), dir.path().join("work"));
+        assert_eq!(overlay_mounters(&upper, &work), Vec::<u32>::new());
     }
 
     #[test]

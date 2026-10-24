@@ -22,11 +22,12 @@ mod linux {
     use std::panic::{AssertUnwindSafe, catch_unwind};
     use std::path::{Path, PathBuf};
     use std::process::{Child, ChildStdin, ChildStdout, Command, ExitCode, Stdio};
-    use std::{env, fs};
+    use std::time::{Duration, Instant};
+    use std::{env, fs, thread};
 
     use ferry::fork::TargetSpec;
     use ferry::lock::FileLock;
-    use ferry::platform::{Capabilities, Probe};
+    use ferry::platform::Capabilities;
     use ferry::sandbox::{self, Entered, Isolation, Plan};
 
     const ROLE: &str = "FERRY_TEST_ROLE";
@@ -62,6 +63,21 @@ mod linux {
             stale_work_dir_is_cleared,
         ),
         (
+            "nested_mount_is_never_mounted_twice",
+            Needs::Overlay,
+            nested_mount_is_never_mounted_twice,
+        ),
+        (
+            "released_lock_is_waited_for",
+            Needs::Overlay,
+            released_lock_is_waited_for,
+        ),
+        (
+            "overlapping_sessions_are_not_refused",
+            Needs::Overlay,
+            overlapping_sessions_are_not_refused,
+        ),
+        (
             "held_lock_without_member_is_refused",
             Needs::Nothing,
             held_lock_without_member_is_refused,
@@ -73,7 +89,7 @@ mod linux {
         ),
         (
             "detect_probes_in_a_child",
-            Needs::Userns,
+            Needs::Nothing,
             detect_probes_in_a_child,
         ),
     ];
@@ -109,18 +125,26 @@ mod linux {
         let probe_dir = tempfile::tempdir().unwrap();
         let caps = Capabilities::detect(probe_dir.path());
         println!("\nrunning {} tests", selected.len());
-        let (mut passed, mut failed, mut skipped) = (0, Vec::new(), 0);
+        let (mut passed, mut failed, mut skipped) = (0, Vec::new(), Vec::new());
         for &&(name, needs, test) in &selected {
-            let missing = match needs {
-                Needs::Nothing => None,
-                Needs::Userns => Some(&caps.userns),
-                Needs::Overlay => Some(&caps.overlay),
+            let probes = match needs {
+                Needs::Nothing => vec![],
+                Needs::Userns => vec![("userns", &caps.userns)],
+                Needs::Overlay => vec![("userns", &caps.userns), ("overlay", &caps.overlay)],
+            };
+            let missing: Vec<_> = probes.into_iter().filter(|(_, p)| !p.is_ok()).collect();
+            if let Some(&(key, probe)) = missing.iter().find(|(key, _)| required(key)) {
+                eprintln!(
+                    "{name}: {key} is required by FERRY_TEST_REQUIRE but unavailable: {probe:?}"
+                );
+                println!("test {name} ... FAILED");
+                failed.push(name);
+                continue;
             }
-            .filter(|probe| !probe.is_ok());
-            if let Some(probe) = missing {
-                eprintln!("skipping {name}: the sandbox probe failed here: {probe:?}");
+            if let Some((key, probe)) = missing.first() {
+                eprintln!("skipping {name}: {key} unavailable here: {probe:?}");
                 println!("test {name} ... skipped");
-                skipped += 1;
+                skipped.push(name);
                 continue;
             }
             if catch_unwind(AssertUnwindSafe(test)).is_ok() {
@@ -131,16 +155,27 @@ mod linux {
                 failed.push(name);
             }
         }
+        if !skipped.is_empty() {
+            println!("\nskipped: {}", skipped.join(", "));
+        }
         println!(
-            "\ntest result: {}. {passed} passed; {} failed; {skipped} skipped\n",
+            "\ntest result: {}. {passed} passed; {} failed; {} skipped\n",
             if failed.is_empty() { "ok" } else { "FAILED" },
-            failed.len()
+            failed.len(),
+            skipped.len()
         );
         if failed.is_empty() {
             ExitCode::SUCCESS
         } else {
             ExitCode::FAILURE
         }
+    }
+
+    /// Whether `FERRY_TEST_REQUIRE` (`userns`, `overlay`, `reflink`) lists
+    /// `key`: CI sets it where the capability exists, so a regression in
+    /// detection fails the run instead of skipping tests.
+    fn required(key: &str) -> bool {
+        env::var("FERRY_TEST_REQUIRE").is_ok_and(|v| v.split(',').any(|k| k.trim() == key))
     }
 
     // --- child side ---
@@ -168,10 +203,15 @@ mod linux {
     fn child(role: &str, root: &Path) {
         let entered = match role {
             "dir" => sandbox::enter(&plan(root, false)),
-            "overlay" => sandbox::enter(&plan(root, true)),
+            "overlay" => {
+                // Held while entering, as `ferry run` holds the agent lock.
+                let agent = fs::File::create(root.join("agent/lock")).unwrap();
+                rustix::fs::flock(&agent, rustix::fs::FlockOperation::LockExclusive).unwrap();
+                sandbox::enter(&plan(root, true))
+            }
             "threaded" => {
                 let (keep_alive, wait) = std::sync::mpsc::channel::<()>();
-                let thread = std::thread::spawn(move || wait.recv());
+                let thread = thread::spawn(move || wait.recv());
                 let entered = sandbox::enter(&plan(root, false));
                 drop(keep_alive);
                 let _ = thread.join();
@@ -192,12 +232,18 @@ mod linux {
         for line in std::io::stdin().lines() {
             let line = line.unwrap();
             let mut words = line.splitn(3, ' ');
-            let (command, path) = (words.next().unwrap(), root.join(words.next().unwrap()));
+            let command = words.next().unwrap();
+            let path = root.join(words.next().unwrap_or_default());
             let reply = match command {
                 "read" => fs::read_to_string(&path).map(|s| format!("data {s}")),
                 "write" => fs::write(&path, words.next().unwrap_or("")).map(|()| "ok".into()),
+                "fill" => {
+                    let len = words.next().unwrap().parse().unwrap();
+                    fs::write(&path, vec![b'x'; len]).map(|()| "ok".into())
+                }
                 "rmtree" => fs::remove_dir_all(&path).map(|()| "ok".into()),
                 "unlock" => unlock(&path).map(|()| "ok".into()),
+                "nest" => nest().map(|()| "ok".into()),
                 other => panic!("unknown command {other}"),
             };
             println!("{}", reply.unwrap_or_else(|e| format!("err {e}")));
@@ -220,6 +266,21 @@ mod linux {
         Ok(())
     }
 
+    /// Moves this process into a user and mount namespace nested in its
+    /// sandbox, like `unshare --user --map-current-user --mount`: it keeps
+    /// the overlay mounted but is no longer in the recorded namespace.
+    fn nest() -> std::io::Result<()> {
+        let uid = rustix::process::getuid().as_raw();
+        let gid = rustix::process::getgid().as_raw();
+        let flags = rustix::thread::UnshareFlags::NEWUSER | rustix::thread::UnshareFlags::NEWNS;
+        // SAFETY: the child runs on its main thread only, and without
+        // CLONE_FILES no file descriptor table is split.
+        unsafe { rustix::thread::unshare_unsafe(flags) }?;
+        fs::write("/proc/self/setgroups", "deny")?;
+        fs::write("/proc/self/uid_map", format!("{uid} {uid} 1\n"))?;
+        fs::write("/proc/self/gid_map", format!("{gid} {gid} 1\n"))
+    }
+
     // --- parent side ---
 
     struct Session {
@@ -234,6 +295,13 @@ mod linux {
 
     impl Session {
         fn start(root: &Path, role: &str) -> Self {
+            let mut session = Self::spawn(root, role);
+            session.wait_entered();
+            session
+        }
+
+        /// Starts the child without waiting for it to enter the sandbox.
+        fn spawn(root: &Path, role: &str) -> Self {
             let mut child = Command::new(env::current_exe().unwrap())
                 .env(ROLE, role)
                 .env(ROOT, root)
@@ -243,16 +311,18 @@ mod linux {
                 .unwrap();
             let stdin = child.stdin.take();
             let stdout = BufReader::new(child.stdout.take().unwrap());
-            let mut session = Self {
+            Self {
                 child,
                 stdin,
                 stdout,
                 entered: String::new(),
                 mnt: 0,
-            };
-            session.entered = session.line();
-            session.mnt = session.line().parse().unwrap();
-            session
+            }
+        }
+
+        fn wait_entered(&mut self) {
+            self.entered = self.line();
+            self.mnt = self.line().parse().unwrap();
         }
 
         fn pid(&self) -> u32 {
@@ -283,7 +353,16 @@ mod linux {
 
     impl Scenario {
         fn new() -> Self {
-            let dir = tempfile::tempdir().unwrap();
+            Self::in_dir(tempfile::tempdir().unwrap())
+        }
+
+        /// Under the target dir rather than on a tmpfs: unmounting an
+        /// overlay syncs its upper dir's filesystem, which can take seconds.
+        fn on_disk() -> Self {
+            Self::in_dir(tempfile::tempdir_in(env!("CARGO_TARGET_TMPDIR")).unwrap())
+        }
+
+        fn in_dir(dir: tempfile::TempDir) -> Self {
             for sub in [
                 "src",
                 "target",
@@ -449,6 +528,94 @@ mod linux {
         assert!(!tree.path("work/stray").exists());
     }
 
+    /// A process in a nested namespace that dropped its lock keeps the
+    /// overlay alive after the recorded namespace is gone: no second overlay
+    /// may be mounted on the same upper dir while it lives.
+    fn nested_mount_is_never_mounted_twice() {
+        let tree = Scenario::new();
+        let mut a = Session::start(tree.root(), "overlay");
+        assert_eq!(a.entered, "created");
+        assert_eq!(a.send("write mnt/target/f from-a"), "ok");
+        assert_eq!(a.send("unlock agent/mount.lock"), "ok");
+        assert_eq!(a.send("nest"), "ok");
+        let record = fs::read(tree.path("agent/ns.json")).unwrap();
+
+        let b = Session::start(tree.root(), "overlay");
+        assert_eq!(
+            b.entered,
+            format!("error OrphanedOverlay {{ pids: \"{}\" }}", a.pid())
+        );
+        b.finish();
+        assert_eq!(fs::read(tree.path("agent/ns.json")).unwrap(), record);
+        assert!(tree.path("work/work").exists(), "work dir cleared");
+        assert_eq!(tree.users(), vec![a.pid()]);
+        assert_eq!(a.send("write mnt/target/f still-a"), "ok");
+
+        a.finish();
+        let mut c = Session::start(tree.root(), "overlay");
+        assert_eq!(c.entered, "created");
+        assert_eq!(c.send("read mnt/target/f"), "data still-a");
+        c.finish();
+    }
+
+    /// A held lock with no member to join is how an exiting session looks
+    /// while the kernel unmounts its overlay.
+    fn released_lock_is_waited_for() {
+        let tree = Scenario::new();
+        let held = FileLock::shared(&tree.path("agent/mount.lock"), "test").unwrap();
+        let mut a = Session::spawn(tree.root(), "overlay");
+        thread::sleep(Duration::from_millis(500));
+        drop(held);
+        a.wait_entered();
+        assert_eq!(a.entered, "created");
+        a.finish();
+    }
+
+    /// Sessions that start while earlier ones exit, as in parallel
+    /// `ferry run`s: every one enters, and sessions alive at the same time
+    /// share one namespace, so one overlay.
+    fn overlapping_sessions_are_not_refused() {
+        let tree = Scenario::on_disk();
+        let sessions: Vec<_> = (0..60_u64)
+            .map(|i| {
+                let root = tree.root().to_path_buf();
+                let session = thread::spawn(move || {
+                    let mut s = Session::start(&root, "overlay");
+                    let start = Instant::now();
+                    if !s.entered.starts_with("error") {
+                        // Data to write back while the overlay is unmounted.
+                        assert_eq!(s.send(&format!("fill mnt/target/{i} 1000000")), "ok");
+                        thread::sleep(Duration::from_millis(i * 37 % 150));
+                    }
+                    let end = Instant::now();
+                    let (entered, mnt) = (s.entered.clone(), s.mnt);
+                    s.finish();
+                    (entered, mnt, start, end)
+                });
+                thread::sleep(Duration::from_millis(40));
+                session
+            })
+            .collect();
+        let sessions: Vec<_> = sessions.into_iter().map(|s| s.join().unwrap()).collect();
+        let refused: Vec<_> = sessions
+            .iter()
+            .map(|(entered, ..)| entered)
+            .filter(|entered| entered.starts_with("error"))
+            .collect();
+        assert!(
+            refused.is_empty(),
+            "{} of 60 refused: {refused:?}",
+            refused.len()
+        );
+        for (i, (_, mnt, start, end)) in sessions.iter().enumerate() {
+            for (_, other_mnt, other_start, other_end) in &sessions[i + 1..] {
+                if start < other_end && other_start < end {
+                    assert_eq!(mnt, other_mnt, "two namespaces alive at once");
+                }
+            }
+        }
+    }
+
     fn held_lock_without_member_is_refused() {
         let tree = Scenario::new();
         let _held = FileLock::shared(&tree.path("agent/mount.lock"), "test").unwrap();
@@ -456,7 +623,7 @@ mod linux {
         assert_eq!(
             a.entered,
             format!(
-                "error OrphanedOverlay {{ pids: \"{}\" }}",
+                "error LockedOverlay {{ holders: \"pids {}\" }}",
                 std::process::id()
             )
         );
@@ -472,10 +639,21 @@ mod linux {
         a.finish();
     }
 
+    /// Runs on every host: skipping it where the probe fails would hide
+    /// exactly the regressions it is for.
     fn detect_probes_in_a_child() {
         let dir = tempfile::tempdir().unwrap();
         let caps = Capabilities::detect(dir.path());
-        assert_eq!(caps.userns, Probe::Ok);
+        for (key, probe) in [("userns", &caps.userns), ("overlay", &caps.overlay)] {
+            assert!(
+                !probe.is_inconclusive(),
+                "{key} probe did not answer: {probe:?}"
+            );
+            assert!(
+                probe.is_ok() || !required(key),
+                "{key} is required by FERRY_TEST_REQUIRE but its probe failed: {probe:?}"
+            );
+        }
         assert_ne!(caps.kernel, "");
         assert_eq!(
             fs::read_dir(dir.path()).unwrap().count(),
