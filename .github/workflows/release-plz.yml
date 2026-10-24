@@ -1,0 +1,75 @@
+name: Release-plz
+
+on:
+  push:
+    branches: [main]
+
+permissions: {}
+
+# Pushes and PRs made with GITHUB_TOKEN start no workflows (release PR CI would
+# wait for approval, and the tag would never start release.yml), so both jobs
+# use a GitHub App token. The jobs' own GITHUB_TOKEN only needs to read.
+jobs:
+  # Publishes to crates.io and pushes the vX.Y.Z tag when a release PR merges.
+  # The tag starts release.yml (dist), which creates the GitHub Release.
+  release:
+    name: Release-plz release
+    if: github.repository_owner == 'patwrall'
+    runs-on: ubuntu-24.04
+    environment: release
+    permissions:
+      contents: read
+      # crates.io trusted publishing: release-plz exchanges the OIDC token itself.
+      id-token: write
+    steps:
+      - id: app-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: read
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
+        with:
+          toolchain: stable
+      - uses: release-plz/action@7ef5e4d4b0420630cfcaeb182c01e13651d4c577 # v0.5.145
+        with:
+          command: release
+        env:
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+
+  # Opens or updates the release PR (version bump + CHANGELOG.md).
+  release-pr:
+    name: Release-plz PR
+    if: github.repository_owner == 'patwrall'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    # Queue rather than cancel: two release-pr runs racing on one branch conflict.
+    concurrency:
+      group: release-plz-${{ github.ref }}
+      cancel-in-progress: false
+    steps:
+      - id: app-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
+        with:
+          toolchain: stable
+      - uses: release-plz/action@7ef5e4d4b0420630cfcaeb182c01e13651d4c577 # v0.5.145
+        with:
+          command: release-pr
+        env:
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}

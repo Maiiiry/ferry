@@ -1,0 +1,40 @@
+[workspace]
+members = ["cargo:."]
+
+# After changing anything here, run `dist generate` and commit the regenerated
+# .github/workflows/release.yml. Never edit release.yml by hand: `dist plan`
+# (which CI runs on every PR) fails when it differs from what dist generates.
+[dist]
+# Must equal the installed `dist --version` exactly.
+cargo-dist-version = "0.33.1"
+ci = "github"
+installers = ["shell", "homebrew"]
+targets = [
+    "aarch64-apple-darwin",
+    "x86_64-apple-darwin",
+    "aarch64-unknown-linux-gnu",
+    "x86_64-unknown-linux-gnu",
+    "aarch64-unknown-linux-musl",
+    "x86_64-unknown-linux-musl",
+]
+tap = "patwrall/homebrew-tap"
+# The crate is ferry-rs (the name ferry is taken on crates.io); the formula and binary are ferry.
+formula = "ferry"
+publish-jobs = ["homebrew"]
+install-path = "CARGO_HOME"
+install-updater = false
+hosting = "github"
+checksum = "sha256"
+pr-run-mode = "plan"
+
+[dist.github-custom-runners]
+# dist 0.33.1 defaults this target to macos-14, which GitHub retires on 2026-11-02.
+aarch64-apple-darwin = "macos-15"
+
+# Dependabot cannot update these (release.yml is excluded from it), so bump them
+# here by hand and run `dist generate`. dist copies the value verbatim, so the
+# text after the SHA becomes a YAML comment in release.yml.
+[dist.github-action-commits]
+"actions/checkout" = "3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1"
+"actions/upload-artifact" = "cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2"
+"actions/download-artifact" = "9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2"

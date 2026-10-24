@@ -1,0 +1,13 @@
+[workspace]
+# dist's release.yml creates the GitHub Release when this tag is pushed; with
+# release-plz also creating one, dist's `gh release create` would fail.
+git_release_enable = false
+git_tag_name = "v{{ version }}"
+# Release only when a release PR is merged, not on every push to main.
+release_always = false
+# The binary is the supported interface; the library API is not stable (src/lib.rs).
+semver_check = false
+pr_labels = ["release"]
+
+[changelog]
+protect_breaking_commits = true

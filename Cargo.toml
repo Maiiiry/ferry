@@ -78,3 +78,7 @@ print_stdout = "allow"
 lto = "thin"
 codegen-units = 1
 strip = "symbols"
+
+# Used by dist for release artifacts.
+[profile.dist]
+inherits = "release"
