@@ -60,8 +60,18 @@ pub enum Command {
         #[arg(long, default_value = "HEAD")]
         rev: String,
         /// Build from scratch instead of seeding from the newest compatible base.
-        #[arg(long)]
+        #[arg(long, conflicts_with = "watch")]
         cold: bool,
+        /// Keep running, and build a base each time REV moves to a new
+        /// commit (seen on two polls in a row).
+        #[arg(long)]
+        watch: bool,
+        /// With --watch: seconds between polls of REV.
+        #[arg(long, value_name = "SECS", requires = "watch", value_parser = parse_interval)]
+        interval: Option<std::time::Duration>,
+        /// With --watch: run `ferry gc` after each new base.
+        #[arg(long, requires = "watch")]
+        gc: bool,
     },
 
     /// Create an agent: a git worktree plus a forked warm target dir.
@@ -236,7 +246,22 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
     let discover = || Context::discover(&cwd);
     match cli.command {
         Command::Init { force } => init(&discover()?, force, json),
-        Command::Base { rev, cold } => base_cmd(&discover()?, &rev, cold, json),
+        Command::Base {
+            rev,
+            watch: true,
+            interval,
+            gc,
+            ..
+        } => watch_cmd(
+            &discover()?,
+            &crate::watch::WatchOptions {
+                rev,
+                interval: interval.unwrap_or(std::time::Duration::from_secs(2)),
+                gc,
+            },
+            json,
+        ),
+        Command::Base { rev, cold, .. } => base_cmd(&discover()?, &rev, cold, json),
         Command::Spawn {
             name,
             from,
@@ -341,6 +366,78 @@ fn base_cmd(ctx: &Context, rev: &str, cold: bool, json: bool) -> anyhow::Result<
         output::json(&report)?;
         return Ok(ExitCode::SUCCESS);
     }
+    print_build(&report)?;
+    Ok(ExitCode::SUCCESS)
+}
+
+fn watch_cmd(
+    ctx: &Context,
+    opts: &crate::watch::WatchOptions,
+    json: bool,
+) -> anyhow::Result<ExitCode> {
+    use crate::watch::Event;
+    let short = |c: &crate::git::CommitId| c.as_str().chars().take(12).collect::<String>();
+    if !json {
+        crate::fsutil::note(&format!(
+            "watching {} every {:.1}s; Ctrl-C stops",
+            opts.rev,
+            opts.interval.as_secs_f64()
+        ));
+    }
+    let mut print = |event: &Event| {
+        if json {
+            // One event per line.
+            if let Ok(line) = serde_json::to_string(event) {
+                println!("{line}");
+            }
+            return;
+        }
+        match event {
+            Event::Building { commit } => crate::fsutil::note(&format!(
+                "{} moved to {}: building",
+                opts.rev,
+                short(commit)
+            )),
+            Event::Built { report, .. } => {
+                let _ = print_build(report);
+            }
+            Event::Failed { commit, error } => {
+                let keeping = base::current(ctx)
+                    .ok()
+                    .flatten()
+                    .map(|b| format!("; keeping base {}", b.id.short()))
+                    .unwrap_or_default();
+                output::warning(&format!(
+                    "build for {} failed: {error}{keeping}",
+                    short(commit)
+                ));
+            }
+            Event::Collected { report } if !report.removed.is_empty() => {
+                output::success(&format!(
+                    "gc removed {} base{}, {} freed",
+                    report.removed.len(),
+                    if report.removed.len() == 1 { "" } else { "s" },
+                    human_bytes(report.freed_bytes)
+                ));
+            }
+            Event::Collected { .. } => {}
+            Event::GcFailed { error } => output::warning(&format!("gc failed: {error}")),
+        }
+    };
+    match crate::watch::watch(ctx, opts, &mut print)? {}
+}
+
+fn parse_interval(value: &str) -> Result<std::time::Duration, String> {
+    value
+        .parse::<f64>()
+        .ok()
+        .and_then(|secs| std::time::Duration::try_from_secs_f64(secs).ok())
+        .filter(|interval| !interval.is_zero())
+        .ok_or_else(|| format!("`{value}` is not a positive number of seconds, at most 1e19"))
+}
+
+/// The human summary of a `ferry base`.
+fn print_build(report: &base::BuildReport) -> anyhow::Result<()> {
     for w in &report.warnings {
         output::warning(w);
     }
@@ -356,8 +453,15 @@ fn base_cmd(ctx: &Context, rev: &str, cold: bool, json: bool) -> anyhow::Result<
             .as_ref()
             .map(|s| format!(", seeded from {}", s.short()))
             .unwrap_or_default();
+        let pruned = b
+            .pruned
+            .map(|p| {
+                let s = if p.units == 1 { "" } else { "s" };
+                format!(", pruned {} unit{s} ({})", p.units, human_bytes(p.bytes))
+            })
+            .unwrap_or_default();
         output::success(&format!(
-            "base {} ready in {:.1}s ({}, {} freshness{seeded})",
+            "base {} ready in {:.1}s ({}, {} freshness{seeded}{pruned})",
             b.id.short(),
             b.build_secs,
             match b.isolation {
@@ -369,7 +473,7 @@ fn base_cmd(ctx: &Context, rev: &str, cold: bool, json: bool) -> anyhow::Result<
                 .unwrap_or_default()
         ));
     }
-    Ok(ExitCode::SUCCESS)
+    Ok(())
 }
 
 fn spawn(ctx: &Context, name: &str, opts: SpawnOptions, json: bool) -> anyhow::Result<ExitCode> {
@@ -678,6 +782,32 @@ mod tests {
         assert!(name.is_none());
 
         assert!(Cli::try_parse_from(["ferry", "run", "a1"]).is_err());
+    }
+
+    #[test]
+    fn watch_options_need_watch_and_exclude_cold() {
+        let parse = |args: &[&str]| Cli::try_parse_from([&["ferry", "base"], args].concat());
+        let Command::Base {
+            watch,
+            interval,
+            gc,
+            ..
+        } = parse(&["--watch", "--interval", "0.2", "--gc"])
+            .unwrap()
+            .command
+        else {
+            panic!()
+        };
+        assert!(watch && gc);
+        assert_eq!(interval, Some(std::time::Duration::from_millis(200)));
+        assert!(parse(&["--watch", "--cold"]).is_err());
+        assert!(parse(&["--interval", "1"]).is_err());
+        assert!(parse(&["--gc"]).is_err());
+        assert!(parse(&["--watch", "--interval", "0"]).is_err());
+        // Too long for a `Duration`, and too short to be anything but zero.
+        assert!(parse(&["--watch", "--interval", "1e20"]).is_err());
+        assert!(parse(&["--watch", "--interval", "1e-300"]).is_err());
+        assert!(parse(&["--cold"]).is_ok());
     }
 
     #[test]

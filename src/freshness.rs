@@ -777,6 +777,42 @@ fn is_gone(e: &io::Error) -> bool {
     matches!(e.kind(), ErrorKind::NotFound | ErrorKind::NotADirectory)
 }
 
+/// Real subdirectories of `dir` (symlinks are not followed); none if `dir`
+/// does not exist.
+pub(crate) fn subdirs(dir: &Path) -> Result<Vec<PathBuf>> {
+    entries_of_type(dir, fs::FileType::is_dir)
+}
+
+/// Regular files in `dir`; none if `dir` does not exist.
+pub(crate) fn files(dir: &Path) -> Result<Vec<PathBuf>> {
+    entries_of_type(dir, fs::FileType::is_file)
+}
+
+fn entries_of_type(dir: &Path, wanted: fn(&fs::FileType) -> bool) -> Result<Vec<PathBuf>> {
+    let entries = match fs::read_dir(dir) {
+        Ok(entries) => entries,
+        Err(e) if is_gone(&e) => return Ok(Vec::new()),
+        Err(e) => return Err(e).at("read directory", dir),
+    };
+    let mut found = Vec::new();
+    for entry in entries {
+        let entry = entry.at("read directory", dir)?;
+        if wanted(&entry.file_type().at("stat", entry.path())?) {
+            found.push(entry.path());
+        }
+    }
+    found.sort();
+    Ok(found)
+}
+
+pub(crate) fn is_real_dir(path: &Path) -> Result<bool> {
+    match fs::symlink_metadata(path) {
+        Ok(meta) => Ok(meta.is_dir()),
+        Err(e) if is_gone(&e) => Ok(false),
+        Err(e) => Err(e).at("stat", path),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::io::Write;

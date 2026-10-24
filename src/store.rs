@@ -4,12 +4,14 @@
 //! <store>/                      one per repository, keyed by its git common dir
 //!   store.json                  layout version + repository path
 //!   lock                        store-wide lock for registry changes
+//!   watch.lock                  held by `ferry base --watch`
 //!   current                     id of the base new agents fork from
 //!   mnt/src, mnt/target         canonical mountpoints (Linux namespace mode)
 //!   bases/<id>/                 immutable once base.json exists
 //!     base.json  src/  target/
 //!     relocation.json           what a fork without the sandbox removes
 //!                               from target/ (written before base.json)
+//!     warm-units/               cargo calls the shim recorded; only while building
 //!   bases/<id>.lock             held while the base is being built
 //!   agents/<name>/
 //!     agent.json  lock  target/ | upper/ work/ mount.lock ns.json
@@ -129,6 +131,11 @@ impl Store {
 
     pub fn lock(&self) -> Result<FileLock> {
         FileLock::exclusive(&self.root.join("lock"), "the ferry store")
+    }
+
+    /// Held by the one `ferry base --watch` of this repository.
+    pub fn watch_lock(&self) -> PathBuf {
+        self.root.join("watch.lock")
     }
 
     pub fn base(&self, id: &BaseId) -> BasePaths {

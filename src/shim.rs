@@ -9,10 +9,10 @@
 //! in other worktrees, which is not true of exporting `CARGO_TARGET_DIR`.
 
 use std::ffi::{OsStr, OsString};
-use std::io::Write;
+use std::io::{BufRead as _, Write};
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::os::unix::fs::MetadataExt;
-use std::os::unix::process::CommandExt;
+use std::os::unix::process::{CommandExt, ExitStatusExt as _};
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode, Stdio};
 
@@ -180,18 +180,171 @@ fn run(cargo: &Path, args: &[OsString]) -> Result<std::convert::Infallible> {
         return crate::agent::exec_cargo(&ctx, &meta, cargo, args, &cwd);
     }
     let mut command = Command::new(cargo);
-    command.args(args).env(DEPTH_ENV, next_depth());
-    if let (Some(src), Some(target)) = (
+    command.env(DEPTH_ENV, next_depth());
+    if let (Some(src), Some(warm_target)) = (
         std::env::var_os(WARM_SRC_ENV),
         std::env::var_os(WARM_TARGET_ENV),
     ) {
         let src = PathBuf::from(src);
-        set_target(
-            &mut command,
-            workspace(cargo, args, &cwd, &[&src]).target(Path::new(&target)),
-        );
+        let warm_target = PathBuf::from(warm_target);
+        let target = workspace(cargo, args, &cwd, &[&src]).target(&warm_target);
+        set_target(&mut command, target.clone());
+        if let (Some(records), Some(target)) = (std::env::var_os(WARM_UNITS_ENV), target) {
+            let root = target
+                .strip_prefix(&warm_target)
+                .map(Path::to_path_buf)
+                .unwrap_or_default();
+            return observe(command, cargo, args, Path::new(&records), &target, &root);
+        }
     }
+    command.args(args);
     Err(exec_error(cargo, command.exec()))
+}
+
+/// What a warm cargo call needs for Ferry to see which units it uses.
+#[derive(Debug, PartialEq, Eq)]
+enum Observe {
+    /// It builds units: insert `--message-format=json-render-diagnostics`
+    /// at this index.
+    Inject(usize),
+    /// It builds units and already asks for JSON messages.
+    AsIs,
+    /// It may build units, and Ferry cannot see which.
+    Unobservable(&'static str),
+    /// It builds no units.
+    Nothing,
+}
+
+fn classify(args: &[OsString]) -> Observe {
+    const BUILDS: &[&str] = &[
+        "build", "b", "check", "c", "test", "t", "bench", "run", "r", "rustc", "rustdoc", "doc",
+        "d", "fix", "clippy",
+    ];
+    const BUILDS_NOTHING: &[&str] = &[
+        "metadata",
+        "locate-project",
+        "read-manifest",
+        "verify-project",
+        "pkgid",
+        "tree",
+        "fetch",
+        "generate-lockfile",
+        "update",
+        "vendor",
+        "search",
+        "info",
+        "owner",
+        "yank",
+        "login",
+        "logout",
+        "new",
+        "init",
+        "add",
+        "remove",
+        "fmt",
+        "version",
+        "help",
+        "config",
+        "report",
+        "clean",
+        "uninstall",
+    ];
+    let (globals, rest) = split_globals(args);
+    let Some(subcommand) = rest.first() else {
+        return Observe::Nothing;
+    };
+    let subcommand = subcommand.to_str().unwrap_or_default();
+    if BUILDS_NOTHING.contains(&subcommand) {
+        return Observe::Nothing;
+    }
+    if !BUILDS.contains(&subcommand) {
+        return Observe::Unobservable("is not a build Ferry can observe");
+    }
+    let mut formats = Vec::new();
+    let mut options = rest[1..].iter().take_while(|a| *a != "--");
+    while let Some(arg) = options.next() {
+        if arg == "--message-format" {
+            formats.extend(options.next().map(|v| v.as_bytes()));
+        } else if let Some(value) = arg.as_bytes().strip_prefix(b"--message-format=") {
+            formats.push(value);
+        }
+    }
+    if formats.is_empty() {
+        return Observe::Inject(globals.len() + 1);
+    }
+    let json = formats
+        .iter()
+        .flat_map(|f| f.split(|&b| b == b','))
+        .all(|v| v.starts_with(b"json"));
+    if json {
+        Observe::AsIs
+    } else {
+        // Cargo refuses to mix them with JSON.
+        Observe::Unobservable("asks for human-readable messages")
+    }
+}
+
+/// Runs a warm cargo call so that Ferry learns which units it used: with
+/// Cargo's JSON messages on stdout, recorded under `records` and, unless the
+/// call asked for them, kept out of the output. Exits with cargo's status.
+fn observe(
+    mut command: Command,
+    cargo: &Path,
+    args: &[OsString],
+    records: &Path,
+    target: &Path,
+    root: &Path,
+) -> Result<std::convert::Infallible> {
+    let mut args = args.to_vec();
+    let forward_messages = match classify(&args) {
+        Observe::Nothing => None,
+        Observe::Unobservable(why) => {
+            let subcommand = split_globals(&args).1.first().cloned().unwrap_or_default();
+            crate::prune::Log::unobservable(
+                records,
+                &format!("`cargo {}` {why}", subcommand.to_string_lossy()),
+            )?;
+            None
+        }
+        Observe::AsIs => Some(true),
+        Observe::Inject(at) => {
+            args.insert(at, "--message-format=json-render-diagnostics".into());
+            Some(false)
+        }
+    };
+    command.args(&args);
+    let Some(forward_messages) = forward_messages else {
+        return Err(exec_error(cargo, command.exec()));
+    };
+    let mut log = crate::prune::Log::start(records, target, root)?;
+    let mut child = command
+        .stdout(Stdio::piped())
+        .spawn()
+        .map_err(|e| exec_error(cargo, e))?;
+    if let Some(stdout) = child.stdout.take() {
+        // Program output (`cargo run`, test binaries) shares stdout with the
+        // messages and passes through byte for byte.
+        let mut reader = std::io::BufReader::new(stdout);
+        let mut out = std::io::stdout().lock();
+        let mut line = Vec::new();
+        while reader
+            .read_until(b'\n', &mut line)
+            .at("read", "cargo's output")?
+            > 0
+        {
+            if !log.message(&line)? || forward_messages {
+                let _ = out.write_all(&line);
+            }
+            line.clear();
+        }
+        let _ = out.flush();
+    }
+    let status = child.wait().map_err(|e| exec_error(cargo, e))?;
+    let code = status
+        .code()
+        .unwrap_or_else(|| 128 + status.signal().unwrap_or(0));
+    log.end(code)?;
+    std::process::exit(code)
 }
 
 fn exec_error(cargo: &Path, source: std::io::Error) -> Error {
@@ -209,6 +362,9 @@ pub(crate) const NESTED_TARGETS: &str = "ferry-ws";
 /// agent's.
 pub(crate) const WARM_SRC_ENV: &str = "FERRY_WARM_SRC";
 pub(crate) const WARM_TARGET_ENV: &str = "FERRY_WARM_TARGET";
+/// Set when Ferry observes which units the warm commands use: the directory
+/// the shim records their cargo calls in (see `prune`).
+pub(crate) const WARM_UNITS_ENV: &str = "FERRY_WARM_UNITS";
 
 /// Points `command` at `target`, or for a workspace with no target here,
 /// clears any inherited one so that it uses its own as plain cargo would.
@@ -389,6 +545,50 @@ mod tests {
         );
         assert_eq!(path(&["run", "--", "--manifest-path", "c"]), None);
         assert_eq!(path(&["build"]), None);
+    }
+
+    #[test]
+    fn warm_calls_are_classified_by_what_they_build() {
+        let classify = |args: &[&str]| classify(&os(args));
+        assert_eq!(classify(&["build"]), Observe::Inject(1));
+        assert_eq!(
+            classify(&["+nightly", "-Zx", "build", "-p", "a"]),
+            Observe::Inject(3)
+        );
+        assert_eq!(
+            classify(&["run", "-p", "app", "--", "--message-format", "x"]),
+            Observe::Inject(1)
+        );
+        assert_eq!(
+            classify(&["clippy", "--", "-D", "warnings"]),
+            Observe::Inject(1)
+        );
+        assert_eq!(classify(&["test", "--message-format=json"]), Observe::AsIs);
+        assert_eq!(
+            classify(&["build", "--message-format", "json-diagnostic-short,json"]),
+            Observe::AsIs
+        );
+        for unobservable in [
+            &["check", "--message-format", "short"][..],
+            &["build", "--message-format=json,human"],
+            &["nextest", "run"],
+            &["xtask"],
+            &["install", "ripgrep"],
+        ] {
+            assert!(
+                matches!(classify(unobservable), Observe::Unobservable(_)),
+                "{unobservable:?}"
+            );
+        }
+        for nothing in [
+            &["metadata"][..],
+            &["-V"],
+            &["--list"],
+            &[],
+            &["clean", "-p", "a"],
+        ] {
+            assert_eq!(classify(nothing), Observe::Nothing, "{nothing:?}");
+        }
     }
 
     #[test]

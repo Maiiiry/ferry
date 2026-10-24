@@ -91,29 +91,59 @@ Build an immutable warm base that new agents fork from.
 |---|---|
 | `--rev <REV>` | Commit to build (any git revision) [default: HEAD] |
 | `--cold` | Build from scratch instead of seeding from the newest compatible base |
+| `--watch` | Keep running and build a base each time `--rev` moves to a new commit (not with `--cold`) |
+| `--interval <SECS>` | With `--watch`: seconds between polls of `--rev` [default: 2] |
+| `--gc` | With `--watch`: run `ferry gc` after each new base |
 
 Checks out the commit into the store, runs the [warm commands](configuration.md#base-what-warms-a-base),
 and makes the base current, so new agents fork from it. If a base with the
 same commit and fingerprint already exists, it is made current without
 building. Otherwise, unless `--cold` is given, the new base is seeded from the
-newest ready base with the same fingerprint and the same manifests,
-lockfiles, Cargo configs, toolchain files and Cargo flag variables, so only
-what changed is rebuilt. Build output goes to stderr.
+newest ready base with the same fingerprint, so only what changed is rebuilt.
+The seed must have the same manifests, lockfiles, Cargo configs, toolchain
+files and Cargo flag variables, or its warm build must have been observed
+(`[base] prune`, the default): the units the new build does not use are then
+deleted, and the success line says how many (`pruned N units`). Build output
+goes to stderr.
 
 Warnings are printed when the namespace sandbox is unavailable (builds then
 run without canonical paths), when a Cargo config above the repository (or an
 untracked one in it) will not apply to Ferry's builds, when the warm
 commands wrote files into the source tree, which agents will not have (build
 scripts writing outside `OUT_DIR`), when clippy is not installed (the
-generated clippy command is skipped), and when the generated clippy command
-failed (the base is kept).
+generated clippy command is skipped), when the generated clippy command
+failed (the base is kept), and when a refresh seeded across such changes was
+rebuilt from scratch because Ferry could not tell which units the warm
+commands used.
 
 JSON: `{ "base": {...}, "reused": <bool>, "warnings": [...] }`, where `base`
 has `id`, `commit`, `created_unix`, `build_secs`, `freshness`, `isolation`,
 `toolchain`, `commands` (the ones that ran), `command_secs` (seconds per
 command), `incomplete` (clippy commands that failed), `ferry_version`,
-`dirtied`, `remap_paths`, `unit_inputs` (the hash seeding compares) and
-`seeded_from`.
+`dirtied`, `remap_paths`, `unit_inputs` (the hash seeding compares),
+`seeded_from`, `observed` (Ferry saw every cargo call of the warm build) and
+`pruned` (`{ "units", "bytes" }` deleted from the seed's units, or `null`).
+
+### `ferry base --watch`
+
+Runs in the foreground until interrupted (run it in a terminal tab, a
+systemd or launchd user service, or a devcontainer's `postStartCommand`), so
+the current base follows `--rev` (default `HEAD`; `--rev origin/main` follows
+fetches; a revision that names no commit at startup is refused). It polls
+the revision, and once a new commit has been seen on two polls in a row it
+runs `ferry base --rev <commit>` in a child process. Polls
+are skipped while a rebase, merge, cherry-pick, revert or bisect is in
+progress. A build for a commit that fails keeps the previous base current and
+is not retried until the revision moves again; a build is never cut short
+when the revision moves, the newest commit is built next. Only one watcher
+runs per repository; a second one is refused. With `--gc`, unused bases are
+deleted after each new base, which matters on filesystems without reflinks,
+where every base holds a full copy of the target dir.
+
+JSON: one object per line, with `event` set to `building` (`commit`),
+`built` (`commit`, `report`: what `ferry --json base` prints), `failed`
+(`commit`, `error`), `collected` (`report`: what `ferry --json gc` prints)
+or `gc-failed` (`error`).
 
 ## `ferry spawn`
 

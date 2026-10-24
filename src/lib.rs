@@ -40,6 +40,8 @@ pub mod lock;
 #[cfg(unix)]
 pub mod platform;
 #[cfg(unix)]
+pub mod prune;
+#[cfg(unix)]
 pub mod remap;
 #[cfg(unix)]
 pub mod sandbox;
@@ -51,6 +53,8 @@ pub mod shim;
 pub mod store;
 #[cfg(unix)]
 pub mod toolchain;
+#[cfg(unix)]
+pub mod watch;
 
 #[cfg(unix)]
 pub use error::{Error, Result};

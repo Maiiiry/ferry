@@ -314,7 +314,9 @@ base keep that base alive.
 - **`warning: N of M tracked files differ from base ...`** at spawn: the agent
   starts from a different commit than its base (`--from`), so crates using the
   changed files rebuild on the first build. Run `ferry base --rev <commit>` to
-  have a base at that commit.
+  have a base at that commit (the warning names it), or, for agents started
+  at `HEAD`, keep `ferry base --watch` running so the base follows it. The
+  warning says when a base for the agent's commit is already being built.
 - **`warning: N build units captured the base's absolute paths ...`** at a
   spawn without the namespace sandbox. The agent builds at other absolute
   paths than its base, and those crates recorded the base's: library code
@@ -325,10 +327,20 @@ base keep that base alive.
   (`ferry doctor`) to avoid it, or stop baking the path in (read it at run
   time, or make it relative).
 - **A refresh is a cold build after a manifest change.** `ferry base` seeds
-  only from a base whose `Cargo.toml`s, `Cargo.lock`s, Cargo configs,
-  toolchain files and `RUSTFLAGS`-style variables are identical: a seeded
-  target also holds units from older commits, which a reverted change could
-  otherwise select as fresh.
+  across a change to `Cargo.toml`s, `Cargo.lock`s, Cargo configs, toolchain
+  files or `RUSTFLAGS`-style variables only from a base whose warm build it
+  observed (`"observed": true` in `ferry --json list`), because it must then
+  delete the units the new build does not use. Warm commands that run
+  `cargo nextest`, an alias like `cargo xtask`, or pass
+  `--message-format=short` are not observed; see
+  [Refreshing a base](configuration.md#refreshing-a-base). `[base] prune =
+  false` turns this off on purpose.
+- **`warning: rebuilt the base from scratch: could not tell which of the
+  seed's units the warm commands used (...)`** from `ferry base`: the seed's
+  warm build was observed but this one was not, or something in the target
+  dir did not match what Cargo reported. The reason in parentheses says
+  which. The base is correct, just built cold; a cargo call that bypasses the
+  shim and rebuilds something is the usual cause.
 - **`warning: the warm commands wrote N file(s) into the source tree ...`**
   from `ferry base`: a build script writes outside `OUT_DIR`. Agents do not get
   those files, so whatever reads them may rebuild or behave differently.

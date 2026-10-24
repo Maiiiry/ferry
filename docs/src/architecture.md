@@ -42,13 +42,17 @@ Each one is enforced in code (module named) and covered by tests.
    a fingerprint of toolchain, warm commands and modes. `base.json` is written
    last, atomically, and doubles as the "ready" marker; nothing writes to a
    ready base. Refreshing builds a new base; `gc` removes a base only when it
-   is not current and no agent references it. A refresh is seeded from an
-   earlier base only if both have the same *unit inputs*: every manifest,
+   is not current and no agent references it. A ready base's target holds
+   only units its own warm build compiled or found fresh (`prune`), so every
+   unit an agent or a later refresh reuses was checked against the content
+   stamping compares. There are three ways to get there: a cold build; a
+   refresh seeded from a base with the same *unit inputs* (every manifest,
    lockfile, Cargo config and toolchain file of the commit, the Cargo configs
-   above the store, and Cargo's flag variables. A seeded target still holds
-   units from the seed's own seeds; with equal inputs the new build selects
-   none of them, so every unit it reuses was checked against the content
-   stamping compared.
+   above the store, and Cargo's flag variables), which selects the same
+   units; and a refresh seeded across unit inputs from a base whose warm
+   build was observed, after which every unit the build neither wrote nor
+   reported is deleted. When that observation is incomplete, the target is
+   emptied and built again from scratch rather than published.
 3. **Each agent owns its build state** (`fork`, `sandbox`, `agent`). Forks are
    reflink clones (new inodes), overlayfs upper layers (base is a read-only
    lower), or full copies. There is no hardlink backend: Cargo rewrites
@@ -117,10 +121,12 @@ relative to what the base was built from.
   bin/ferry-rustc -> ...           experimental remap wrapper
   <repo-name>-<hash>/              one store per repository (hash of git common dir)
     store.json  lock  current
+    watch.lock                     held by `ferry base --watch`
     mnt/src  mnt/target            canonical mountpoints (empty on the host)
     bases/<commit>-<fp>/           immutable once base.json exists
       base.json  src/  target/
       relocation.json              built without the sandbox: what forks remove from target/
+      warm-units/                  the shim's records of warm cargo calls, while building
     bases/<commit>-<fp>.lock
     agents/<name>/
       agent.json  lock
@@ -148,25 +154,76 @@ needs one writable-root entry for it plus the worktree (its working directory).
    (probe user namespaces in a child process when `sandbox = auto`).
 2. Compute the base id; take `bases/<id>.lock`. If `base.json` exists, make it
    current and stop. Otherwise discard any partial directory.
-3. `git worktree add --detach` the checkout and `git worktree lock` it. If a
-   ready base with the same fingerprint and unit inputs exists at another
-   commit (and `--cold` is not given), seed from it: clone its target (reflink
-   when possible), relocate the clone without the sandbox (see below), and
-   stamp only files proven identical to its checkout, exactly as for an
-   agent, so the warm build only rebuilds what changed.
-   Otherwise stamp all tracked files and directories (the base is the
-   reference, nothing to compare).
-4. Enter the sandbox (irreversible for this process; host paths stay
+3. `git worktree add --detach` the checkout and `git worktree lock` it. Unless
+   `--cold` is given, seed from the newest ready base with the same
+   fingerprint at another commit that has the same unit inputs or (with
+   `[base] prune`, the default) was observed: clone its target (reflink when
+   possible), relocate the clone without the sandbox (see below), and stamp
+   only files proven identical to its checkout, exactly as for an agent, so
+   the warm build only rebuilds what changed. Otherwise stamp all tracked
+   files and directories (the base is the reference, nothing to compare). A
+   seed with other unit inputs loses its nested workspaces' target dirs
+   (`ferry-ws/`), which are not observed.
+4. Create `warm-units/` and take a write threshold: the mtime of a file
+   created there that is strictly newer than one created just before, so
+   every file written later is at least as new and every cloned file older.
+5. Enter the sandbox (irreversible for this process; host paths stay
    reachable), run each warm command with `sh -c`, stdout redirected to
    stderr, the shim first on `PATH` so each workspace gets the target dir it
    gets in agents, and `CARGO_BUILD_WARNINGS=warn`. A failing command
    discards the base, except a generated clippy command, which only warns
    and is recorded in `incomplete`. Clippy commands are left out (before the
-   base id is computed) when `cargo clippy --version` fails.
-5. Record files the build wrote into the source tree (build scripts writing
+   base id is computed) when `cargo clippy --version` fails. The shim records
+   each build-type cargo call (`build`, `check`, `test`, `run`, `clippy`,
+   `doc`, ...) in a file of its own under `warm-units/`: it adds
+   `--message-format=json-render-diagnostics` unless the call asks for JSON
+   itself, records every `compiler-artifact` and `build-script-executed`
+   message with the inode, length and mtime of each named file as it
+   arrives, and passes all other output through (and the messages too, when
+   the call asked for them). A call asking for `human` or `short` messages,
+   or a subcommand it does not know (`nextest`, aliases, `install`), is
+   recorded as unobservable.
+6. Work out which units the build used. Every profile dir (a directory with
+   a `.cargo-lock`) is scanned in both build-dir layouts; a unit is used if
+   Cargo wrote its fingerprint after the threshold, or if a message names it:
+   by a path inside its own directory or carrying its hash, or, for files
+   uplifted without a hash (binaries, examples, root proc macros and
+   dylibs), as the only unit of that package with the fingerprint file Cargo
+   names after the target, else the one whose output has the recorded inode
+   (Linux hard links) or length and mtime (macOS copies). The observation is
+   incomplete if a call was unobservable or did not finish, a message
+   matches no unit or several, a rebuilt unit's fingerprint predates the
+   threshold, a written unit was reported by no message (a cargo call that
+   bypassed the shim) although every call succeeded, a directory in the
+   target cannot be read, or a profile dir has an unknown layout. After a
+   call that failed (a clippy command under `--keep-going`, say), a written
+   unit no message reported is one that failed to build (Cargo writes its
+   fingerprint dir, with an empty hash, and reports nothing), and it counts
+   as unused.
+7. With other unit inputs than the seed: if the observation is complete,
+   delete every unused unit (fingerprint, build dir, hash-named outputs, and
+   hash-named outputs without a fingerprint), leaving uplifted files, `doc/`
+   and `incremental/`; otherwise warn, empty the target, and run the warm
+   commands again into it without a seed. Record `observed` and `pruned`.
+8. Record files the build wrote into the source tree (build scripts writing
    outside `OUT_DIR`) as warnings; without the sandbox, compute the
    relocation plan and write `relocation.json` (see below); write
    `base.json`; set `current` before releasing the base lock.
+
+### `ferry base --watch [--rev R] [--interval S] [--gc]`
+
+A foreground poller. It refuses an `R` that names no commit, takes
+`<store>/watch.lock` (a second watcher is refused, naming the holder), then
+every `S` seconds (default 2) resolves `R` with one `git rev-parse`,
+skipping polls while the watcher's worktree is in a rebase, merge,
+cherry-pick, revert or bisect. A commit seen on two polls
+in a row that is neither the current base's commit at startup nor the last
+one built or failed is built by a child `ferry --json base --rev <commit>`
+(building enters the sandbox for the rest of the process, and the child
+re-reads `ferry.toml`); its stderr is the watcher's. A refresh is never
+interrupted when `R` moves: the newest commit is built after it. A failed
+build leaves the current base alone and is not retried until `R` moves.
+`--gc` runs gc in the watcher after each new base.
 
 ### `ferry spawn NAME [--from REF] [--path DIR] [--branch B]`
 
@@ -211,7 +268,8 @@ It sets `CARGO_TARGET_DIR`, `CARGO_BUILD_BUILD_DIR` and the freshness env
 accordingly and execs the real cargo (the next `cargo` on `PATH` that is not
 ferry). Outside agent worktrees it execs the real cargo unchanged, except
 inside a base's warm commands, where `FERRY_WARM_SRC` and `FERRY_WARM_TARGET`
-apply the same table to the base checkout.
+apply the same table to the base checkout, and `FERRY_WARM_UNITS` names the
+directory the shim records the call in (see `ferry base`, step 5).
 
 ### `ferry rm NAME [--force]`
 
@@ -413,7 +471,8 @@ while an agent's build runs; the base lock is held for its own warm build:
 | Lock | Held by | Duration |
 |---|---|---|
 | `<store>/lock` | spawn (registry step), rm, gc, setting `current` | milliseconds to seconds |
-| `bases/<id>.lock` | `ferry base` for that id (exclusive), a refresh seeded from it (shared); gc only try-locks | the base build |
+| `bases/<id>.lock` | `ferry base` for that id (exclusive), a refresh seeded from it (shared); gc and spawn only try-lock | the base build |
+| `<store>/watch.lock` | `ferry base --watch` (try-locked) | the life of the watcher |
 | `agents/<name>/lock` | spawn (whole), rm, sandbox entry for runs | spawn; ~1 ms per run |
 | `agents/<name>/busy.lock` | shared by every `ferry run`, `shell` and shim call through an inherited fd; rm, list and gc try it exclusively | the life of the process and its children |
 | `agents/<name>/mount.lock` | shared by every process using an overlay mount, as above | the life of the mount's users |

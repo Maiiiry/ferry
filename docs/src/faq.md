@@ -82,11 +82,13 @@ profiles share nothing (see
 
 ## What happens when my main branch moves on?
 
-Run `ferry base` again. The new base is seeded from the previous one, so only
-what changed is rebuilt, and new agents fork from it. Existing agents keep
-the base they were forked from. If you rebase an agent's branch, the files that
-changed get new mtimes and Cargo rebuilds what they affect; Ferry never
-re-stamps a live worktree.
+Run `ferry base` again, or keep `ferry base --watch` running to have that
+done each time `HEAD` (or the `--rev` you give it) moves. The new base is
+seeded from the previous one, so only what changed is rebuilt, also after
+`Cargo.toml` or `Cargo.lock` changes, and new agents fork from it. Existing
+agents keep the base they were forked from. If you rebase an agent's branch,
+the files that changed get new mtimes and Cargo rebuilds what they affect;
+Ferry never re-stamps a live worktree.
 
 ## What does Ferry add to my repository?
 

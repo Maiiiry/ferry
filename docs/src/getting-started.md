@@ -96,7 +96,9 @@ ferry: running `cargo test --no-run --workspace`
 A base is an immutable warm build of one commit (`HEAD` unless you pass
 `--rev`). It is built once and never modified. When your main branch moves
 on, run `ferry base` again: the new base is seeded from the previous one, so
-only what changed is rebuilt. Pass `--cold` to build from scratch.
+only what changed is rebuilt. Pass `--cold` to build from scratch. To have
+this happen on its own, keep `ferry base --watch` running in a spare
+terminal: it builds a new base whenever `HEAD` moves.
 
 ## 4. Spawn agents
 

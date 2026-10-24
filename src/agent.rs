@@ -343,9 +343,10 @@ fn populate(
     git::refresh_index(&meta.worktree)?;
     if differing > 0 {
         warnings.push(format!(
-            "{differing} of {} tracked files differ from base {} (or are reached through a symlink that changed); crates using them rebuild on the first build",
+            "{differing} of {} tracked files differ from base {} (or are reached through a symlink that changed); crates using them rebuild on the first build{}",
             meta.stamp.tracked,
-            base.id.short()
+            base.id.short(),
+            other_commit_hint(ctx, base, &meta.from)?
         ));
     }
 
@@ -444,6 +445,35 @@ fn choose_base(ctx: &Context, from: &CommitId) -> Result<BaseMeta> {
         return Ok(exact);
     }
     current.ok_or(Error::NoBase)
+}
+
+/// For a base at another commit than the agent's: whether a base for that
+/// commit is on its way, or how to get one.
+fn other_commit_hint(ctx: &Context, base: &BaseMeta, from: &CommitId) -> Result<String> {
+    if &base.commit == from {
+        return Ok(String::new());
+    }
+    let short = |c: &CommitId| c.as_str().chars().take(12).collect::<String>();
+    let prefix = format!("{from}-");
+    for id in ctx.store.base_ids()? {
+        if id.as_str().starts_with(&prefix)
+            && FileLock::try_exclusive(&ctx.store.base(&id).lock)?.is_none()
+        {
+            return Ok(format!("; a base for {} is being built", short(from)));
+        }
+    }
+    // Both build HEAD, which helps only an agent that starts there.
+    let how = if ctx.repo.resolve_commit("HEAD").ok().as_ref() == Some(from) {
+        "`ferry base` (or keep `ferry base --watch` running)".to_owned()
+    } else {
+        format!("`ferry base --rev {}`", short(from))
+    };
+    Ok(format!(
+        "; base {} is at {}, not {}: run {how}",
+        base.id.short(),
+        short(&base.commit),
+        short(from)
+    ))
 }
 
 fn agent_isolation(
