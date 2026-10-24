@@ -178,7 +178,8 @@ an artifact holding `bench/results/ci/<runner>/` and the build logs. The job
 fails if a scenario failed or any artifact check is not `ok`; times are never
 asserted.
 
-Standard macOS runners are shared virtual machines (3 vCPU M1, 7 GB), so:
+GitHub-hosted macOS runners are shared virtual machines whose CPUs and RAM
+depend on the runner label (`env.json` records them for each run), so:
 
 - `results.md` from a CI run opens with a notice that its times are not
   comparable with any other machine or run;

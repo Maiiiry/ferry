@@ -35,11 +35,13 @@ machines. Their results are published in their own table, never next to the
 results above, and each table states the runner label, image version, run
 link and date; the Ferry commit, rustc, Xcode and linker versions; the runs
 per step with the minimum and maximum of each step; and the load before and
-after. Every such table carries this note:
+after. Every such table carries this note, with the hardware taken from that
+run's `env.json` (`logical_cpus`, `cpu_model` and `ram_bytes`), because it
+depends on the runner label:
 
-> Measured on a shared GitHub-hosted VM (3 vCPU M1, 7 GB). Not comparable
-> with the local results above or with other CI runs; ratios within one run
-> are indicative, absolute seconds are not.
+> Measured on a shared GitHub-hosted VM (_logical CPUs_ vCPU _CPU model_,
+> _RAM_ GiB). Not comparable with the local results above or with other CI
+> runs; ratios within one run are indicative, absolute seconds are not.
 
 Claims about how much of rustc's incremental state survives on macOS come
 from the test suite's codegen-unit counts, which do not depend on timing
