@@ -994,6 +994,8 @@ mod tests {
         assert_eq!(p.remove, Vec::<PathBuf>::new());
     }
 
+    // SELF_EXE is a /proc path.
+    #[cfg(target_os = "linux")]
     #[test]
     fn user_owned_copy_is_not_installed() {
         if rustix::process::geteuid().as_raw() == 0 {
