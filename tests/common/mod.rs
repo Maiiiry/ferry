@@ -26,7 +26,12 @@ pub const BASE_MARKER: &str = "LEAF_BASE";
 const BASE_ASSETS: &str = "a.txt=alpha;sub/b.txt=beta;sub/c.txt=gamma";
 pub const ALL_PACKAGES: &[&str] = &["app", "embed", "leaf", "mid", "side"];
 
-const FERRY: &str = env!("CARGO_BIN_EXE_ferry");
+/// The binary under test: `FERRY_TEST_BIN` when set (CI points it at a copy
+/// installed under an `AppArmor` profile), otherwise the one Cargo built.
+fn ferry_bin() -> PathBuf {
+    std::env::var_os("FERRY_TEST_BIN")
+        .map_or_else(|| PathBuf::from(env!("CARGO_BIN_EXE_ferry")), PathBuf::from)
+}
 
 /// Removed from every command the harness runs: they would redirect or
 /// reconfigure the builds under test (CI toolchain actions export
@@ -139,7 +144,7 @@ impl TestRepo {
         I: IntoIterator<Item = S>,
         S: AsRef<OsStr>,
     {
-        let mut cmd = self.command(FERRY);
+        let mut cmd = self.command(ferry_bin());
         cmd.args(args);
         cmd
     }
