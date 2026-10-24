@@ -152,14 +152,16 @@ fn a_refreshed_base_is_seeded_from_the_previous_one_and_rebuilds_only_changes() 
     assert_eq!(cold.json()["base"]["seeded_from"], Value::Null);
     assert!(compiled_in_base_build(&cold.stderr).len() >= common::ALL_PACKAGES.len());
 
-    // The shim records the JSON messages the command asked for without
-    // printing them a second time.
+    // The shim forwards the JSON messages the command asked for (which
+    // `compiled_in_base_build` reads above) while recording them, and
+    // without printing them a second time.
     let artifacts: Vec<&str> = refresh
         .stderr
         .lines()
         .filter(|l| l.starts_with(r#"{"reason":"compiler-artifact""#))
         .collect();
     let unique: std::collections::BTreeSet<&str> = artifacts.iter().copied().collect();
+    assert!(!artifacts.is_empty(), "{}", refresh.stderr);
     assert_eq!(artifacts.len(), unique.len(), "{}", refresh.stderr);
 }
 
@@ -252,6 +254,90 @@ fn feature_switched_off_and_on(repo: &TestRepo) {
 
     repo.spawn("agent");
     assert_eq!(repo.app("agent").marker, "LEAF_B");
+}
+
+/// Nested workspaces' target dirs are not observed, so a refresh seeded
+/// across unit inputs drops them and builds them again. One kept from the
+/// seed could hand an agent the nested build of a library whose feature the
+/// seed's commit turned off and this one turned back on.
+#[test]
+fn a_nested_workspace_is_rebuilt_on_a_refresh_across_inputs() {
+    let repo = TestRepo::with_env(&[(
+        "FERRY_BASE_COMMAND",
+        "cargo build --workspace && cargo build --manifest-path fuzz/Cargo.toml",
+    )]);
+    let fuzz = repo.root().join("fuzz");
+    std::fs::create_dir_all(fuzz.join("fz/src")).unwrap();
+    repo.write(
+        &fuzz.join("Cargo.toml"),
+        "[workspace]\nmembers = [\"fz\"]\nresolver = \"2\"\n\n[profile.dev]\ndebug = false\n",
+    );
+    repo.write(
+        &fuzz.join("fz/Cargo.toml"),
+        "[package]\nname = \"fz\"\nversion = \"0.1.0\"\nedition = \"2021\"\npublish = false\n\n\
+         [dependencies]\nleaf = { path = \"../../leaf\" }\n",
+    );
+    repo.write(
+        &fuzz.join("fz/src/main.rs"),
+        "fn main() {\n    println!(\"marker={}\", leaf::marker());\n}\n",
+    );
+    common::run(
+        repo.cargo_in(&fuzz)
+            .args(["generate-lockfile", "--offline"]),
+    )
+    .ok();
+    let manifest = repo.root().join("leaf/Cargo.toml");
+    let plain = std::fs::read_to_string(&manifest).unwrap();
+    let with_feature = format!("{plain}\n[features]\ndefault = [\"x\"]\nx = []\n");
+
+    repo.write(&manifest, &with_feature);
+    repo.set_marker(repo.root(), "LEAF_A");
+    repo.commit_all("A: nested workspace, feature on");
+    let a = repo.ferry_json(["base"]);
+    assert_eq!(a["base"]["observed"], true, "{a}");
+    let a = str_of(&a["base"]["id"]).to_owned();
+
+    repo.write(&manifest, &plain);
+    repo.set_marker(repo.root(), "LEAF_B");
+    repo.commit_all("B: feature off");
+    std::thread::sleep(std::time::Duration::from_millis(1100));
+    let b = repo.ferry_json(["base"]);
+    assert_eq!(b["base"]["seeded_from"], a.as_str(), "{b}");
+    let b = str_of(&b["base"]["id"]).to_owned();
+    let a_built = std::fs::metadata(repo.base_dir(&a).join("base.json"))
+        .unwrap()
+        .modified()
+        .unwrap();
+    let mut stack = vec![repo.base_dir(&b).join("target/ferry-ws")];
+    let mut files = 0;
+    while let Some(dir) = stack.pop() {
+        for entry in std::fs::read_dir(&dir).unwrap() {
+            let path = entry.unwrap().path();
+            let meta = std::fs::symlink_metadata(&path).unwrap();
+            if meta.is_dir() {
+                stack.push(path);
+            } else {
+                files += 1;
+                assert!(
+                    meta.modified().unwrap() > a_built,
+                    "B kept {}",
+                    path.display()
+                );
+            }
+        }
+    }
+    assert!(files > 0, "B did not build the nested workspace");
+
+    repo.write(&manifest, &with_feature);
+    repo.commit_all("C: feature on again");
+    let c = repo.ferry_json(["base"]);
+    assert_eq!(c["base"]["seeded_from"], b.as_str(), "{c}");
+
+    repo.spawn("agent");
+    let nested = ["--manifest-path", "fuzz/Cargo.toml"];
+    Build::run(repo.agent_cargo("agent").arg("build").args(nested)).assert_rebuilt(&[]);
+    let out = common::run(repo.agent_cargo("agent").args(["run", "-q"]).args(nested)).ok();
+    assert_eq!(out.stdout.trim(), "marker=LEAF_B", "{out}");
 }
 
 /// The unit hashes of `package` in a base's dev profile, in either layout.
