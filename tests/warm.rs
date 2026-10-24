@@ -246,9 +246,10 @@ fn lint_strictness_never_fails_a_base() {
     );
 }
 
-/// A toolchain without clippy still gets a base, warmed without it.
-#[test]
-fn missing_clippy_is_skipped() {
+/// A repository with the default configuration whose `cargo clippy` fails
+/// the way it does where clippy is not installed. Keep the directory alive
+/// as long as the repository.
+fn repo_without_clippy() -> (tempfile::TempDir, TestRepo) {
     use std::os::unix::fs::PermissionsExt;
     let bin = tempfile::tempdir_in(env!("CARGO_TARGET_TMPDIR")).unwrap();
     let fake = bin.path().join("cargo-clippy");
@@ -261,6 +262,13 @@ fn missing_clippy_is_skipped() {
     )
     .unwrap();
     let repo = TestRepo::with_default_config(&[("PATH", path.to_str().unwrap())]);
+    (bin, repo)
+}
+
+/// A toolchain without clippy still gets a base, warmed without it.
+#[test]
+fn missing_clippy_is_skipped() {
+    let (_bin, repo) = repo_without_clippy();
     let report = default_base(&repo);
     let commands = report["base"]["commands"].as_array().unwrap();
     assert!(
@@ -273,4 +281,20 @@ fn missing_clippy_is_skipped() {
             .any(|w| w.contains("clippy is not installed")),
         "{report}"
     );
+}
+
+/// Skipping clippy must not leave a base that warms nothing, which config
+/// validation rejects for the same reason.
+#[test]
+fn missing_clippy_fails_a_clippy_only_base() {
+    let (_bin, repo) = repo_without_clippy();
+    commit_files(&repo, &[("ferry.toml", "[base]\ntargets = [\"clippy\"]\n")]);
+    let failed = repo.ferry(["--json", "base"]).failed();
+    assert!(
+        failed.stderr.contains("clippy is not installed")
+            && failed.stderr.contains("rustup component add clippy"),
+        "{failed}"
+    );
+    let listed = repo.ferry_json(["list"]);
+    assert_eq!(listed["bases"], serde_json::json!([]), "{listed}");
 }

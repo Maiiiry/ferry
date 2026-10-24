@@ -117,7 +117,7 @@ pub fn build(ctx: &Context, rev: &str, cold: bool) -> Result<BuildReport> {
     // later builds a new base instead of reusing one that never ran it.
     let commands = runnable(&ctx.settings.warm_commands, &mut warnings, || {
         Toolchain::clippy_available(&ctx.repo.main_worktree)
-    });
+    })?;
     let hash = fingerprint(
         ctx,
         &commit,
@@ -652,16 +652,20 @@ fn runnable(
     commands: &[WarmCommand],
     warnings: &mut Vec<String>,
     clippy_installed: impl FnOnce() -> bool,
-) -> Vec<WarmCommand> {
+) -> Result<Vec<WarmCommand>> {
     if !commands.iter().any(|c| c.clippy) || clippy_installed() {
-        return commands.to_vec();
+        return Ok(commands.to_vec());
+    }
+    let kept: Vec<WarmCommand> = commands.iter().filter(|c| !c.clippy).cloned().collect();
+    if kept.is_empty() {
+        return Err(Error::ClippyMissing);
     }
     warnings.push(
         "clippy is not installed for this toolchain; the base does not warm `cargo clippy` \
          (rustup component add clippy)"
             .into(),
     );
-    commands.iter().filter(|c| !c.clippy).cloned().collect()
+    Ok(kept)
 }
 
 fn build_plan(
@@ -794,17 +798,36 @@ mod tests {
         let generated = [cmd("cargo build", false), cmd("cargo clippy", true)];
 
         let mut warnings = Vec::new();
-        assert_eq!(runnable(&generated, &mut warnings, || true), generated);
+        assert_eq!(
+            runnable(&generated, &mut warnings, || true).unwrap(),
+            generated
+        );
         assert_eq!(warnings, Vec::<String>::new());
 
-        let kept = runnable(&generated, &mut warnings, || false);
+        let kept = runnable(&generated, &mut warnings, || false).unwrap();
         assert_eq!(kept, [cmd("cargo build", false)]);
         assert_eq!(warnings.len(), 1);
         assert!(warnings[0].contains("rustup component add clippy"));
 
         let explicit = [cmd("cargo clippy", false)];
-        let kept = runnable(&explicit, &mut warnings, || panic!("probed without clippy"));
+        let kept = runnable(&explicit, &mut warnings, || panic!("probed without clippy")).unwrap();
         assert_eq!(kept, explicit);
         assert_eq!(warnings.len(), 1);
+    }
+
+    /// Config validation rejects an empty command list; dropping clippy must
+    /// not produce one either.
+    #[test]
+    fn runnable_refuses_to_drop_every_command() {
+        let only_clippy = [WarmCommand {
+            line: "cargo clippy".into(),
+            clippy: true,
+        }];
+        let err = runnable(&only_clippy, &mut Vec::new(), || false).unwrap_err();
+        assert!(matches!(err, Error::ClippyMissing), "{err}");
+        assert!(
+            err.hint()
+                .is_some_and(|h| h.contains("rustup component add clippy"))
+        );
     }
 }

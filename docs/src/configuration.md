@@ -97,7 +97,7 @@ invocation selects the same package, features, profile and target kind.
 
 | Key | Type | Default | Meaning |
 |---|---|---|---|
-| `targets` | array of `"check"`, `"build"`, `"test"`, `"clippy"` | `["build", "test", "check", "clippy"]` | Cargo subcommands to run. `"test"` runs `cargo test --no-run`, which builds the test binaries without running them. `"clippy"` runs `cargo clippy --all-targets --keep-going` (each flag left out when `cargo-args` already selects targets or has it); it is skipped with a warning when clippy is not installed, and its failure only warns. |
+| `targets` | array of `"check"`, `"build"`, `"test"`, `"clippy"` | `["build", "test", "check", "clippy"]` | Cargo subcommands to run. `"test"` runs `cargo test --no-run`, which builds the test binaries without running them. `"clippy"` runs `cargo clippy --all-targets --keep-going` (each flag left out when `cargo-args` already selects targets or has it); it is skipped with a warning when clippy is not installed (an error when it is the only target), and its failure only warns. |
 | `profiles` | array of profile names | `["dev"]` | Profiles to warm. `"dev"` adds no flag (Cargo's own selection, so tests keep using the `test` profile), `"release"` adds `--release`, any other name adds `--profile <name>`. Names must be non-empty and contain no whitespace. |
 | `cargo-args` | array of strings | `["--workspace"]` | Appended to every generated command, shell-quoted. |
 | `commands` | array of strings | unset | Replaces the generated commands. Each entry is a shell command line. Must not be empty when set. |
@@ -124,7 +124,8 @@ dev-dependencies; `--keep-going` warms the rest when some target fails, for
 example benches that need nightly.
 
 The generated clippy command is optional. When `cargo clippy --version`
-fails in the main checkout, `ferry base` warns and leaves it out. When it
+fails in the main checkout, `ferry base` warns and leaves it out, or fails
+when it is the only warm command, since a base must warm something. When it
 runs and fails (a deny-level lint, a bench that needs nightly), `ferry base`
 warns, keeps the base and lists the command in `incomplete`. Commands from
 `commands` or `FERRY_BASE_COMMAND` are never optional.

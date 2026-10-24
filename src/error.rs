@@ -44,6 +44,11 @@ pub enum Error {
     #[error("base build failed: `{command}` exited with {status}")]
     BaseBuildFailed { command: String, status: String },
 
+    #[error(
+        "clippy is not installed for this toolchain, and `cargo clippy` is the only warm command"
+    )]
+    ClippyMissing,
+
     #[error("agent `{0}` already exists")]
     AgentExists(String),
 
@@ -78,6 +83,9 @@ impl Error {
             Error::NoBase => Some("run `ferry base` to build one".into()),
             Error::BaseBuildFailed { .. } => Some(
                 "fix the build, or set the warm commands in ferry.toml ([base] targets or commands)".into(),
+            ),
+            Error::ClippyMissing => Some(
+                "rustup component add clippy, or add other [base] targets in ferry.toml".into(),
             ),
             Error::BaseMissing { .. } => {
                 Some("run `ferry base` to rebuild it, then `ferry gc` to clean up".into())
