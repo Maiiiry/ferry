@@ -230,13 +230,12 @@ are byte-for-byte identical to the base; it never re-stamps a live worktree.
 
 ## Errors and odd states
 
-- **`ferry rm` says an agent you never touched has uncommitted changes.** If
-  the repository does not track `Cargo.lock` and does not ignore it either,
-  Ferry copies the base's `Cargo.lock` into each new worktree (so agents
-  resolve the same dependency versions), and git reports it as untracked.
-  Commit `Cargo.lock` or add it to `.gitignore`, or use `ferry rm --force`.
-  The same untracked file keeps the Claude Code `WorktreeRemove` hook from
-  removing such agents and `ferry gc` from reaping them.
+- **An untracked `Cargo.lock` in a new worktree.** If the repository does not
+  track `Cargo.lock`, Ferry copies the base's into each new worktree so agents
+  resolve the same dependency versions. `ferry rm`, the Claude Code
+  `WorktreeRemove` hook and `ferry gc` recognise that unchanged copy and do not
+  treat it as the agent's work; once the agent changes it (say, by adding a
+  dependency), it counts as uncommitted.
 - **`agent ... was not fully created`**, or `incomplete` in `ferry list`:
   spawning was interrupted. Remove it with `ferry rm <name>`.
 - **`base ... is missing or incomplete`**: run `ferry base` to rebuild it,

@@ -92,11 +92,11 @@ store, locked with `git worktree lock` so git never prunes it. They show up in
 `ferry.toml` when you run `ferry init` and, in remap-paths mode, one line in
 `.git/info/exclude`.
 
-## Why are there store directories for repositories I never used with Ferry?
+## Does the shim leave anything behind in repositories I never use with Ferry?
 
-The shim and the Claude Code `SessionStart` hook look up every git
-repository they run in, and that creates an empty store directory for it under
-the store parent. They hold no build state until you run `ferry base` there.
+No. The shim and the Claude Code `SessionStart` hook look up every git
+repository they run in, but only read: a repository without a store gets plain
+cargo, and no store directory is created for it.
 
 ## Does Ferry handle rust-analyzer?
 

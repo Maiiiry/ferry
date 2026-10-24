@@ -120,7 +120,7 @@ Create an agent: a git worktree plus a forked warm target dir.
 |---|---|
 | `<NAME>` | Agent name (letters, digits, '-', '_', '.') |
 | `--from <REF>` | Revision the agent's branch starts at [default: HEAD] |
-| `--path <DIR>` | Where to create the worktree (default: inside the store) |
+| `--path <DIR>` | Where to create the worktree (default: the worktree directory, see `[agent] worktree-dir`) |
 | `--branch <BRANCH>` | Branch name (default: the configured branch prefix plus NAME) |
 
 Creates the branch and worktree, stamps the files that are identical to the
@@ -133,9 +133,8 @@ branch and fork.
 
 Without `--path`, the worktree goes in the worktree parent directory (see
 [Configuration](configuration.md#agent-worktrees-and-branches)), which is not
-inside the store unless you configured it that way; the `--help` text is out
-of date on this point. A relative `--path` is relative to the current
-directory. The directory must not exist or must be empty.
+inside the store unless you configured it that way. A relative `--path` is
+relative to the current directory. The directory must not exist or must be empty.
 
 JSON: `{ "agent": {...}, "backend_reason": <string>, "fork": { "files", "bytes", "elapsed" }, "elapsed_secs": <number>, "warnings": [...] }`,
 where `agent` has `name`, `state`, `base`, `from`, `branch`, `worktree`,
@@ -223,7 +222,9 @@ Bases: `*` marks the current base; `BUILT` is its age (or `incomplete`);
 `DISK` for an agent is the build state it holds beyond the base: the overlay
 upper layer, or for reflink clones the files rewritten since the fork (shared
 extents cannot be seen through `stat`), or the whole copy. `STATUS` is
-`running` when processes run in the agent's overlay sandbox, `incomplete`
+`running` while any process started through `ferry run`, `ferry shell` or the
+cargo shim for the agent is alive (JSON `busy`, with the pids Ferry can
+attribute in `running`), `incomplete`
 when spawning did not finish (remove it with `ferry rm`), `worktree missing`,
 or `idle`.
 
@@ -247,8 +248,10 @@ in the agent's sandbox. The branch is kept if it has new commits.
 |---|---|
 | `--force` | Discard uncommitted changes and ignore running processes |
 
-Untracked files count as uncommitted changes. Running processes are detected
-for overlay agents. The branch is deleted only if it still points at the
+Untracked files count as uncommitted changes, except the `Cargo.lock` that
+spawn copied from the base when the repository does not track one (as long as
+it is unchanged). Processes started for the agent are detected on every
+backend. The branch is deleted only if it still points at the
 commit the agent started from; otherwise Ferry keeps it and says how many
 commits it carries.
 
@@ -272,8 +275,7 @@ Claude Code. Agents created with `ferry spawn` are never removed. Then deletes
 every base that is neither current nor used by an agent, including incomplete
 ones left by interrupted builds, and skips bases that are being built.
 
-The human-readable output lists the removed and skipped bases only; use
-`--json` to see reaped agents.
+The human-readable output lists reaped agents and removed and skipped bases.
 
 JSON: `{ "removed": [...], "busy": [...], "kept": [...], "reaped_agents": [...], "freed_bytes": <number>, "dry_run": <bool> }`.
 
@@ -287,7 +289,7 @@ Check platform capabilities and print fixes for what is missing.
 
 | Option | Meaning |
 |---|---|
-| `--apparmor-profile` | Print an `AppArmor` profile that allows this ferry binary to use user namespaces (Ubuntu 23.10+) |
+| `--apparmor-profile` | Print an `AppArmor` profile that allows this ferry binary to use user namespaces (Ubuntu 24.04+) |
 
 Prints one line per check (`✓` ok, `·` information, `!` warning with a `fix:`
 line, `✗` failure), then the plan: which fork backend agents will use and
