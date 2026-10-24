@@ -60,7 +60,7 @@ $ ferry doctor
   ✓ namespaces  unprivileged user + mount namespaces work
   ✓ overlayfs   mounts inside user namespaces
 
-  → agents fork with overlay (overlayfs works in the namespace sandbox on btrfs) and build in a namespace sandbox at canonical paths (incremental reuse on the first edit)
+  → agents fork with reflink (btrfs supports copy-on-write clones) and build in a namespace sandbox at canonical paths (incremental reuse on the first edit)
 ```
 
 The last line is the plan: how agents will fork their target dir and whether
@@ -105,7 +105,7 @@ $ ferry spawn a1
 ✓ spawned a1 in 0.09s
   worktree  /home/you/.local/share/ferry/worktrees/myproject-d5c4fd3a48754db4/a1  (branch ferry/a1)
   base      9ae1f5d4b0aa-20509c3c
-  fork      overlay — overlayfs works in the namespace sandbox on btrfs
+  fork      reflink — btrfs supports copy-on-write clones
   sandbox   namespace
   stamped   3/3 tracked files
   run       ferry run a1 -- cargo build
@@ -156,8 +156,8 @@ Bases
 
 Agents
   NAME  BASE                   FORK     SANDBOX    DISK       STATUS  WORKTREE
-  a1    9ae1f5d4b0aa-20509c3c  overlay  namespace  136.0 KiB  idle    /home/you/.local/share/ferry/worktrees/myproject-d5c4fd3a48754db4/a1
-  a2    9ae1f5d4b0aa-20509c3c  overlay  namespace  0 B        idle    /home/you/.local/share/ferry/worktrees/myproject-d5c4fd3a48754db4/a2
+  a1    9ae1f5d4b0aa-20509c3c  reflink  namespace  136.0 KiB  idle    /home/you/.local/share/ferry/worktrees/myproject-d5c4fd3a48754db4/a1
+  a2    9ae1f5d4b0aa-20509c3c  reflink  namespace  0 B        idle    /home/you/.local/share/ferry/worktrees/myproject-d5c4fd3a48754db4/a2
 ```
 
 `*` marks the current base, which new agents fork from. `DISK` for an agent is
@@ -171,7 +171,7 @@ ferry gc
 ```
 
 `ferry rm` refuses while the worktree has uncommitted changes (untracked files
-count) or, for overlay agents, while processes still run in the agent's
+count) or while processes still run in the agent's
 sandbox; `--force` overrides both. It deletes the
 agent's branch only if the branch has no new commits, and otherwise tells you
 how many it kept. `ferry gc` deletes bases that are neither current nor used
@@ -179,8 +179,9 @@ by an agent.
 
 ## Running what you built
 
-With the overlay backend, an agent's target dir exists only inside its
-sandbox. Run binaries and tests through Ferry:
+Inside the namespace sandbox, the paths cargo prints exist only there, and
+with the overlay backend so does the whole target dir. Run binaries and tests
+through Ferry:
 
 ```sh
 ferry run a1 -- cargo run --bin myapp
@@ -188,7 +189,8 @@ ferry shell a1        # an interactive shell in a1's build context
 ```
 
 Inside `ferry run` and `ferry shell`, the target dir is at the path that
-`ferry --json env a1` prints as `build_target_dir`.
+`ferry --json env a1` prints as `build_target_dir`. Reflink and copy targets
+are also on the host, at `host_target_dir`.
 
 ## Next steps
 

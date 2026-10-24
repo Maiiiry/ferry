@@ -241,12 +241,17 @@ pub trait Backend {
 
 | Backend | Platforms | Fork cost | Notes |
 |---|---|---|---|
-| `overlay` | Linux 5.11+, namespace sandbox required | O(1) | copy-up copies a file on its first write; on btrfs/XFS the copy-up is itself a reflink. The mount exists only inside the sandbox |
 | `reflink` | Linux (btrfs, XFS, OpenZFS 2.2+), macOS (APFS) | per-file `FICLONE` (Linux), one `clonefile(2)` of the tree (macOS) | target is a real dir; mtimes preserved |
+| `overlay` | Linux 5.11+, namespace sandbox required | O(1) | copy-up copies a file on its first write; on btrfs/XFS the copy-up is itself a reflink. The mount exists only inside the sandbox |
 | `copy` | everywhere | full copy | fallback |
 
-`auto` picks overlay when the agent runs in a namespace sandbox and overlayfs
-works there, else reflink when the store filesystem supports it, else copy. An
+`auto` picks reflink when the store filesystem supports copy-on-write clones,
+else overlay when the agent runs in a namespace sandbox and overlayfs works
+there, else copy. So auto picks overlay only on filesystems without clones
+(ext4, tmpfs). Reflink comes first because the overlay costs every build
+outside Cargo: the mount protocol below on entry, and on the per-call path
+(shim, hooks) a `syncfs` of the whole upper filesystem when the last process
+using the mount exits. An agent keeps the backend recorded at spawn. An
 explicit backend that is unavailable is an error, never a silent fallback.
 
 ## Sandbox (Linux)

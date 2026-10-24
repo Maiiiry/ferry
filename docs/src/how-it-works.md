@@ -14,7 +14,7 @@ the code is written against: invariants, on-disk layout, locks and lifecycle.
        ferry spawn a1       ferry spawn a2       ferry spawn a3
             |                    |                    |
        worktree a1          worktree a2          worktree a3     your branches, at host paths
-       fork of target       fork of target       fork of target  overlay layer, reflink or copy
+       fork of target       fork of target       fork of target  reflink, overlay layer or copy
             |
        cargo for a1 (via `ferry run a1` or the shim) runs in a1's private
        mount namespace, where
@@ -54,14 +54,20 @@ copying it, where possible. There are three backends:
 
 | Backend | How | Cost per agent |
 |---|---|---|
-| `overlay` | overlayfs: the base's target is a read-only lower layer, the agent writes to its own upper layer | constant time to fork; a file is copied into the upper layer on its first write (on btrfs and XFS that copy is itself a reflink) |
 | `reflink` | copy-on-write clone of every file (`FICLONE` on Linux, `clonefile(2)` on macOS) | time per file; disk only for files the agent rewrites |
+| `overlay` | overlayfs: the base's target is a read-only lower layer, the agent writes to its own upper layer | constant time to fork; a file is copied into the upper layer on its first write (on btrfs and XFS that copy is itself a reflink) |
 | `copy` | a full copy | time and disk for the whole target dir |
 
-`auto` (the default) picks overlay when the agent runs in the namespace
-sandbox and overlayfs works there, else reflink when the store's filesystem
-supports it, else copy. Ferry never uses hard links: Cargo rewrites some files
-in place, so a hard-linked fork would let an agent's build modify the base.
+`auto` (the default) picks reflink when the store's filesystem supports
+copy-on-write clones, else overlay when the agent runs in the namespace
+sandbox and overlayfs works there, else copy. A reflink fork is a plain
+directory, so a build needs no overlay mount. On the per-call path (shim,
+hooks), where each cargo call gets its own sandbox, an overlay build also
+waits for that sandbox's teardown, most likely the kernel syncing the whole
+store filesystem: about 0.2 s per build on ripgrep. Builds inside one
+long-lived `ferry run` session share its sandbox and do not pay this. Ferry
+never uses hard links: Cargo rewrites some files in place, so a hard-linked
+fork would let an agent's build modify the base.
 
 ## Stamping: making the fork look fresh
 

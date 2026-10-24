@@ -3,7 +3,19 @@
 
 mod common;
 
-use common::{ALL_PACKAGES, App, Snapshot, TestRepo, path_of};
+use common::{ALL_PACKAGES, App, Build, Snapshot, TestRepo, path_of};
+
+/// What `auto` must pick here (`fork::select`).
+fn expected_auto(repo: &TestRepo, sandbox: &str) -> &'static str {
+    let caps = repo.capabilities();
+    if caps.reflink.is_ok() {
+        "reflink"
+    } else if sandbox != "off" && caps.userns.is_ok() && caps.overlay.is_ok() {
+        "overlay"
+    } else {
+        "copy"
+    }
+}
 
 fn scenario(backend: &str, sandbox: &str) {
     let repo = TestRepo::with_env(&[("FERRY_BACKEND", backend), ("FERRY_SANDBOX", sandbox)]);
@@ -15,6 +27,11 @@ fn scenario(backend: &str, sandbox: &str) {
     if !available {
         return;
     }
+    let expected = if backend == "auto" {
+        expected_auto(&repo, sandbox)
+    } else {
+        backend
+    };
     let isolation = if sandbox != "off" && repo.capabilities().userns.is_ok() {
         "namespace"
     } else {
@@ -23,8 +40,10 @@ fn scenario(backend: &str, sandbox: &str) {
     let base = repo.base();
     let before = Snapshot::of(&repo.base_dir(&base));
 
+    let doctor = common::run(&mut repo.ferry_cmd(["--json", "doctor"])).json();
+    assert_eq!(doctor["plan"]["backend"], expected, "{doctor}");
     let report = repo.ferry_json(["spawn", "a"]);
-    assert_eq!(report["agent"]["backend"], backend, "{report}");
+    assert_eq!(report["agent"]["backend"], expected, "{report}");
     assert_eq!(report["agent"]["isolation"], isolation, "{report}");
     let worktree = path_of(&report["agent"]["worktree"]);
     // At its own paths the agent cannot trust local units, which may have
@@ -43,6 +62,16 @@ fn scenario(backend: &str, sandbox: &str) {
 
     repo.ferry(["rm", "--force", "a"]).ok();
     before.assert_unchanged(&Snapshot::of(&repo.base_dir(&base)));
+}
+
+#[test]
+fn auto_backend() {
+    scenario("auto", "auto");
+}
+
+#[test]
+fn auto_backend_without_sandbox() {
+    scenario("auto", "off");
 }
 
 #[test]
@@ -68,6 +97,26 @@ fn reflink_backend_without_sandbox() {
 #[test]
 fn overlay_backend() {
     scenario("overlay", "auto");
+}
+
+/// The backend is recorded at spawn: an overlay agent keeps overlay after
+/// `auto` starts preferring reflink, and still builds warm.
+#[test]
+fn an_overlay_agent_keeps_overlay_under_auto() {
+    let repo = TestRepo::with_env(&[("FERRY_BACKEND", "overlay")]);
+    if !repo.require_overlay() {
+        return;
+    }
+    repo.base();
+    repo.spawn("a");
+    let mut env = repo.ferry_cmd(["--json", "env", "a"]);
+    env.env("FERRY_BACKEND", "auto");
+    let env = common::run(&mut env).ok().json();
+    assert_eq!(env["backend"], "overlay", "{env}");
+    assert!(env["host_target_dir"].is_null(), "{env}");
+    let mut cargo = repo.agent_cargo("a");
+    cargo.env("FERRY_BACKEND", "auto").arg("build");
+    Build::run(&mut cargo).assert_rebuilt(&[]);
 }
 
 #[test]

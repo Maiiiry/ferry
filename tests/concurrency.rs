@@ -64,3 +64,29 @@ fn concurrent_spawns_all_succeed() {
         build.assert_rebuilt(&[]);
     }
 }
+
+/// Reflink sandboxes are plain bind mounts of one host directory: a build
+/// next to a live session needs no mount protocol and sees the same target.
+#[test]
+fn concurrent_sessions_of_a_reflink_agent_share_its_target() {
+    let repo = TestRepo::with_env(&[("FERRY_BACKEND", "reflink")]);
+    if !repo.require_reflink() {
+        return;
+    }
+    repo.base();
+    let worktree = repo.spawn("a");
+    let mut holder = repo
+        .ferry_cmd(["run", "a", "--", "sleep", "30"])
+        .spawn()
+        .unwrap();
+    thread::sleep(std::time::Duration::from_millis(500));
+    repo.set_marker(&worktree, "EDITED");
+    repo.build("a").assert_rebuilt(&["leaf", "mid", "app"]);
+    repo.build("a").assert_rebuilt(&[]);
+    assert_eq!(repo.app("a").marker, "EDITED");
+    let _ = holder.kill();
+    let _ = holder.wait();
+    for file in ["ns.json", "mount.lock"] {
+        assert!(!repo.store().join("agents/a").join(file).exists(), "{file}");
+    }
+}

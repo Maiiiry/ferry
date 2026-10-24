@@ -127,7 +127,7 @@ every call, so nothing needs exporting. See
        ferry spawn a1       ferry spawn a2       ferry spawn a3
             |                    |                    |
        worktree a1          worktree a2          worktree a3     your branches, at host paths
-       fork of target       fork of target       fork of target  overlay layer, reflink or copy
+       fork of target       fork of target       fork of target  reflink, overlay layer or copy
             |
        cargo for a1 (via `ferry run a1` or the shim) runs in a1's private
        mount namespace, where
@@ -139,9 +139,10 @@ every call, so nothing needs exporting. See
 
 - **Base:** `ferry base` builds one commit's workspace once and never touches
   it again. Refreshing for a newer commit is seeded from the previous base.
-- **Fork:** each agent gets an overlayfs upper layer over the base's target,
-  a copy-on-write clone (btrfs, XFS, APFS), or a plain copy. Never hard links:
-  Cargo rewrites some files in place.
+- **Fork:** each agent gets a copy-on-write clone of the base's target
+  (btrfs, XFS, APFS), or where clones are unavailable an overlayfs upper
+  layer over it, or a plain copy. Never hard links: Cargo rewrites some files
+  in place.
 - **Stamping:** a fresh checkout's files are newer than the base's artifacts,
   so Cargo would rebuild everything. Ferry sets the mtime of each file that is
   provably identical to the base (same blob, mode and bytes) to a fixed old
@@ -160,7 +161,7 @@ Ferry is not a security sandbox: agents run with your user's full privileges
 
 | Platform | Fork | Builds run | First edit after spawn |
 |---|---|---|---|
-| Linux with unprivileged user namespaces | overlay, reflink or copy | in a namespace sandbox at canonical paths | incremental reuse |
+| Linux with unprivileged user namespaces | reflink, overlay or copy | in a namespace sandbox at canonical paths | incremental reuse |
 | Ubuntu 24.04 and later | as above, once the AppArmor profile from `ferry doctor --apparmor-profile` is loaded for a root-owned `ferry` binary | as above; without the profile, at host paths | incremental reuse with the profile; dependency reuse without |
 | Containers (Docker's default seccomp blocks namespaces) | reflink or copy | at host paths | dependency reuse |
 | macOS | `clonefile` (APFS) or copy | at host paths: no canonical path | dependency reuse; incremental state is lost on the first edit. The experimental remap-paths mode reused 12 of 13 library codegen units after a fork on Linux, against 0 of 13 without; unverified on a real Mac |
@@ -221,13 +222,14 @@ more than the absolute times.
   (Ubuntu 24.04+ without the AppArmor profile, Docker's default seccomp
   profile, hardened systems), agents reuse only dependencies: the workspace's
   own crates rebuild once after spawn.
-- **Overlay copy-up costs disk.** An agent's first write to a file copies it
-  into the agent's upper layer; relinked binaries and incremental session
-  files make up most of it. On ext4 that is a full copy; on btrfs and XFS the
-  copy-up is a reflink. `ferry list` shows each agent's share.
-- **With the overlay backend, the target dir exists only inside the
-  sandbox.** Run built binaries through `ferry run` or `ferry shell`; paths
-  that cargo prints do not exist on the host.
+- **Overlay copy-up costs disk where clones are unavailable.** On ext4 and
+  tmpfs agents fork with overlay, and an agent's first write to a file copies
+  all of it into the agent's upper layer; relinked binaries and incremental
+  session files make up most of it. `ferry list` shows each agent's share.
+- **Paths that cargo prints in the sandbox do not exist on the host.** Run
+  built binaries through `ferry run` or `ferry shell`. Reflink and copy
+  targets are also reachable on the host at `ferry env`'s
+  `host_target_dir`; an overlay target exists only inside the sandbox.
 - **Build scripts that write outside `OUT_DIR`** write into the base's
   checkout, and agents do not get those files. `ferry base` warns when it
   happens.

@@ -155,10 +155,12 @@ pub struct Choice {
 /// Chooses a backend. An explicit preference that cannot be honoured is an
 /// error, never a silent fallback.
 ///
-/// `auto` order: overlay when the agent runs in a namespace sandbox and
-/// overlayfs works there (O(1) fork, and copy-up is itself a reflink when the
-/// store is on btrfs or XFS); otherwise reflink when the store's filesystem
-/// supports it; otherwise copy.
+/// `auto` order: reflink when the store's filesystem supports copy-on-write
+/// clones (a plain directory: no copy-up, no shared mount to coordinate, no
+/// upper-filesystem sync when a sandbox exits; costs time per file at
+/// spawn); otherwise overlay when the agent runs in a namespace sandbox and
+/// overlayfs works there (O(1) fork; copy-ups are full copies without
+/// clones); otherwise copy.
 pub fn select(
     pref: BackendPref,
     caps: &Capabilities,
@@ -196,18 +198,18 @@ pub fn select(
             kind: BackendKind::Copy,
             reason: "requested by configuration".into(),
         }),
-        BackendPref::Auto => match (overlay, reflink) {
+        BackendPref::Auto => match (reflink, overlay) {
             (Ok(reason), _) => Ok(Choice {
-                kind: BackendKind::Overlay,
-                reason,
-            }),
-            (Err(_), Ok(reason)) => Ok(Choice {
                 kind: BackendKind::Reflink,
                 reason,
             }),
-            (Err(no_overlay), Err(no_reflink)) => Ok(Choice {
+            (Err(no_reflink), Ok(reason)) => Ok(Choice {
+                kind: BackendKind::Overlay,
+                reason: format!("{reason}; {no_reflink}"),
+            }),
+            (Err(no_reflink), Err(no_overlay)) => Ok(Choice {
                 kind: BackendKind::Copy,
-                reason: format!("full copy: {no_overlay}; {no_reflink}"),
+                reason: format!("full copy: {no_reflink}; {no_overlay}"),
             }),
         },
     }
@@ -278,22 +280,26 @@ mod tests {
     }
 
     #[test]
-    fn auto_prefers_overlay_then_reflink_then_copy() {
+    fn auto_prefers_reflink_then_overlay_then_copy() {
         let ns = Isolation::Namespace;
         let auto = |reflink, overlay, isolation| {
-            select(BackendPref::Auto, &caps(reflink, overlay), isolation)
-                .unwrap()
-                .kind
+            select(BackendPref::Auto, &caps(reflink, overlay), isolation).unwrap()
         };
-        let overlay_if_linux = if cfg!(target_os = "linux") {
-            BackendKind::Overlay
+        assert_eq!(auto(true, true, ns).kind, BackendKind::Reflink);
+        assert_eq!(auto(true, true, Isolation::None).kind, BackendKind::Reflink);
+        assert_eq!(auto(true, false, ns).kind, BackendKind::Reflink);
+        let no_clones = auto(false, true, ns);
+        if cfg!(target_os = "linux") {
+            assert_eq!(no_clones.kind, BackendKind::Overlay);
+            assert!(
+                no_clones.reason.contains("no copy-on-write clones"),
+                "{}",
+                no_clones.reason
+            );
         } else {
-            BackendKind::Reflink
-        };
-        assert_eq!(auto(true, true, ns), overlay_if_linux);
-        assert_eq!(auto(true, true, Isolation::None), BackendKind::Reflink);
-        assert_eq!(auto(true, false, ns), BackendKind::Reflink);
-        let copy = select(BackendPref::Auto, &caps(false, false), ns).unwrap();
+            assert_eq!(no_clones.kind, BackendKind::Copy);
+        }
+        let copy = auto(false, false, ns);
         assert_eq!(copy.kind, BackendKind::Copy);
         assert!(copy.reason.contains("testfs"), "{}", copy.reason);
     }
