@@ -46,7 +46,7 @@ first edit gets no incremental reuse.
 
 ### Containers
 
-Inside a container, Ferry falls back to dependency reuse unless the container
+Inside a container, Ferry falls back to crate-level reuse unless the container
 allows the namespace sandbox. Accepting the fallback needs nothing else.
 Otherwise up to four layers are in the way:
 

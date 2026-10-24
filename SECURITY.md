@@ -110,8 +110,9 @@ namespace. This applies equally to every user-namespace profile Ubuntu ships;
 Ubuntu 25.04 and later set that sysctl to `1`.
 
 If you do not want this trade-off, leave the restriction on and set
-`sandbox = "off"`: builds then run at host paths, dependencies are still
-reused, and the workspace's own crates rebuild once per agent.
+`sandbox = "off"`: builds then run at host paths, unchanged crates are still
+reused except the few that captured the base's paths, and an agent's first
+edit gets no incremental reuse.
 
 ### What counts as a vulnerability
 
