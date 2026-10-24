@@ -8,13 +8,14 @@ permissions: {}
 
 # Pushes and PRs made with GITHUB_TOKEN start no workflows (release PR CI would
 # wait for approval, and the tag would never start release.yml), so both jobs
-# use a GitHub App token. The jobs' own GITHUB_TOKEN only needs to read.
+# use a GitHub App token. The jobs' own GITHUB_TOKEN only needs to read. Both
+# jobs skip until the RELEASE_APP_CLIENT_ID variable is set.
 jobs:
   # Publishes to crates.io and pushes the vX.Y.Z tag when a release PR merges.
   # The tag starts release.yml (dist), which creates the GitHub Release.
   release:
     name: Release-plz release
-    if: github.repository_owner == 'patwrall'
+    if: github.repository_owner == 'patwrall' && vars.RELEASE_APP_CLIENT_ID != ''
     runs-on: ubuntu-24.04
     environment: release
     permissions:
@@ -45,7 +46,7 @@ jobs:
   # Opens or updates the release PR (version bump + CHANGELOG.md).
   release-pr:
     name: Release-plz PR
-    if: github.repository_owner == 'patwrall'
+    if: github.repository_owner == 'patwrall' && vars.RELEASE_APP_CLIENT_ID != ''
     runs-on: ubuntu-24.04
     permissions:
       contents: read
