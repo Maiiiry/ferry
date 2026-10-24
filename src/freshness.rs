@@ -41,6 +41,7 @@ use std::os::unix::ffi::OsStringExt;
 use std::os::unix::fs::MetadataExt;
 use std::path::{Component, Path, PathBuf};
 use std::thread;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use rustix::fs::{AtFlags, CWD, Mode, OFlags, Timespec, Timestamps};
 use rustix::io::Errno;
@@ -312,6 +313,46 @@ pub fn apply(plan: &StampPlan) -> Result<StampReport> {
         }
     }
     Ok(report)
+}
+
+/// Makes every regular file and directory that `plan` skipped for differing
+/// from the base, or for being reached through a changed symlink, at least
+/// as new as `at_least`. Symlinks, submodules and missing paths are left
+/// alone, and nothing is reached through a symlink.
+///
+/// Checkout gives such paths the current time, but a post-checkout hook
+/// that restores commit times, or clock skew, can leave them older than the
+/// base's artifacts, and Cargo would keep stale units. Returns the number
+/// of paths changed.
+pub fn freshen_skipped(plan: &StampPlan, at_least: SystemTime) -> Result<usize> {
+    let Ok(since_epoch) = at_least.duration_since(UNIX_EPOCH) else {
+        return Ok(0);
+    };
+    let time = Timespec {
+        tv_sec: i64::try_from(since_epoch.as_secs()).unwrap_or(i64::MAX),
+        tv_nsec: since_epoch.subsec_nanos().into(),
+    };
+    let mut freshened = 0;
+    for (rel, reason) in plan.skipped.iter().chain(&plan.skipped_dirs) {
+        if matches!(reason, SkipReason::NotRegularFile | SkipReason::Missing) {
+            continue;
+        }
+        let path = under(&plan.root, rel);
+        if !parent_is_real(&plan.root, &path)? {
+            continue;
+        }
+        let meta = match fs::symlink_metadata(&path) {
+            Ok(meta) if meta.is_file() || meta.is_dir() => meta,
+            Ok(_) => continue,
+            Err(e) if is_gone(&e) => continue,
+            Err(e) => return Err(e).at("stat", &path),
+        };
+        if meta.modified().at("stat", &path)? < at_least {
+            set_times(&path, time)?;
+            freshened += 1;
+        }
+    }
+    Ok(freshened)
 }
 
 /// Stamps every tracked regular file of a freshly created base checkout, and
@@ -786,13 +827,31 @@ fn stamp_unchanged(root: &Path, verified: &Verified) -> Result<bool> {
 }
 
 fn set_stamp(path: &Path) -> Result<()> {
+    set_times(path, STAMP)
+}
+
+fn set_times(path: &Path, time: Timespec) -> Result<()> {
     let times = Timestamps {
-        last_access: STAMP,
-        last_modification: STAMP,
+        last_access: time,
+        last_modification: time,
     };
     rustix::fs::utimensat(CWD, path, &times, AtFlags::SYMLINK_NOFOLLOW)
         .map_err(io::Error::from)
         .at("set the mtime of", path)
+}
+
+/// Whether every directory from `root` down to the parent of `path`, a path
+/// under `root` without `.` or `..`, is a real directory.
+fn parent_is_real(root: &Path, path: &Path) -> Result<bool> {
+    let parent = match path.parent() {
+        Some(parent) if path != root => parent,
+        _ => return Ok(true),
+    };
+    match fs::canonicalize(parent) {
+        Ok(canonical) => Ok(canonical == parent),
+        Err(e) if is_gone(&e) => Ok(false),
+        Err(e) => Err(e).at("resolve", parent),
+    }
 }
 
 fn under(root: &Path, rel: &Path) -> PathBuf {
@@ -1684,6 +1743,104 @@ mod tests {
         }
         let restored_mtime = fs::metadata(&restored).unwrap().modified().unwrap();
         assert_eq!(restored_mtime, original);
+    }
+
+    /// Sets the atime and mtime of `path` itself, even of a symlink.
+    fn set_secs(path: &Path, secs: i64) {
+        let time = Timespec {
+            tv_sec: secs,
+            tv_nsec: 0,
+        };
+        set_times(path, time).unwrap();
+    }
+
+    #[test]
+    fn skipped_paths_are_made_at_least_as_new_as_asked() {
+        // As a hook restoring commit times leaves them.
+        const OLD: i64 = 1_000_000_000;
+        let fx = Fixture::with(
+            &[
+                ("same.rs", "s\n"),
+                ("blob.rs", "b\n"),
+                ("bytes.rs", "abc\n"),
+                ("newer.rs", "n\n"),
+                ("gone.rs", "g\n"),
+                ("sub/a.rs", "a\n"),
+                ("v1.txt", "1\n"),
+                ("v2.txt", "2\n"),
+                ("vendor/x.rs", "x\n"),
+            ],
+            |fx| {
+                symlink("v1.txt", fx.repo.join("cur")).unwrap();
+                symlink("same.rs", fx.repo.join("link")).unwrap();
+                fx.git(&fx.repo, &["add", "--all"]);
+            },
+        );
+        let agent = &fx.agent;
+        write(&agent.join("blob.rs"), "b changed\n");
+        write(&agent.join("newer.rs"), "n changed\n");
+        write(&agent.join("new.rs"), "new\n");
+        write(&agent.join("vendor/added.rs"), "added\n");
+        relink("v2.txt", &agent.join("cur"));
+        fx.git(agent, &["add", "--all"]);
+        write(&agent.join("bytes.rs"), "acb\n");
+        write(&agent.join("sub/untracked.txt"), "u\n");
+        fs::remove_file(agent.join("gone.rs")).unwrap();
+        // vendor/added.rs differs from the base, but is now reached through
+        // a symlink out of the worktree.
+        let outside = fx.outside().join("vendor");
+        write(&outside.join("added.rs"), "added\n");
+        fs::remove_dir_all(agent.join("vendor")).unwrap();
+        symlink(&outside, agent.join("vendor")).unwrap();
+        for rel in [
+            "", "blob.rs", "bytes.rs", "cur", "link", "new.rs", "same.rs", "sub", "sub/a.rs",
+            "v1.txt", "v2.txt", "vendor",
+        ] {
+            set_secs(&under(agent, Path::new(rel)), OLD);
+        }
+        set_secs(&agent.join("newer.rs"), 1_600_000_000);
+        set_secs(&outside.join("added.rs"), OLD);
+
+        let plan = fx.plan();
+        let reached = SkipReason::ReachedThroughChangedSymlink;
+        assert_eq!(
+            reasons(plan.skipped()),
+            [
+                ("blob.rs".into(), SkipReason::BlobDiffers),
+                ("bytes.rs".into(), SkipReason::ContentDiffers),
+                ("cur".into(), SkipReason::NotRegularFile),
+                ("gone.rs".into(), SkipReason::Missing),
+                ("link".into(), SkipReason::NotRegularFile),
+                ("new.rs".into(), SkipReason::NotInBase),
+                ("newer.rs".into(), SkipReason::BlobDiffers),
+                ("v1.txt".into(), reached),
+                ("v2.txt".into(), reached),
+                ("vendor/added.rs".into(), SkipReason::NotInBase),
+                ("vendor/x.rs".into(), SkipReason::Missing),
+            ]
+        );
+        apply(&plan).unwrap();
+        let at_least = UNIX_EPOCH + Duration::from_secs(1_500_000_000);
+        assert_eq!(freshen_skipped(&plan, at_least).unwrap(), 7);
+
+        for rel in [
+            "", "blob.rs", "bytes.rs", "new.rs", "sub", "v1.txt", "v2.txt",
+        ] {
+            let meta = fs::symlink_metadata(under(agent, Path::new(rel))).unwrap();
+            assert_eq!(
+                (meta.mtime(), meta.atime()),
+                (1_500_000_000, 1_500_000_000),
+                "{rel:?}"
+            );
+        }
+        for rel in ["cur", "link", "vendor"] {
+            assert_eq!(mtime(&agent.join(rel)), (OLD, 0), "{rel}");
+        }
+        assert_eq!(mtime(&outside.join("added.rs")), (OLD, 0));
+        assert_eq!(mtime(&agent.join("newer.rs")), (1_600_000_000, 0));
+        assert_eq!(mtime(&agent.join("same.rs")), STAMPED);
+        assert_eq!(mtime(&agent.join("sub/a.rs")), STAMPED);
+        assert_eq!(freshen_skipped(&plan, at_least).unwrap(), 0);
     }
 
     #[test]
