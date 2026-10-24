@@ -85,10 +85,11 @@ pub struct Facts {
     /// `--bin-dir`, canonicalized as far as it exists.
     pub bin_dir: PathBuf,
     pub bin_dir_problem: Option<String>,
-    /// Whether `bin_dir/ferry` holds the running binary's bytes.
+    /// Whether `bin_dir/ferry` is a root-owned regular file with the running
+    /// binary's bytes ([`holds_binary`]).
     pub installed: bool,
-    /// The namespace probe of [`Facts::target`], when that is `exe` or an
-    /// identical copy.
+    /// The namespace probe of [`Facts::target`], when that is `exe`
+    /// profiled where it is or an installed copy.
     pub target_userns: Option<Probe>,
     pub parser: Option<PathBuf>,
     /// Whether the `AppArmor` 4.0 ABI the profile declares is installed.
@@ -154,9 +155,11 @@ impl Facts {
         if file.exists() && !facts.ferry_files.iter().any(|f| f.path == file) {
             facts.foreign_files.push(file);
         }
-        if target == facts.exe {
+        // `target` can be `exe` with `exe_problem` set, e.g. a user-owned
+        // file in a root-owned directory; then it still has to be replaced.
+        if facts.exe_problem.is_none() {
             facts.target_userns = Some(facts.caps.userns.clone());
-        } else if same_bytes(&target, Path::new(SELF_EXE)) {
+        } else if holds_binary(&target, Path::new(SELF_EXE)) {
             facts.installed = true;
             facts.target_userns = Some(verify(&target, &home).userns);
         }
@@ -406,7 +409,7 @@ pub fn decide(f: &Facts) -> Decision<InstallPlan> {
 /// machine that is set up does nothing.
 fn install_plan(f: &Facts, parser: &Path) -> Decision<InstallPlan> {
     let target = f.target();
-    let install = target != f.exe && !f.installed;
+    let install = f.exe_problem.is_some() && !f.installed;
     let profile_path = f.profile_path(&target);
     let profile = doctor::apparmor_profile(&target);
     let remove: Vec<PathBuf> = f
@@ -678,6 +681,15 @@ pub fn current_exe() -> Result<PathBuf> {
     Ok(std::fs::canonicalize(&exe).unwrap_or(exe))
 }
 
+/// Whether `target` is an installed copy of `binary` that a profile can
+/// name: a regular file, not a symlink (`AppArmor` matches the resolved
+/// path), that only root can replace, with `binary`'s bytes.
+pub fn holds_binary(target: &Path, binary: &Path) -> bool {
+    std::fs::symlink_metadata(target).is_ok_and(|m| m.file_type().is_file())
+        && doctor::apparmor_path_problem(target).is_none()
+        && same_bytes(target, binary)
+}
+
 /// Whether both files can be read and have the same bytes.
 pub fn same_bytes(a: &Path, b: &Path) -> bool {
     match (std::fs::read(a), std::fs::read(b)) {
@@ -936,6 +948,63 @@ mod tests {
         assert!(steps.contains(USER_EXE), "{steps}");
         assert!(steps.contains("-r"), "{steps}");
         assert_eq!(p.warnings, Vec::<String>::new());
+    }
+
+    #[test]
+    fn plan_replaces_user_owned_binary_in_root_owned_dir() {
+        // After `sudo cp -p ~/.cargo/bin/ferry /usr/local/bin/`, the
+        // directory is root's, the file is the user's, and it is the binary
+        // that runs.
+        let mut f = ubuntu();
+        f.exe = "/usr/local/bin/ferry".into();
+        f.exe_problem = Some("/usr/local/bin/ferry is writable".into());
+        let p = plan(decide(&f));
+        assert!(p.install, "{p:?}");
+        assert_eq!(p.target, f.exe);
+        assert_eq!(p.sudo_argv(42, false)[7], "/usr/local/bin/ferry");
+
+        // A profile an earlier run loaded for it works, but the file is
+        // still the user's.
+        f.caps.userns = Probe::Ok;
+        f.ferry_files = vec![ferry_file("usr.local.bin.ferry", "/usr/local/bin/ferry")];
+        let p = plan(decide(&f));
+        assert!(p.install, "{p:?}");
+        assert_eq!(p.remove, Vec::<PathBuf>::new());
+    }
+
+    #[test]
+    fn user_owned_copy_is_not_installed() {
+        if rustix::process::geteuid().as_raw() == 0 {
+            return;
+        }
+        let tmp = tempfile::tempdir().unwrap();
+        let copy = tmp.path().join("ferry");
+        std::fs::copy(SELF_EXE, &copy).unwrap();
+        assert!(same_bytes(&copy, Path::new(SELF_EXE)));
+        assert!(!holds_binary(&copy, Path::new(SELF_EXE)));
+    }
+
+    /// `AppArmor` attaches by the resolved path, so a profile for a symlink
+    /// never attaches: root has to replace the link with the file.
+    #[test]
+    fn symlink_is_not_installed() {
+        // A root-owned symlink to a root-owned binary, such as /bin/sh on
+        // NixOS, Debian or Fedora.
+        let Some((link, file)) = ["/bin/sh", "/usr/bin/sh", "/usr/bin/env", "/bin/bash"]
+            .iter()
+            .map(Path::new)
+            .filter(|p| std::fs::symlink_metadata(p).is_ok_and(|m| m.is_symlink()))
+            .filter_map(|p| Some((p, std::fs::canonicalize(p).ok()?)))
+            .find(|(link, file)| {
+                doctor::apparmor_path_problem(link).is_none()
+                    && doctor::apparmor_path_problem(file).is_none()
+            })
+        else {
+            eprintln!("skipping: no root-owned symlink to a root-owned binary here");
+            return;
+        };
+        assert!(holds_binary(&file, &file), "{}", file.display());
+        assert!(!holds_binary(link, &file), "{}", link.display());
     }
 
     #[test]
@@ -1261,6 +1330,20 @@ mod tests {
         assert!(lines[0].starts_with("-Q -K "), "{log}");
         assert!(lines[0].contains(&format!("/.{name}.new.")), "{log}");
         assert_eq!(lines[1], format!("-r {}", profile.display()));
+
+        // A symlink at the target is replaced by the file, not followed.
+        let elsewhere = dir.join("elsewhere");
+        std::fs::write(&elsewhere, b"old").unwrap();
+        std::fs::remove_file(&installed).unwrap();
+        std::os::unix::fs::symlink(&elsewhere, &installed).unwrap();
+        let out = run_as_fake_root(&args, p.profile.as_bytes()).unwrap();
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert!(std::fs::symlink_metadata(&installed).unwrap().is_file());
+        assert_eq!(std::fs::read(&elsewhere).unwrap(), b"old");
 
         // A failing parse check changes no profile.
         std::fs::write(dir.join("apparmor_parser"), "#!/bin/sh\nexit 1\n").unwrap();

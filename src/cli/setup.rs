@@ -138,11 +138,11 @@ fn install(facts: &Facts, opts: Opts) -> anyhow::Result<Report> {
 /// create user namespaces, then points the cargo shim at it.
 fn verify_install(report: &mut Report, plan: &InstallPlan) -> anyhow::Result<()> {
     let target = &plan.target;
-    if !setup::same_bytes(target, Path::new(setup::SELF_EXE)) {
+    if !setup::holds_binary(target, Path::new(setup::SELF_EXE)) {
         report.fail(
             Outcome::Failed,
             format!(
-                "{} does not hold this ferry ({}) after the install",
+                "{} is not a root-owned copy of this ferry ({}) after the install",
                 target.display(),
                 plan.exe.display()
             ),
