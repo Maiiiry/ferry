@@ -61,11 +61,13 @@ copying it, where possible. There are three backends:
 `auto` (the default) picks reflink when the store's filesystem supports
 copy-on-write clones, else overlay when the agent runs in the namespace
 sandbox and overlayfs works there, else copy. A reflink fork is a plain
-directory, so a build needs no per-call overlay mount and does not wait for
-the kernel to sync the whole store filesystem when its sandbox exits, which
-costs an overlay build about 0.2 s. Ferry never uses hard links: Cargo
-rewrites some files in place, so a hard-linked fork would let an agent's
-build modify the base.
+directory, so a build needs no overlay mount. On the per-call path (shim,
+hooks), where each cargo call gets its own sandbox, an overlay build also
+waits for that sandbox's teardown, most likely the kernel syncing the whole
+store filesystem: about 0.2 s per build on ripgrep. Builds inside one
+long-lived `ferry run` session share its sandbox and do not pay this. Ferry
+never uses hard links: Cargo rewrites some files in place, so a hard-linked
+fork would let an agent's build modify the base.
 
 ## Stamping: making the fork look fresh
 

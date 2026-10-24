@@ -90,7 +90,7 @@ Where the store lives decides which fork backends work and what they cost.
 | XFS | yes (`reflink=1`, the mkfs default since xfsprogs 5.1) | expected to work, not tested | reflink | overlay copy-up is a reflink |
 | OpenZFS | 2.2.0, and 2.3.0 or newer; off by default in 2.2.2 to 2.2.x | not tested | reflink where block cloning is on | |
 | ext4 | no | yes | overlay | overlay copy-up copies the whole file |
-| tmpfs | no | Linux 6.6 or newer | overlay | |
+| tmpfs | no | Linux 6.6 or newer | overlay (6.6+) | |
 | NFS, CIFS, FUSE | not recommended | not recommended | | `ferry doctor` warns: slow builds, unreliable mtimes |
 
 Without the namespace sandbox `auto` never picks overlay: it uses reflink

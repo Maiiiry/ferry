@@ -74,7 +74,7 @@ mode = "auto"
 
 # Per-platform overrides of backend, sandbox and freshness.
 # [linux]
-# backend = "overlay"
+# sandbox = "namespace"
 # [macos]
 # backend = "reflink"
 ```
@@ -207,7 +207,6 @@ Per-platform overrides. Only the table for the running platform applies.
 ```toml
 [linux]
 sandbox = "namespace"
-backend = "overlay"
 
 [macos]
 backend = "reflink"

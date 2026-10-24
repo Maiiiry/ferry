@@ -454,7 +454,7 @@ mode = "auto"
 
 # Per-platform overrides of backend, sandbox and freshness.
 # [linux]
-# backend = "overlay"
+# sandbox = "namespace"
 # [macos]
 # backend = "reflink"
 "#;
