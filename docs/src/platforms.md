@@ -122,12 +122,14 @@ caches.
 | `repository` | ok or fail | the main checkout Ferry will use; fails outside a git repository |
 | `config` | ok or info | the `ferry.toml` that was loaded, or that defaults are in use |
 | `toolchain` | ok or fail | the `rustc` and `cargo` the repository selects |
+| `clippy` | ok or info | whether `cargo clippy` works, when the toolchain works and the warm commands include the generated clippy command; bases skip it when it does not |
 | `freshness` | ok | `checksum freshness (content hashes)` or `mtime stamping of files proven identical to the base` |
 | `store` | ok or warn | the store path, its filesystem and free space; warns on NFS, CIFS and FUSE |
 | `reflink` | ok or info | whether copy-on-write clones work on the store's filesystem |
 | `namespaces` | ok or warn (Linux) | whether an unprivileged user and mount namespace with a bind mount works; the fix names the cause it found (AppArmor, a sysctl, or a container) |
 | `overlayfs` | ok or warn (Linux) | whether overlayfs mounts inside such a namespace, with upper and work dirs in the store |
 | `sandbox` | info (macOS) | that macOS has no mount namespaces |
+| `remap-paths` | info | when bases would remap paths (remap-paths on, no namespace sandbox, rustc 1.98 or newer): `cargo clippy` runs are not remapped |
 
 The plan line reads like:
 

@@ -23,8 +23,10 @@ Rules:
   and tests with `cargo test`, not by path.
 - Keep the change small and focused on the task. Add or update tests for the
   behavior you change.
-- Before finishing, run `cargo test` and `cargo clippy --all-targets` and fix
-  what they report.
+- Before finishing, run `cargo test` and
+  `CARGO_BUILD_WARNINGS=deny cargo clippy --all-targets` and fix what they
+  report. Do not pass lint flags after `--` (`-- -D warnings`): they make
+  clippy re-lint every workspace crate from scratch.
 - Commit your work on your branch with a clear message, so the parent session
   can review or merge it. Ferry never deletes a worktree with uncommitted
   changes or a branch with new commits.

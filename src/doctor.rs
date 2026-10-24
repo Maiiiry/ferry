@@ -104,6 +104,9 @@ pub fn run(ctx: Result<&Context, String>) -> Report {
                 "toolchain",
                 format!("rustc {} ({}), {}", t.release, t.channel, t.cargo_version),
             ));
+            // Only here: without a toolchain the clippy probe fails too,
+            // and "not installed" would point at the wrong fix.
+            checks.extend(clippy_check(ctx));
             freshness::resolve_mode(ctx.settings.freshness, t).ok()
         }
         Err(e) => {
@@ -156,11 +159,49 @@ pub fn run(ctx: Result<&Context, String>) -> Report {
     }
 
     let plan = plan(&ctx.settings, &caps, freshness);
+    checks.extend(remap_check(ctx, plan.isolation, toolchain.ok().as_ref()));
     Report {
         checks,
         capabilities: Some(caps),
         plan: Some(plan),
     }
+}
+
+fn clippy_check(ctx: &Context) -> Option<Check> {
+    if !ctx.settings.warm_commands.iter().any(|c| c.clippy) {
+        return None;
+    }
+    Some(if Toolchain::clippy_available(&ctx.repo.main_worktree) {
+        ok("clippy", "installed; bases warm `cargo clippy`".into())
+    } else {
+        Check {
+            fix: Some("rustup component add clippy".into()),
+            ..info(
+                "clippy",
+                "not installed for this toolchain; bases skip warming it".into(),
+            )
+        }
+    })
+}
+
+/// Shown when `ferry base` would remap paths: remap-paths is on, there is no
+/// namespace sandbox and the toolchain supports it (as in `resolve_remap`).
+fn remap_check(
+    ctx: &Context,
+    isolation: Isolation,
+    toolchain: Option<&Toolchain>,
+) -> Option<Check> {
+    let remaps = ctx.settings.remap_paths
+        && isolation == Isolation::None
+        && toolchain.is_some_and(|t| crate::remap::supported(t).is_ok());
+    remaps.then(|| {
+        info(
+            "remap-paths",
+            "`cargo clippy` runs are not remapped: clippy replaces the wrapper, so workspace \
+             crates re-lint without incremental reuse"
+                .into(),
+        )
+    })
 }
 
 fn store_check(root: &Path, caps: &Capabilities) -> Check {

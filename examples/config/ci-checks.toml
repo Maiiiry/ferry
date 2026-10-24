@@ -3,12 +3,15 @@
 #
 # Generated warm commands (one per target, in this order):
 #   cargo check --workspace --all-targets --locked
-#   cargo clippy --workspace --all-targets --locked
+#   cargo clippy --keep-going --workspace --all-targets --locked
 #   cargo test --no-run --workspace --all-targets --locked
 #
-# check and clippy keep separate artifacts (clippy runs rustc through its own
-# driver), so warm both if agents run both. Agents then start with
-# `cargo clippy` and `cargo test` already fresh; only what they edit rebuilds.
+# clippy shares check's artifacts for dependencies but lints workspace members
+# through its own driver, so warm both if agents run both. The clippy command
+# gets --keep-going (--all-targets is already in cargo-args); if it fails, or
+# clippy is not installed, `ferry base` warns and keeps the base. Agents then
+# start with `cargo clippy` and `cargo test` already fresh; only what they edit
+# rebuilds.
 
 [base]
 targets = ["check", "clippy", "test"]

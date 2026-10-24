@@ -44,6 +44,9 @@ const SCRUBBED_VARS: &[&str] = &[
     "CARGO_BUILD_BUILD_DIR",
     "RUSTC_WRAPPER",
     "CARGO_BUILD_RUSTC_WRAPPER",
+    "RUSTC_WORKSPACE_WRAPPER",
+    "CARGO_BUILD_WARNINGS",
+    "CLIPPY_CONF_DIR",
     "CLICOLOR_FORCE",
 ];
 
@@ -63,13 +66,34 @@ pub struct TestRepo {
 }
 
 impl TestRepo {
+    /// [`TestRepo::with_env`] with no extra variables, so it ignores any
+    /// `ferry.toml` too.
     pub fn new() -> Self {
         Self::with_env(&[])
     }
 
     /// A repository whose ferry and cargo commands all get `env` on top of
-    /// the scrubbed environment, e.g. `FERRY_BACKEND`.
+    /// the scrubbed environment, e.g. `FERRY_BACKEND`. Its bases warm only
+    /// `build` and `test`: the default `check` and `clippy` commands double
+    /// the time of every base and are covered by `tests/warm.rs`.
+    ///
+    /// That is done by setting `FERRY_CONFIG`, which Ferry reads instead of
+    /// the repository's `ferry.toml`: a `ferry.toml` a test writes is
+    /// silently ignored. Tests that need one use
+    /// [`TestRepo::with_default_config`].
     pub fn with_env(env: &[(&str, &str)]) -> Self {
+        let mut repo = Self::with_default_config(env);
+        let config = repo.scratch.join("ferry-test.toml");
+        fs::write(&config, "[base]\ntargets = [\"build\", \"test\"]\n").unwrap();
+        repo.env.insert(
+            0,
+            ("FERRY_CONFIG".into(), config.to_string_lossy().into_owned()),
+        );
+        repo
+    }
+
+    /// [`TestRepo::with_env`] with Ferry's built-in configuration.
+    pub fn with_default_config(env: &[(&str, &str)]) -> Self {
         // Under the target dir rather than /tmp: it is on the same
         // filesystem as the project, which is where reflinks are likely to
         // work, and /tmp is often tmpfs.
@@ -312,6 +336,17 @@ impl TestRepo {
             self.capabilities().reflink,
         )
     }
+
+    /// False, after printing why, when `cargo clippy` does not work here.
+    pub fn require_clippy(&self) -> bool {
+        let version = run(self.cargo_in(&self.root).args(["clippy", "--version"]));
+        let probe = if version.status.success() {
+            Ok(())
+        } else {
+            Err(version.stderr.trim().to_owned())
+        };
+        require("clippy", "clippy", probe)
+    }
 }
 
 impl Drop for TestRepo {
@@ -461,7 +496,18 @@ impl Build {
     /// `build` or `test --no-run`) with JSON messages and requires success.
     #[track_caller]
     pub fn run(cargo: &mut Command) -> Self {
-        let output = run(cargo.args(["--message-format=json", "-v"])).ok();
+        Self::run_clippy(cargo, &[])
+    }
+
+    /// [`Build::run`] for `cargo clippy` with `lint_args` after `--`, where
+    /// cargo's own flags must not go.
+    #[track_caller]
+    pub fn run_clippy(cargo: &mut Command, lint_args: &[&str]) -> Self {
+        cargo.args(["--message-format=json", "-v"]);
+        if !lint_args.is_empty() {
+            cargo.arg("--").args(lint_args);
+        }
+        let output = run(cargo).ok();
         let mut rebuilt = Vec::new();
         let mut fresh = 0;
         for line in output.stdout.lines().filter(|l| l.starts_with('{')) {
@@ -665,8 +711,8 @@ fn probe(value: &Value) -> Probe {
     }
 }
 
-/// `FERRY_TEST_REQUIRE` lists capabilities (`userns`, `overlay`, `reflink`)
-/// that must be present: CI sets it where they are, so a regression in
+/// `FERRY_TEST_REQUIRE` lists capabilities (`userns`, `overlay`, `reflink`,
+/// `clippy`) that must be present: CI sets it where they are, so a regression in
 /// detection fails the run instead of silently skipping tests.
 fn require(what: &str, key: &str, probe: Probe) -> bool {
     match probe {

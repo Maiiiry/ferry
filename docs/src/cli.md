@@ -101,14 +101,18 @@ what changed is rebuilt. Build output goes to stderr.
 
 Warnings are printed when the namespace sandbox is unavailable (builds then
 run without canonical paths), when a Cargo config above the repository (or an
-untracked one in it) will not apply to Ferry's builds, and when the warm
+untracked one in it) will not apply to Ferry's builds, when the warm
 commands wrote files into the source tree, which agents will not have (build
-scripts writing outside `OUT_DIR`).
+scripts writing outside `OUT_DIR`), when clippy is not installed (the
+generated clippy command is skipped), and when the generated clippy command
+failed (the base is kept).
 
 JSON: `{ "base": {...}, "reused": <bool>, "warnings": [...] }`, where `base`
 has `id`, `commit`, `created_unix`, `build_secs`, `freshness`, `isolation`,
-`toolchain`, `commands`, `ferry_version`, `dirtied`, `remap_paths`,
-`unit_inputs` (the hash seeding compares) and `seeded_from`.
+`toolchain`, `commands` (the ones that ran), `command_secs` (seconds per
+command), `incomplete` (clippy commands that failed), `ferry_version`,
+`dirtied`, `remap_paths`, `unit_inputs` (the hash seeding compares) and
+`seeded_from`.
 
 ## `ferry spawn`
 

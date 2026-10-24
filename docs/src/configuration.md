@@ -35,8 +35,9 @@ This is exactly what `ferry init` writes. Every value in it is the default.
 # Ferry configuration: https://patwrall.github.io/ferry/configuration.html
 
 [base]
-# Cargo subcommands that warm the base: "check", "build", "test" (--no-run), "clippy".
-targets = ["build", "test"]
+# Cargo subcommands that warm the base: "check", "build", "test" (--no-run),
+# "clippy" (--all-targets --keep-going; skipped if not installed, failures only warn).
+targets = ["build", "test", "check", "clippy"]
 # Cargo profiles to warm. "dev" uses Cargo's default profile selection.
 profiles = ["dev"]
 # Extra arguments for every generated command.
@@ -84,15 +85,19 @@ mode = "auto"
 `ferry base` runs the warm commands, in order, at the root of the base's
 checkout (at the canonical path, inside the namespace sandbox when it is in
 use). Each runs with `sh -c`, with `CARGO_TARGET_DIR` and
-`CARGO_BUILD_BUILD_DIR` set to the base's target dir. Their output goes to
-stderr. If one fails, the base is discarded.
+`CARGO_BUILD_BUILD_DIR` set to the base's target dir, and
+`CARGO_BUILD_WARNINGS=warn`, so a `build.warnings = "deny"` in your
+environment or tracked Cargo config cannot fail a base (Cargo applies that
+setting after a unit is built, so the units still match your agents'
+builds). Their output goes to stderr. If one fails, the base is discarded,
+except for the generated clippy command (see below).
 
 Warm what your agents will run. Cargo reuses a unit only when the agent's
 invocation selects the same package, features, profile and target kind.
 
 | Key | Type | Default | Meaning |
 |---|---|---|---|
-| `targets` | array of `"check"`, `"build"`, `"test"`, `"clippy"` | `["build", "test"]` | Cargo subcommands to run. `"test"` runs `cargo test --no-run`, which builds the test binaries without running them. |
+| `targets` | array of `"check"`, `"build"`, `"test"`, `"clippy"` | `["build", "test", "check", "clippy"]` | Cargo subcommands to run. `"test"` runs `cargo test --no-run`, which builds the test binaries without running them. `"clippy"` runs `cargo clippy --all-targets --keep-going` (each flag left out when `cargo-args` already selects targets or has it); it is skipped with a warning when clippy is not installed (an error when it is the only target), and its failure only warns. |
 | `profiles` | array of profile names | `["dev"]` | Profiles to warm. `"dev"` adds no flag (Cargo's own selection, so tests keep using the `test` profile), `"release"` adds `--release`, any other name adds `--profile <name>`. Names must be non-empty and contain no whitespace. |
 | `cargo-args` | array of strings | `["--workspace"]` | Appended to every generated command, shell-quoted. |
 | `commands` | array of strings | unset | Replaces the generated commands. Each entry is a shell command line. Must not be empty when set. |
@@ -105,10 +110,60 @@ must not be empty then. With the defaults that is:
 ```sh
 cargo build --workspace
 cargo test --no-run --workspace
+cargo check --workspace
+cargo clippy --all-targets --keep-going --workspace
 ```
 
-The warm commands are part of the base's identity: changing them makes the
-next `ferry base` build a new base.
+Cargo keys every unit on its compile mode, so `cargo check` shares only
+build scripts and proc macros (and what they depend on) with `cargo build`:
+warming `build` alone leaves an agent's first `cargo check` recompiling
+every other dependency. `cargo clippy` lints only workspace members, so it
+shares every other package's units with `cargo check`.
+`--all-targets` also checks tests, examples and benches with their
+dev-dependencies; `--keep-going` warms the rest when some target fails, for
+example benches that need nightly.
+
+The generated clippy command is optional. When `cargo clippy --version`
+fails in the main checkout, `ferry base` warns and leaves it out, or fails
+when it is the only warm command, since a base must warm something. When it
+runs and fails (a deny-level lint, a bench that needs nightly), `ferry base`
+warns, keeps the base and lists the command in `incomplete`. Commands from
+`commands` or `FERRY_BASE_COMMAND` are never optional.
+
+The warm commands that run are part of the base's identity: changing them
+makes the next `ferry base` build a new base, and so does installing clippy
+after a base was built without it.
+
+Each warm command costs base time and disk, reported per command in
+`ferry --json base` (`command_secs`). To trim:
+
+```toml
+[base]
+targets = ["build", "test"]            # what Ferry warmed before check and clippy
+# targets = ["check", "clippy"]        # agents never build: no codegen at all
+# targets = ["build", "test", "check"] # no clippy
+```
+
+To keep benches out, or to match agents that pass lint flags, write the
+commands yourself. These are required, so append `|| true` to a command
+whose lint failures should not fail the base:
+
+```toml
+[base]
+commands = [
+  "cargo build --workspace",
+  "cargo test --no-run --workspace",
+  "cargo check --workspace",
+  "cargo clippy --workspace --lib --bins --tests --examples",
+]
+```
+
+Lint flags after `--` (`cargo clippy -- -D warnings`) are part of what
+clippy records for each member, so an agent that passes different ones
+re-lints every workspace member from scratch. Prefer
+`CARGO_BUILD_WARNINGS=deny cargo clippy` (Cargo 1.97+), which keeps every
+unit the base warmed fresh. `RUSTFLAGS=-Dwarnings` changes every unit and
+rebuilds everything.
 
 Do not pass `--target-dir` or `--config build.target-dir=...` /
 `--config build.build-dir=...` in warm commands. Command-line options beat
@@ -246,6 +301,7 @@ For cargo started by the shim (and for warm commands):
 | `CARGO_TARGET_DIR`, `CARGO_BUILD_BUILD_DIR` | the agent's target dir as the build sees it |
 | `CARGO_UNSTABLE_CHECKSUM_FRESHNESS`, `CARGO_BUILD_FINGERPRINT` | `true`, `content` (checksum freshness only) |
 | `RUSTC_WORKSPACE_WRAPPER` | the `ferry-rustc` wrapper (remap-paths mode only) |
+| `CARGO_BUILD_WARNINGS` | `warn` (warm commands only) |
 
 Ferry deliberately never exports `CARGO_TARGET_DIR` to anything else. See
 [Agent integrations](agents.md#the-rules).
@@ -254,8 +310,8 @@ Ferry deliberately never exports `CARGO_TARGET_DIR` to anything else. See
 
 A base is reused only if its commit and fingerprint match. The fingerprint
 covers the `rustc -vV` and `cargo -V` output, the commit's
-`rust-toolchain.toml` or `rust-toolchain` file, the warm commands, the
-freshness mode, the isolation (namespace sandbox or not) and remap-paths.
+`rust-toolchain.toml` or `rust-toolchain` file, the warm commands that run
+(so also whether clippy is installed), the freshness mode, the isolation (namespace sandbox or not) and remap-paths.
 Changing any of them and running `ferry base` builds a new base. Existing
 agents keep using the base they were forked from.
 

@@ -92,8 +92,11 @@ during Ferry's research; **it has not been verified on a real Mac.**
 - **Stable wrapper path.** Cargo hashes the workspace wrapper's path into
   member artifact names. Builds with and without the wrapper do not share
   artifacts, and moving the store parent rebuilds every workspace member.
-- **Clippy.** `cargo clippy` uses its own workspace wrapper, so clippy runs
-  are not remapped.
+- **Clippy.** `cargo clippy` sets `RUSTC_WORKSPACE_WRAPPER` to
+  `clippy-driver`, replacing `ferry-rustc`, in the base and in agents alike.
+  Clippy runs are not remapped: workspace members re-lint after the move
+  without incremental reuse. Dependencies are unaffected, since both
+  wrappers apply only to workspace members. `ferry doctor` notes this.
 - **`profile.trim-paths`** adds `--remap-path-prefix` rules with absolute
   paths, which rustc tracks. Ferry does not rewrite them, so trim-paths and
   remap-paths together are expected to lose the incremental reuse.

@@ -64,7 +64,12 @@ pub struct BaseConfig {
 impl Default for BaseConfig {
     fn default() -> Self {
         Self {
-            targets: vec![WarmTarget::Build, WarmTarget::Test],
+            targets: vec![
+                WarmTarget::Build,
+                WarmTarget::Test,
+                WarmTarget::Check,
+                WarmTarget::Clippy,
+            ],
             profiles: vec!["dev".into()],
             cargo_args: vec!["--workspace".into()],
             commands: None,
@@ -79,6 +84,17 @@ pub enum WarmTarget {
     Build,
     Test,
     Clippy,
+}
+
+/// A shell command that warms a base.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct WarmCommand {
+    pub line: String,
+    /// Generated from the `clippy` target. Clippy is an optional toolchain
+    /// component, and lints can fail where a build does not, so the command
+    /// is skipped when clippy is not installed and its failure only warns
+    /// instead of discarding the base.
+    pub clippy: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -170,7 +186,7 @@ pub struct Settings {
     pub backend: BackendPref,
     pub sandbox: SandboxMode,
     pub freshness: FreshnessPref,
-    pub warm_commands: Vec<String>,
+    pub warm_commands: Vec<WarmCommand>,
     pub branch_prefix: String,
     /// Parent directory of agent worktrees (one subdirectory per repository).
     pub worktree_parent: Option<PathBuf>,
@@ -253,7 +269,10 @@ impl Config {
             freshness = parse_env("FERRY_FRESHNESS", &v, "auto, checksum, mtime")?;
         }
         let warm_commands = match env("FERRY_BASE_COMMAND") {
-            Some(cmd) if !cmd.trim().is_empty() => vec![cmd],
+            Some(cmd) if !cmd.trim().is_empty() => vec![WarmCommand {
+                line: cmd,
+                clippy: false,
+            }],
             _ => self.warm_commands(),
         };
         let explicit_store = match env("FERRY_HOME").filter(|v| !v.is_empty()) {
@@ -317,10 +336,24 @@ impl Config {
 
     /// Shell commands that warm a base, generated from `[base]` unless
     /// `base.commands` overrides them.
-    pub fn warm_commands(&self) -> Vec<String> {
+    pub fn warm_commands(&self) -> Vec<WarmCommand> {
         if let Some(commands) = &self.base.commands {
-            return commands.clone();
+            return commands
+                .iter()
+                .map(|line| WarmCommand {
+                    line: line.clone(),
+                    clippy: false,
+                })
+                .collect();
         }
+        // Only these reach cargo; the rest go to rustc or clippy-driver.
+        let cargo_args: Vec<&str> = self
+            .base
+            .cargo_args
+            .iter()
+            .map(String::as_str)
+            .take_while(|a| *a != "--")
+            .collect();
         let mut out = Vec::new();
         for profile in &self.base.profiles {
             for target in &self.base.targets {
@@ -334,13 +367,28 @@ impl Config {
                     "release" => argv.push("--release"),
                     other => argv.extend(["--profile", other]),
                 }
+                let clippy = *target == WarmTarget::Clippy;
+                if clippy {
+                    // `--all-targets` also checks tests and their
+                    // dev-dependencies; `--keep-going` still warms the rest
+                    // when some target fails (e.g. benches that need
+                    // nightly). Cargo rejects either flag given twice.
+                    if !cargo_args.iter().any(|a| selects_targets(a)) {
+                        argv.push("--all-targets");
+                    }
+                    if !cargo_args.contains(&"--keep-going") {
+                        argv.push("--keep-going");
+                    }
+                }
                 argv.extend(self.base.cargo_args.iter().map(String::as_str));
-                out.push(
-                    argv.iter()
+                out.push(WarmCommand {
+                    line: argv
+                        .iter()
                         .map(|a| shell_quote(a))
                         .collect::<Vec<_>>()
                         .join(" "),
-                );
+                    clippy,
+                });
             }
         }
         out
@@ -356,6 +404,24 @@ impl WarmTarget {
             WarmTarget::Clippy => &["clippy"],
         }
     }
+}
+
+/// True for cargo's target-selection flags, with or without `=value`.
+fn selects_targets(arg: &str) -> bool {
+    let flag = arg.split_once('=').map_or(arg, |(flag, _)| flag);
+    matches!(
+        flag,
+        "--lib"
+            | "--bin"
+            | "--bins"
+            | "--example"
+            | "--examples"
+            | "--test"
+            | "--tests"
+            | "--bench"
+            | "--benches"
+            | "--all-targets"
+    )
 }
 
 macro_rules! display_as_serde {
@@ -415,8 +481,9 @@ pub fn shell_quote(arg: &str) -> String {
 pub const TEMPLATE: &str = r#"# Ferry configuration: https://patwrall.github.io/ferry/configuration.html
 
 [base]
-# Cargo subcommands that warm the base: "check", "build", "test" (--no-run), "clippy".
-targets = ["build", "test"]
+# Cargo subcommands that warm the base: "check", "build", "test" (--no-run),
+# "clippy" (--all-targets --keep-going; skipped if not installed, failures only warn).
+targets = ["build", "test", "check", "clippy"]
 # Cargo profiles to warm. "dev" uses Cargo's default profile selection.
 profiles = ["dev"]
 # Extra arguments for every generated command.
@@ -472,12 +539,66 @@ mod tests {
         assert_eq!(Config::parse(TEMPLATE).unwrap(), Config::default());
     }
 
+    fn lines(commands: &[WarmCommand]) -> Vec<&str> {
+        commands.iter().map(|c| c.line.as_str()).collect()
+    }
+
     #[test]
     fn default_warm_command() {
+        let commands = Config::default().warm_commands();
         assert_eq!(
-            Config::default().warm_commands(),
-            vec!["cargo build --workspace", "cargo test --no-run --workspace"]
+            lines(&commands),
+            vec![
+                "cargo build --workspace",
+                "cargo test --no-run --workspace",
+                "cargo check --workspace",
+                "cargo clippy --all-targets --keep-going --workspace",
+            ]
         );
+        let clippy: Vec<bool> = commands.iter().map(|c| c.clippy).collect();
+        assert_eq!(clippy, [false, false, false, true]);
+    }
+
+    #[test]
+    fn clippy_target_selection_is_not_duplicated() {
+        let clippy_with = |args: &str| {
+            let toml = format!("[base]\ntargets = [\"clippy\"]\ncargo-args = {args}\n");
+            Config::parse(&toml).unwrap().warm_commands()[0]
+                .line
+                .clone()
+        };
+        assert_eq!(
+            clippy_with(r#"["--workspace", "--all-targets", "--locked"]"#),
+            "cargo clippy --keep-going --workspace --all-targets --locked"
+        );
+        assert_eq!(
+            clippy_with(r#"["--lib"]"#),
+            "cargo clippy --keep-going --lib"
+        );
+        assert_eq!(
+            clippy_with(r#"["--bin=app"]"#),
+            "cargo clippy --keep-going --bin=app"
+        );
+        assert_eq!(
+            clippy_with(r#"["--keep-going"]"#),
+            "cargo clippy --all-targets --keep-going"
+        );
+        // Arguments after `--` go to clippy-driver, not to cargo.
+        assert_eq!(
+            clippy_with(r#"["--", "--test"]"#),
+            "cargo clippy --all-targets --keep-going -- --test"
+        );
+    }
+
+    #[test]
+    fn explicit_commands_are_never_optional() {
+        let config = Config::parse("[base]\ncommands = [\"cargo clippy\"]\n").unwrap();
+        assert!(config.warm_commands().iter().all(|c| !c.clippy));
+        let env = |k: &str| (k == "FERRY_BASE_COMMAND").then(|| "cargo clippy".to_string());
+        let s = Config::default()
+            .resolve(Path::new("/r"), None, &env)
+            .unwrap();
+        assert!(s.warm_commands.iter().all(|c| !c.clippy));
     }
 
     #[test]
@@ -502,12 +623,12 @@ mod tests {
         )
         .unwrap();
         assert_eq!(
-            config.warm_commands(),
+            lines(&config.warm_commands()),
             vec![
                 "cargo test --no-run --release --features 'a b'",
-                "cargo clippy --release --features 'a b'",
+                "cargo clippy --release --all-targets --keep-going --features 'a b'",
                 "cargo test --no-run --profile ci --features 'a b'",
-                "cargo clippy --profile ci --features 'a b'",
+                "cargo clippy --profile ci --all-targets --keep-going --features 'a b'",
             ]
         );
     }
@@ -576,7 +697,7 @@ mod tests {
         let s = Config::default()
             .resolve(Path::new("/r"), None, &env)
             .unwrap();
-        assert_eq!(s.warm_commands, vec!["cargo check"]);
+        assert_eq!(lines(&s.warm_commands), vec!["cargo check"]);
     }
 
     #[test]

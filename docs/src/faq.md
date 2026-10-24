@@ -72,8 +72,12 @@ also read from the host.
 All of them, including subcommands such as `cargo clippy` or `cargo nextest`,
 as long as `cargo` resolves to the shim: inside `ferry run` and `ferry shell`,
 or with the shim first on your `PATH`. Tools that run `rustc` directly, or
-call cargo by an absolute path, bypass it. Warm what agents run: `clippy` and
-`check` artifacts are separate from `build` artifacts, and so are profiles.
+call cargo by an absolute path, bypass it. Warm what agents run: the default
+base warms `build`, `test --no-run`, `check` and `clippy --all-targets` for the
+`dev` profile. `check` shares only build scripts and proc macros with
+`build`, `clippy` shares everything but workspace members with `check`, and
+profiles share nothing (see
+[Configuration](configuration.md#base-what-warms-a-base)).
 
 ## What happens when my main branch moves on?
 
