@@ -248,7 +248,7 @@ fn plan(settings: &Settings, caps: &Capabilities, freshness: Option<FreshnessMod
     }
 }
 
-/// An AppArmor profile that lets `binary` create user namespaces on Ubuntu
+/// An `AppArmor` profile that lets `binary` create user namespaces on Ubuntu
 /// 24.04+ (`kernel.apparmor_restrict_unprivileged_userns=1`).
 ///
 /// It is the stacked form Ubuntu uses for `bwrap-userns-restrict`: ferry
@@ -306,7 +306,7 @@ pub fn apparmor_profile(binary: &Path) -> String {
     )
 }
 
-/// Why `binary` is unsuitable for an AppArmor profile, if it is: the
+/// Why `binary` is unsuitable for an `AppArmor` profile, if it is: the
 /// profile attaches by path, so anyone who can replace the file inherits the
 /// exemption.
 pub fn apparmor_path_problem(binary: &Path) -> Option<String> {

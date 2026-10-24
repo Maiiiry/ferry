@@ -354,8 +354,8 @@ pub fn cargo_env(mode: FreshnessMode) -> &'static [(&'static str, &'static str)]
 /// absolute paths of the build they were forked from.
 ///
 /// Only needed when an agent builds at different paths than its base (no
-/// namespace sandbox). rustc records `# env-dep:CARGO_MANIFEST_DIR=...`,
-/// `OUT_DIR` and some `include_str!` paths as absolute paths in its dep-info,
+/// namespace sandbox). rustc records `# env-dep:CARGO_MANIFEST_DIR=...` and
+/// some `include_str!` paths as absolute paths in its dep-info,
 /// and Cargo does not re-check them: such a unit would stay "fresh" while its
 /// artifact points at the base's files (a test reading fixtures via
 /// `env!("CARGO_MANIFEST_DIR")` would read the base's copies). This scans the
@@ -773,18 +773,22 @@ fn mentions_any(haystack: &[u8], roots: &[Vec<u8>]) -> bool {
 }
 
 /// True if `root` occurs in `haystack` as a whole path, not as a prefix of a
-/// longer file name (`/a/src` does not match `/a/src2`).
+/// longer file name (`/a/src` does not match `/a/src2`). Paths through the
+/// remap-mode target link (`<root>/.ferry-target/...`) are build outputs,
+/// not sources, and do not count.
 fn mentions(haystack: &[u8], root: &[u8]) -> bool {
     let continues_name =
         |b: u8| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'-' | b'_') || !b.is_ascii();
+    let link = [b"/", crate::remap::TARGET_LINK.as_bytes()].concat();
     haystack
         .windows(root.len())
         .enumerate()
         .any(|(at, window)| {
+            let rest = &haystack[at + root.len()..];
             window == root
-                && haystack
-                    .get(at + root.len())
-                    .is_none_or(|&b| !continues_name(b))
+                && rest.first().is_none_or(|&b| !continues_name(b))
+                && !(rest.starts_with(&link)
+                    && rest.get(link.len()).is_none_or(|&b| !continues_name(b)))
         })
 }
 
@@ -1685,6 +1689,18 @@ mod tests {
 
         let invalidated = invalidate_relocated_units(&target, &[root.join("alias/src/")]).unwrap();
         assert_eq!(invalidated, ["debug/.fingerprint/sp-1111"]);
+    }
+    #[test]
+    fn whole_path_matches_ignore_longer_names_and_the_remap_target_link() {
+        let root = b"/s/base/src";
+        assert!(mentions(b"/s/base/src/lib.rs", root));
+        assert!(mentions(b"x /s/base/src", root));
+        assert!(!mentions(b"/s/base/src2/lib.rs", root));
+        assert!(!mentions(
+            b"/s/base/src/.ferry-target/debug/build/a/out/gen.rs",
+            root
+        ));
+        assert!(mentions(b"/s/base/src/.ferry-targets/x.rs", root));
     }
 
     #[test]

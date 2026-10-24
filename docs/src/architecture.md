@@ -141,7 +141,7 @@ needs a single writable-root entry for Ferry.
 
 `ferry run` (and `ferry shell`) enter the agent's sandbox and exec `CMD` with
 the working directory left at its host path, `PATH` prefixed with the shim
-directory, and `FERRY_SANDBOX=<name>` set for scripts. Host paths keep working
+directory, and `FERRY_AGENT=<name>` set for scripts. Host paths keep working
 inside the sandbox; agent tools that key state on their cwd (transcripts,
 memory) keep one entry per agent.
 

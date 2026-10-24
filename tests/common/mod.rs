@@ -289,15 +289,23 @@ impl TestRepo {
     /// False, after printing why the calling test is skipped, when
     /// unprivileged user + mount namespaces are unavailable.
     pub fn require_userns(&self) -> bool {
-        require("user namespaces", self.capabilities().userns)
+        require("user namespaces", "userns", self.capabilities().userns)
     }
 
     pub fn require_overlay(&self) -> bool {
-        require("overlayfs in a user namespace", self.capabilities().overlay)
+        require(
+            "overlayfs in a user namespace",
+            "overlay",
+            self.capabilities().overlay,
+        )
     }
 
     pub fn require_reflink(&self) -> bool {
-        require("reflinks in the store", self.capabilities().reflink)
+        require(
+            "reflinks in the store",
+            "reflink",
+            self.capabilities().reflink,
+        )
     }
 }
 
@@ -652,10 +660,19 @@ fn probe(value: &Value) -> Probe {
     }
 }
 
-fn require(what: &str, probe: Probe) -> bool {
+/// `FERRY_TEST_REQUIRE` lists capabilities (`userns`, `overlay`, `reflink`)
+/// that must be present: CI sets it where they are, so a regression in
+/// detection fails the run instead of silently skipping tests.
+fn require(what: &str, key: &str, probe: Probe) -> bool {
     match probe {
         Ok(()) => true,
         Err(reason) => {
+            let required = std::env::var("FERRY_TEST_REQUIRE")
+                .is_ok_and(|v| v.split(',').any(|k| k.trim() == key));
+            assert!(
+                !required,
+                "{what} required by FERRY_TEST_REQUIRE but unavailable: {reason}"
+            );
             skip(&format!("{what} unavailable ({reason})"));
             false
         }

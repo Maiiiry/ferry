@@ -186,16 +186,10 @@ impl Config {
         repo_root: &Path,
         env: &dyn Fn(&str) -> Option<String>,
     ) -> Result<(Self, Option<PathBuf>), ConfigError> {
-        let path = match env("FERRY_CONFIG") {
-            Some(p) => PathBuf::from(p),
-            None => {
-                let p = repo_root.join(FILE_NAME);
-                if !p.exists() {
-                    return Ok((Self::default(), None));
-                }
-                p
-            }
-        };
+        let path = env("FERRY_CONFIG").map_or_else(|| repo_root.join(FILE_NAME), PathBuf::from);
+        if env("FERRY_CONFIG").is_none() && !path.exists() {
+            return Ok((Self::default(), None));
+        }
         let text = std::fs::read_to_string(&path).map_err(|source| ConfigError::Read {
             path: path.clone(),
             source,

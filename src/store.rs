@@ -165,8 +165,7 @@ impl Store {
 
     /// Ids of every directory under `bases/`, complete or not.
     pub fn base_ids(&self) -> Result<Vec<BaseId>> {
-        let mut ids: Vec<BaseId> = self
-            .list_dirs(&self.root.join("bases"))?
+        let mut ids: Vec<BaseId> = Self::list_dirs(&self.root.join("bases"))?
             .into_iter()
             .filter_map(|n| n.parse().ok())
             .collect();
@@ -175,8 +174,7 @@ impl Store {
     }
 
     pub fn agent_names(&self) -> Result<Vec<AgentName>> {
-        let mut names: Vec<AgentName> = self
-            .list_dirs(&self.root.join("agents"))?
+        let mut names: Vec<AgentName> = Self::list_dirs(&self.root.join("agents"))?
             .into_iter()
             .filter_map(|n| n.parse().ok())
             .collect();
@@ -184,7 +182,7 @@ impl Store {
         Ok(names)
     }
 
-    fn list_dirs(&self, dir: &Path) -> Result<Vec<String>> {
+    fn list_dirs(dir: &Path) -> Result<Vec<String>> {
         let mut out = Vec::new();
         for entry in fs::read_dir(dir).at("read directory", dir)? {
             let entry = entry.at("read directory", dir)?;
@@ -297,7 +295,10 @@ impl FromStr for AgentName {
                 "may only contain letters, digits, '-', '_' and '.'",
             ));
         }
-        if s.ends_with('.') || s.contains("..") || s.ends_with(".lock") {
+        // Git refuses branch components ending in ".lock" (case-sensitively).
+        #[allow(clippy::case_sensitive_file_extension_comparisons)]
+        let lock_suffix = s.ends_with(".lock");
+        if s.ends_with('.') || s.contains("..") || lock_suffix {
             return Err(invalid("is not a valid git branch component"));
         }
         Ok(Self(s.to_owned()))

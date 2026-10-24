@@ -13,7 +13,7 @@ keywords = ["cargo", "worktree", "agents", "build", "cache"]
 categories = ["development-tools::build-utils", "command-line-utilities"]
 include = [
     "/src/**",
-    "/tests/**",
+    "/contrib/**",
     "/Cargo.toml",
     "/Cargo.lock",
     "/README.md",

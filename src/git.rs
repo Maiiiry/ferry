@@ -275,7 +275,7 @@ pub fn refresh_index(worktree: &Path) -> Result<()> {
     // error here.
     let output = command(worktree, ["update-index", "-q", "--refresh"])
         .output()
-        .map_err(map_spawn_error)?;
+        .map_err(|e| map_spawn_error(&e))?;
     match output.status.code() {
         Some(0 | 1) => Ok(()),
         _ => Err(command_error(&["update-index", "-q", "--refresh"], &output)),
@@ -425,7 +425,9 @@ where
     S: AsRef<OsStr>,
 {
     let args: Vec<OsString> = args.into_iter().map(|a| a.as_ref().to_owned()).collect();
-    let output = command(dir, &args).output().map_err(map_spawn_error)?;
+    let output = command(dir, &args)
+        .output()
+        .map_err(|e| map_spawn_error(&e))?;
     if output.status.success() {
         Ok(output.stdout)
     } else {
@@ -449,7 +451,7 @@ fn command_error<S: AsRef<str>>(args: &[S], output: &Output) -> GitError {
     }
 }
 
-fn map_spawn_error(e: std::io::Error) -> GitError {
+fn map_spawn_error(e: &std::io::Error) -> GitError {
     if e.kind() == std::io::ErrorKind::NotFound {
         GitError::NotInstalled
     } else {

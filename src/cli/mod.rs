@@ -31,7 +31,7 @@ use output::{BOLD, DIM, GREEN, YELLOW};
     propagate_version = true
 )]
 pub struct Cli {
-    /// Run as if ferry was started in <DIR>.
+    /// Run as if ferry was started in DIR.
     #[arg(short = 'C', global = true, value_name = "DIR")]
     pub dir: Option<PathBuf>,
 
@@ -69,7 +69,7 @@ pub enum Command {
         /// Where to create the worktree (default: inside the store).
         #[arg(long, value_name = "DIR")]
         path: Option<PathBuf>,
-        /// Branch name (default: <branch-prefix><name>).
+        /// Branch name (default: the configured branch prefix plus NAME).
         #[arg(long)]
         branch: Option<String>,
     },
@@ -115,7 +115,7 @@ pub enum Command {
 
     /// Check platform capabilities and print fixes for what is missing.
     Doctor {
-        /// Print an AppArmor profile that allows this ferry binary to use
+        /// Print an `AppArmor` profile that allows this ferry binary to use
         /// user namespaces (Ubuntu 23.10+).
         #[arg(long)]
         apparmor_profile: bool,

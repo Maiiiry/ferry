@@ -202,7 +202,7 @@ pub fn ready_bases(ctx: &Context) -> Result<Vec<BaseMeta>> {
             bases.push(meta);
         }
     }
-    bases.sort_by(|a, b| b.created_unix.cmp(&a.created_unix));
+    bases.sort_by_key(|b| std::cmp::Reverse(b.created_unix));
     Ok(bases)
 }
 

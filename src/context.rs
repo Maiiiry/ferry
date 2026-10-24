@@ -33,8 +33,7 @@ impl Context {
         let name = repo
             .main_worktree
             .file_name()
-            .map(|n| n.to_string_lossy().into_owned())
-            .unwrap_or_else(|| "repo".into());
+            .map_or_else(|| "repo".into(), |n| n.to_string_lossy().into_owned());
         let store = Store::open(
             parent.join(store::repo_key(&common_dir, &name)),
             &repo.main_worktree,

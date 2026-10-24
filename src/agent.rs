@@ -36,7 +36,7 @@ use crate::store::{AgentName, AgentPaths, BaseId};
 
 /// Set inside every sandbox to the agent's name, for scripts and prompts.
 /// Ferry itself never reads it.
-pub const SANDBOX_ENV: &str = "FERRY_SANDBOX";
+pub const SANDBOX_ENV: &str = "FERRY_AGENT";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -236,16 +236,21 @@ fn populate(
     }
     ctx.repo
         .add_branch_worktree(&meta.worktree, &meta.branch, &meta.from)?;
+    copy_untracked_lockfile(&base_paths.src, &meta.worktree)?;
 
     let base_tree = ctx.repo.ls_tree(&base.commit)?;
     let index = git::ls_files(&meta.worktree)?;
     let plan = freshness::plan(&base_tree, &base_paths.src, &index, &meta.worktree)?;
+    let differing = plan
+        .skipped()
+        .iter()
+        .filter(|(_, reason)| *reason != freshness::SkipReason::NotRegularFile)
+        .count();
     meta.stamp = freshness::apply(&plan)?;
     git::refresh_index(&meta.worktree)?;
-    if meta.stamp.skipped > 0 {
+    if differing > 0 {
         warnings.push(format!(
-            "{} of {} tracked files differ from base {}; crates using them rebuild on the first build",
-            meta.stamp.skipped,
+            "{differing} of {} tracked files differ from base {}; crates using them rebuild on the first build",
             meta.stamp.tracked,
             base.id.short()
         ));
@@ -256,12 +261,16 @@ fn populate(
     fsutil::write_json_atomic(&paths.meta, &*meta)?;
     let stats = fork::backend(choice.kind)?.fork(&fork_paths(paths, &base_paths.target))?;
     if meta.isolation == Isolation::None {
-        // The agent builds at different absolute paths than the base did.
-        let old_roots = match base.isolation {
-            Isolation::Namespace => vec![ctx.store.canonical_src(), ctx.store.canonical_target()],
-            Isolation::None => vec![base_paths.src.clone(), base_paths.target.clone()],
+        // The agent builds at a different absolute source path than the
+        // base did. Only the source root matters: the base's target dir is
+        // immutable and outlives the agent, so a captured OUT_DIR still reads
+        // what this agent's own build script would produce, and Cargo
+        // re-runs dependents whenever that output changes.
+        let old_src = match base.isolation {
+            Isolation::Namespace => ctx.store.canonical_src(),
+            Isolation::None => base_paths.src.clone(),
         };
-        let invalidated = freshness::invalidate_relocated_units(&paths.target, &old_roots)?;
+        let invalidated = freshness::invalidate_relocated_units(&paths.target, &[old_src])?;
         if !invalidated.is_empty() {
             warnings.push(format!(
                 "{} unit(s) captured the base's absolute paths (e.g. env!(\"CARGO_MANIFEST_DIR\")) and will rebuild",
@@ -276,6 +285,25 @@ fn populate(
     meta.state = AgentState::Ready;
     fsutil::write_json_atomic(&paths.meta, &*meta)?;
     Ok((choice.reason, stats))
+}
+
+/// Gives the agent the base's `Cargo.lock` when the repository does not
+/// track one, so the agent resolves the same dependency versions the base
+/// was built with instead of re-resolving (and rebuilding) on first build.
+fn copy_untracked_lockfile(base_src: &Path, worktree: &Path) -> Result<()> {
+    let (from, to) = (base_src.join("Cargo.lock"), worktree.join("Cargo.lock"));
+    if !from.is_file() || to.exists() {
+        return Ok(());
+    }
+    fs::copy(&from, &to).at("copy", &from)?;
+    let mtime = fs::metadata(&from)
+        .and_then(|m| m.modified())
+        .at("stat", &from)?;
+    fs::File::options()
+        .write(true)
+        .open(&to)
+        .and_then(|f| f.set_modified(mtime))
+        .at("set times on", &to)
 }
 
 fn rollback(ctx: &Context, paths: &AgentPaths, meta: &AgentMeta) -> Result<()> {
@@ -475,7 +503,7 @@ pub fn reap_abandoned(ctx: &Context, dry_run: bool) -> Result<Vec<AgentName>> {
             continue;
         }
         let paths = ctx.store.agent(&meta.name);
-        let Some(_agent) = FileLock::try_exclusive(&paths.lock)? else {
+        let Some(agent_lock) = FileLock::try_exclusive(&paths.lock)? else {
             continue;
         };
         if !sandbox::users(&paths.ns_record)?.is_empty()
@@ -487,7 +515,7 @@ pub fn reap_abandoned(ctx: &Context, dry_run: bool) -> Result<Vec<AgentName>> {
         {
             continue;
         }
-        drop(_agent);
+        drop(agent_lock);
         if !dry_run {
             remove_locked(ctx, &meta.name, false)?;
         }
