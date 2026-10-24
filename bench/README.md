@@ -120,7 +120,9 @@ plus Ferry's own `private_bytes` estimate.
 ### Statistics
 
 hyperfine runs each step `--runs` times with no warmup; `--prepare` and
-`--conclude` (artifact check, kache events) are not timed. Reported: median,
+`--conclude` (artifact check, kache events) are not timed. Each prepare ends
+with `sync`, so writeback from deleting or cloning a target is not charged to
+the timed build. Reported: median,
 mean, min, max, standard deviation and every individual time. No run is
 dropped; a failing step stops its scenario, is recorded as failed in
 `results.json`/`results.md`, and the harness continues with the next one.

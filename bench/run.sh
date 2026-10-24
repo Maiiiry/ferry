@@ -222,9 +222,11 @@ lib() { echo "bash $(printf %q "$B_LIB") $*"; }
 # One hyperfine invocation; per-run logs are collected into a step record.
 hf() { # <scenario> <step> <runs> <prepare> <command> [conclude]
   local name="$1@$2" before aux="$B_LOGS/$1-$2.aux.log"
-  # hyperfine discards the output of --prepare and --conclude; keep it.
+  # hyperfine discards the output of --prepare and --conclude; keep it. The
+  # sync keeps writeback from a prepare (deleted or cloned targets) out of
+  # the timed command.
   local args=(--runs "$3" --shell=bash --style basic --export-json "$B_OUT/hyperfine/$1-$2.json"
-    --command-name "$1/$2" --prepare "$4 >>$(printf %q "$aux") 2>&1")
+    --command-name "$1/$2" --prepare "$4 >>$(printf %q "$aux") 2>&1 && sync")
   [[ -n ${6:-} ]] && args+=(--conclude "$6 >>$(printf %q "$aux") 2>&1")
   before=$(loadavg)
   note "$1/$2: $3 run(s)"
