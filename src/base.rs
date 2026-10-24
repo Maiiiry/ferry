@@ -116,15 +116,7 @@ pub fn build(ctx: &Context, rev: &str, cold: bool) -> Result<BuildReport> {
             unapplied_message(ctx, &config)
         ));
     }
-    let remap = isolation == Isolation::None && ctx.settings.remap_paths && {
-        match crate::remap::supported(&host_toolchain) {
-            Ok(()) => true,
-            Err(why) => {
-                warnings.push(format!("remap-paths disabled: {why}"));
-                false
-            }
-        }
-    };
+    let remap = resolve_remap(ctx, isolation, &host_toolchain, &mut warnings);
     let id = BaseId::new(
         commit.as_str(),
         fingerprint(ctx, &commit, &host_toolchain, freshness, isolation, remap)?,
@@ -168,7 +160,16 @@ pub fn build(ctx: &Context, rev: &str, cold: bool) -> Result<BuildReport> {
     };
     let plan = build_plan(ctx, &paths, isolation, remap_wrapper);
     let commands = ctx.settings.warm_commands.clone();
-    let warmed = warm(ctx, &paths, &plan, freshness, seed.as_ref(), &inputs).inspect_err(|_| {
+    let warmed = warm(
+        ctx,
+        &paths,
+        &plan,
+        freshness,
+        seed.as_ref(),
+        &inputs,
+        &commands,
+    )
+    .inspect_err(|_| {
         // The process may now be inside the sandbox, but host paths are
         // still reachable, so cleanup works the same way.
         let _ = discard(ctx, &paths);
@@ -467,6 +468,23 @@ fn resolve_isolation(ctx: &Context, warnings: &mut Vec<String>) -> Result<Isolat
     Ok(Isolation::None)
 }
 
+fn resolve_remap(
+    ctx: &Context,
+    isolation: Isolation,
+    toolchain: &Toolchain,
+    warnings: &mut Vec<String>,
+) -> bool {
+    isolation == Isolation::None && ctx.settings.remap_paths && {
+        match crate::remap::supported(toolchain) {
+            Ok(()) => true,
+            Err(why) => {
+                warnings.push(format!("remap-paths disabled: {why}"));
+                false
+            }
+        }
+    }
+}
+
 /// Hash of everything besides the commit that determines a base's artifacts.
 fn fingerprint(
     ctx: &Context,
@@ -659,8 +677,8 @@ struct Warmed {
     warning: Option<String>,
 }
 
-/// Enters the sandbox and runs the warm commands into the prepared target.
-/// A target seeded across unit inputs is then pruned to the units the
+/// Enters the sandbox and runs `commands` into the prepared target. A
+/// target seeded across unit inputs is then pruned to the units the
 /// commands used, or, when that cannot be told, emptied and built again.
 fn warm(
     ctx: &Context,
@@ -669,6 +687,7 @@ fn warm(
     freshness: FreshnessMode,
     seed: Option<&BaseMeta>,
     inputs: &str,
+    commands: &[String],
 ) -> Result<Warmed> {
     let cross_inputs = seed.is_some_and(|s| s.unit_inputs != inputs);
     if cross_inputs {
@@ -693,7 +712,6 @@ fn warm(
         &shim_dir,
         watch.as_ref().map(prune::Watch::dir),
     );
-    let commands = &ctx.settings.warm_commands;
     run_warm_commands(plan, &env, commands)?;
     let mut warmed = Warmed {
         observed: false,
