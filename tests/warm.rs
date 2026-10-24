@@ -298,3 +298,51 @@ fn missing_clippy_fails_a_clippy_only_base() {
     let listed = repo.ferry_json(["list"]);
     assert_eq!(listed["bases"], serde_json::json!([]), "{listed}");
 }
+
+/// Names of the checks `ferry --json doctor` reports with `env` added.
+fn doctor_checks(repo: &TestRepo, env: &[(&str, &str)]) -> Vec<String> {
+    let mut cmd = repo.ferry_cmd(["--json", "doctor"]);
+    cmd.envs(env.iter().copied());
+    // Doctor exits non-zero when a check fails; the report is still JSON.
+    let report = common::run(&mut cmd).json();
+    report["checks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| str_of(&c["name"]).to_owned())
+        .collect()
+}
+
+/// Doctor's note that clippy runs are not remapped shows only where
+/// `ferry base` remaps: without the namespace sandbox, on a rustc that can.
+#[test]
+fn doctor_notes_unremapped_clippy_only_where_remapping_applies() {
+    let repo = TestRepo::with_env(&[("FERRY_REMAP_PATHS", "1")]);
+    let toolchain = ferry::toolchain::Toolchain::detect(repo.root()).unwrap();
+    let remaps = ferry::remap::supported(&toolchain).is_ok();
+    let noted = |sandbox| {
+        doctor_checks(&repo, &[("FERRY_SANDBOX", sandbox)])
+            .iter()
+            .any(|name| name == "remap-paths")
+    };
+    assert_eq!(noted("off"), remaps);
+    if repo.require_userns() {
+        assert!(!noted("auto"));
+    }
+}
+
+/// Without a working toolchain, doctor reports that, not a missing clippy.
+#[test]
+fn doctor_skips_the_clippy_check_without_a_toolchain() {
+    let repo = TestRepo::with_default_config(&[]);
+    let git = std::env::split_paths(&std::env::var_os("PATH").unwrap())
+        .map(|dir| dir.join("git"))
+        .find(|path| path.is_file())
+        .unwrap();
+    let bin = repo.scratch().join("git-only");
+    fs::create_dir(&bin).unwrap();
+    std::os::unix::fs::symlink(git, bin.join("git")).unwrap();
+    let checks = doctor_checks(&repo, &[("PATH", bin.to_str().unwrap())]);
+    assert!(checks.iter().any(|name| name == "toolchain"), "{checks:?}");
+    assert!(!checks.iter().any(|name| name == "clippy"), "{checks:?}");
+}
