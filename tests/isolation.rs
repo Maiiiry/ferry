@@ -53,10 +53,13 @@ fn cargo_runs_at_host_paths_without_a_sandbox() {
 
     let metadata = cargo_metadata(&repo, "a");
     assert_eq!(path_of(&metadata["workspace_root"]), worktree);
-    assert_eq!(
-        path_of(&metadata["target_directory"]),
-        path_of(&env["host_target_dir"])
-    );
+    let mut target = path_of(&metadata["target_directory"]);
+    // With remap-paths (FERRY_TEST_REMAP=1), cargo reaches the target
+    // through a link in the worktree.
+    if target == worktree.join(ferry::remap::TARGET_LINK) {
+        target = fs::read_link(&target).unwrap();
+    }
+    assert_eq!(target, path_of(&env["host_target_dir"]));
 }
 
 #[test]
