@@ -1,0 +1,5821 @@
+{
+  "schema": 1,
+  "name": "ripgrep",
+  "workspace": {
+    "source": "https://github.com/BurntSushi/ripgrep",
+    "commit": "6892bc2b7efe5909cbbeec8f757ed2c4c76b1d30",
+    "edit_file": "crates/ignore/src/lib.rs",
+    "edit_package": "ignore",
+    "edit_crate_root": "crates/ignore/src/lib.rs",
+    "build_command": "cargo build"
+  },
+  "runs": 3,
+  "cold_runs": 2,
+  "agents": 3,
+  "scenarios_selected": [
+    "cold",
+    "naive",
+    "shared",
+    "kache",
+    "ferry-off",
+    "ferry-remap",
+    "ferry-overlay",
+    "ferry-reflink",
+    "refresh"
+  ],
+  "env": {
+    "date": "2026-10-24T20:53:10Z",
+    "cpu_model": "AMD Ryzen 5 3600X 6-Core Processor",
+    "logical_cpus": 12,
+    "physical_cores": 6,
+    "cpu_governor": "powersave",
+    "ram_bytes": 33576771584,
+    "mem_available_bytes": 22712033280,
+    "swap_used_bytes": 2919772160,
+    "os": "NixOS 26.11 (Zokor)",
+    "bench_fs": "btrfs",
+    "bench_mount": {
+      "target": "/home",
+      "source": "/dev/nvme1n1p3[/@home]",
+      "fstype": "btrfs",
+      "options": "rw,noatime,nodiratime,compress=zstd:1,ssd,discard=async,space_cache=v2,subvolid=257,subvol=/@home"
+    },
+    "kernel": "6.18.55",
+    "bench_free_bytes": 19759517696,
+    "rustc": "rustc 1.99.0 (b940084d7 2026-09-28)\nbinary: rustc\ncommit-hash: b940084d7eb6a299eb4bfeb8e34901bc051e7ac4\ncommit-date: 2026-09-28\nhost: x86_64-unknown-linux-gnu\nrelease: 1.99.0\nLLVM version: 23.1.1",
+    "cargo": "cargo 1.99.0 (5f94df478 2026-08-27)",
+    "ferry": "ferry 0.1.0",
+    "ferry_path": "/home/pat/Projects/ferry/target/release/ferry",
+    "ferry_commit": "d7fb5cb8abde0cb5d0b527a36c341c64fe83bf9f",
+    "ferry_source_dirty": false,
+    "kache": "kache 1.2.2",
+    "hyperfine": "hyperfine 1.21.0",
+    "git": "git version 2.55.0",
+    "cp": "cp (GNU coreutils) 9.11",
+    "btrfs_progs": "btrfs-progs v7.1",
+    "bash": "5.3.15(1)-release",
+    "jq": "jq-1.8.2",
+    "ci": null,
+    "loadavg_before": "1.21 3.40 3.67",
+    "loadavg_after": "4.86 5.20 4.55",
+    "mem_available_after_bytes": 21301374976,
+    "swap_used_after_bytes": 2868002816,
+    "date_end": "2026-10-24T21:01:22Z",
+    "idle_note": "idle means no other heavy jobs; judge from loadavg_before/after (1, 5, 15 min) against logical_cpus"
+  },
+  "scenarios": {
+    "cold": {
+      "edit_on_spawn": {
+        "runs": 2,
+        "times": [
+          7.01900971244,
+          7.10739018244
+        ],
+        "median": 7.063199947439999,
+        "mean": 7.063199947439999,
+        "min": 7.01900971244,
+        "max": 7.10739018244,
+        "stddev": 0.06249442966145402,
+        "exit_codes": [
+          0,
+          0
+        ],
+        "crates": [
+          44,
+          44
+        ],
+        "checks_ok": [
+          true,
+          true
+        ],
+        "per_run": [
+          {
+            "crates": 44,
+            "crate_list": [
+              "cfg_if (lib)",
+              "log (lib)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "termcolor (lib)",
+              "itoa (lib)",
+              "build-script-build (custom-build)",
+              "same_file (lib)",
+              "build-script-build (custom-build)",
+              "zmij (lib)",
+              "lexopt (lib)",
+              "grep_matcher (lib)",
+              "memchr (lib)",
+              "walkdir (lib)",
+              "crossbeam_utils (lib)",
+              "build-script-build (custom-build)",
+              "textwrap (lib)",
+              "anyhow (lib)",
+              "crossbeam_epoch (lib)",
+              "crossbeam_deque (lib)",
+              "encoding_rs_io (lib)",
+              "encoding_rs (lib)",
+              "libc (lib)",
+              "memmap2 (lib)",
+              "aho_corasick (lib)",
+              "regex_syntax (lib)",
+              "serde_core (lib)",
+              "serde (lib)",
+              "serde_json (lib)",
+              "bstr (lib)",
+              "grep_searcher (lib)",
+              "grep_regex (lib)",
+              "regex_automata (lib)",
+              "globset (lib)",
+              "grep_cli (lib)",
+              "grep (lib)",
+              "grep_printer (lib)",
+              "ignore (lib)",
+              "rg (bin)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/wt/cold/target/debug/deps/libignore-d6807c341156843a.rlib",
+              "found": [
+                "FERRY_MARK[cold_edit_on_spawn_r0]"
+              ],
+              "expected": [
+                "FERRY_MARK[cold_edit_on_spawn_r0]"
+              ],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          },
+          {
+            "crates": 44,
+            "crate_list": [
+              "cfg_if (lib)",
+              "build-script-build (custom-build)",
+              "log (lib)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "itoa (lib)",
+              "termcolor (lib)",
+              "build-script-build (custom-build)",
+              "same_file (lib)",
+              "build-script-build (custom-build)",
+              "zmij (lib)",
+              "lexopt (lib)",
+              "walkdir (lib)",
+              "build-script-build (custom-build)",
+              "crossbeam_utils (lib)",
+              "textwrap (lib)",
+              "grep_matcher (lib)",
+              "memchr (lib)",
+              "crossbeam_deque (lib)",
+              "crossbeam_epoch (lib)",
+              "anyhow (lib)",
+              "encoding_rs_io (lib)",
+              "libc (lib)",
+              "encoding_rs (lib)",
+              "memmap2 (lib)",
+              "aho_corasick (lib)",
+              "regex_syntax (lib)",
+              "serde_core (lib)",
+              "serde (lib)",
+              "serde_json (lib)",
+              "bstr (lib)",
+              "grep_searcher (lib)",
+              "grep_regex (lib)",
+              "regex_automata (lib)",
+              "globset (lib)",
+              "grep_cli (lib)",
+              "grep (lib)",
+              "grep_printer (lib)",
+              "ignore (lib)",
+              "rg (bin)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/wt/cold/target/debug/deps/libignore-d6807c341156843a.rlib",
+              "found": [
+                "FERRY_MARK[cold_edit_on_spawn_r1]"
+              ],
+              "expected": [
+                "FERRY_MARK[cold_edit_on_spawn_r1]"
+              ],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          }
+        ],
+        "hyperfine": "hyperfine/cold-edit_on_spawn.json",
+        "load_before": "2.37 3.54 3.71",
+        "load_after": "3.56 3.76 3.78"
+      },
+      "first_edit": {
+        "runs": 2,
+        "times": [
+          0.8931365476800001,
+          0.8763083786800001
+        ],
+        "median": 0.8847224631800001,
+        "mean": 0.8847224631800001,
+        "min": 0.8763083786800001,
+        "max": 0.8931365476800001,
+        "stddev": 0.011899312414853206,
+        "exit_codes": [
+          0,
+          0
+        ],
+        "crates": [
+          2,
+          2
+        ],
+        "checks_ok": [
+          true,
+          true
+        ],
+        "per_run": [
+          {
+            "crates": 2,
+            "crate_list": [
+              "ignore (lib)",
+              "rg (bin)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/wt/cold/target/debug/deps/libignore-d6807c341156843a.rlib",
+              "found": [
+                "FERRY_MARK[cold_first_edit_r0]"
+              ],
+              "expected": [
+                "FERRY_MARK[cold_first_edit_r0]"
+              ],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          },
+          {
+            "crates": 2,
+            "crate_list": [
+              "ignore (lib)",
+              "rg (bin)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/wt/cold/target/debug/deps/libignore-d6807c341156843a.rlib",
+              "found": [
+                "FERRY_MARK[cold_first_edit_r1]"
+              ],
+              "expected": [
+                "FERRY_MARK[cold_first_edit_r1]"
+              ],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          }
+        ],
+        "hyperfine": "hyperfine/cold-first_edit.json",
+        "load_before": "3.56 3.76 3.78",
+        "load_after": "5.03 4.10 3.89"
+      },
+      "spawn_build": {
+        "runs": 2,
+        "times": [
+          7.25024876854,
+          7.5503614055399995
+        ],
+        "median": 7.40030508704,
+        "mean": 7.40030508704,
+        "min": 7.25024876854,
+        "max": 7.5503614055399995,
+        "stddev": 0.21221168074247662,
+        "exit_codes": [
+          0,
+          0
+        ],
+        "crates": [
+          44,
+          44
+        ],
+        "checks_ok": [
+          true,
+          true
+        ],
+        "per_run": [
+          {
+            "crates": 44,
+            "crate_list": [
+              "cfg_if (lib)",
+              "log (lib)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "same_file (lib)",
+              "itoa (lib)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "termcolor (lib)",
+              "build-script-build (custom-build)",
+              "zmij (lib)",
+              "lexopt (lib)",
+              "walkdir (lib)",
+              "build-script-build (custom-build)",
+              "memchr (lib)",
+              "grep_matcher (lib)",
+              "textwrap (lib)",
+              "crossbeam_utils (lib)",
+              "anyhow (lib)",
+              "crossbeam_epoch (lib)",
+              "crossbeam_deque (lib)",
+              "encoding_rs_io (lib)",
+              "encoding_rs (lib)",
+              "libc (lib)",
+              "memmap2 (lib)",
+              "aho_corasick (lib)",
+              "serde_core (lib)",
+              "regex_syntax (lib)",
+              "serde (lib)",
+              "serde_json (lib)",
+              "bstr (lib)",
+              "grep_searcher (lib)",
+              "grep_regex (lib)",
+              "regex_automata (lib)",
+              "globset (lib)",
+              "grep_cli (lib)",
+              "grep (lib)",
+              "grep_printer (lib)",
+              "ignore (lib)",
+              "rg (bin)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/wt/cold/target/debug/deps/libignore-d6807c341156843a.rlib",
+              "found": [],
+              "expected": [],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          },
+          {
+            "crates": 44,
+            "crate_list": [
+              "cfg_if (lib)",
+              "build-script-build (custom-build)",
+              "log (lib)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "itoa (lib)",
+              "same_file (lib)",
+              "termcolor (lib)",
+              "build-script-build (custom-build)",
+              "zmij (lib)",
+              "lexopt (lib)",
+              "walkdir (lib)",
+              "crossbeam_utils (lib)",
+              "grep_matcher (lib)",
+              "textwrap (lib)",
+              "build-script-build (custom-build)",
+              "memchr (lib)",
+              "anyhow (lib)",
+              "crossbeam_epoch (lib)",
+              "crossbeam_deque (lib)",
+              "encoding_rs_io (lib)",
+              "libc (lib)",
+              "encoding_rs (lib)",
+              "memmap2 (lib)",
+              "aho_corasick (lib)",
+              "regex_syntax (lib)",
+              "serde_core (lib)",
+              "serde (lib)",
+              "serde_json (lib)",
+              "bstr (lib)",
+              "grep_searcher (lib)",
+              "grep_regex (lib)",
+              "regex_automata (lib)",
+              "globset (lib)",
+              "grep_cli (lib)",
+              "grep (lib)",
+              "grep_printer (lib)",
+              "ignore (lib)",
+              "rg (bin)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/wt/cold/target/debug/deps/libignore-d6807c341156843a.rlib",
+              "found": [],
+              "expected": [],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          }
+        ],
+        "hyperfine": "hyperfine/cold-spawn_build.json",
+        "load_before": "1.21 3.40 3.67",
+        "load_after": "2.37 3.54 3.71"
+      },
+      "target_disk": {
+        "path": "/home/pat/Projects/ferry/bench/work/ripgrep/wt/cold/target",
+        "du_bytes": 422240256,
+        "btrfs_total_bytes": 340107264,
+        "btrfs_exclusive_bytes": 340107264,
+        "btrfs_shared_bytes": 0
+      }
+    },
+    "ferry-off": {
+      "base_disk": {
+        "path": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/bases/6892bc2b7efe5909cbbeec8f757ed2c4c76b1d30-ed82577a/target",
+        "du_bytes": 383827968,
+        "btrfs_total_bytes": 381124608,
+        "btrfs_exclusive_bytes": 381124608,
+        "btrfs_shared_bytes": 0
+      },
+      "base": {
+        "runs": 2,
+        "times": [
+          17.27039119818,
+          9.78558932418
+        ],
+        "median": 13.527990261180001,
+        "mean": 13.527990261180001,
+        "min": 9.78558932418,
+        "max": 17.27039119818,
+        "stddev": 5.292554160943179,
+        "exit_codes": [
+          0,
+          0
+        ],
+        "crates": [
+          42,
+          41
+        ],
+        "checks_ok": [
+          null,
+          null
+        ],
+        "per_run": [
+          {
+            "crates": 42,
+            "crate_list": [
+              "cfg_if (lib)",
+              "build-script-build (custom-build)",
+              "log (lib)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "same_file (lib)",
+              "itoa (lib)",
+              "build-script-build (custom-build)",
+              "termcolor (lib)",
+              "build-script-build (custom-build)",
+              "zmij (lib)",
+              "lexopt (lib)",
+              "walkdir (lib)",
+              "crossbeam_utils (lib)",
+              "textwrap (lib)",
+              "grep_matcher (lib)",
+              "memchr (lib)",
+              "build-script-build (custom-build)",
+              "crossbeam_epoch (lib)",
+              "crossbeam_deque (lib)",
+              "anyhow (lib)",
+              "encoding_rs (lib)",
+              "aho_corasick (lib)",
+              "serde_core (lib)",
+              "encoding_rs_io (lib)",
+              "memmap2 (lib)",
+              "serde (lib)",
+              "serde_json (lib)",
+              "bstr (lib)",
+              "grep_searcher (lib)",
+              "grep_regex (lib)",
+              "regex_automata (lib)",
+              "globset (lib)",
+              "grep_cli (lib)",
+              "grep (lib)",
+              "grep_printer (lib)",
+              "ignore (lib)",
+              "rg (bin)"
+            ],
+            "verify": null,
+            "kache": null,
+            "agents": null,
+            "ferry_report": {
+              "base": {
+                "id": "6892bc2b7efe5909cbbeec8f757ed2c4c76b1d30-ed82577a",
+                "commit": "6892bc2b7efe5909cbbeec8f757ed2c4c76b1d30",
+                "created_unix": 1792875392,
+                "build_secs": 7.864183495,
+                "freshness": "mtime",
+                "isolation": "none",
+                "toolchain": {
+                  "release": "1.99.0",
+                  "channel": "stable",
+                  "host": "x86_64-unknown-linux-gnu",
+                  "rustc_verbose": "rustc 1.99.0 (b940084d7 2026-09-28)\nbinary: rustc\ncommit-hash: b940084d7eb6a299eb4bfeb8e34901bc051e7ac4\ncommit-date: 2026-09-28\nhost: x86_64-unknown-linux-gnu\nrelease: 1.99.0\nLLVM version: 23.1.1",
+                  "cargo_version": "cargo 1.99.0 (5f94df478 2026-08-27)"
+                },
+                "commands": [
+                  "cargo build  --message-format=json"
+                ],
+                "ferry_version": "0.1.0",
+                "dirtied": [],
+                "remap_paths": false,
+                "unit_inputs": "45fabfc5c101d7dc",
+                "seeded_from": null,
+                "command_secs": [
+                  7.782931945
+                ],
+                "incomplete": [],
+                "observed": true,
+                "pruned": null
+              },
+              "reused": false,
+              "warnings": []
+            }
+          },
+          {
+            "crates": 41,
+            "crate_list": [
+              "cfg_if (lib)",
+              "build-script-build (custom-build)",
+              "log (lib)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "itoa (lib)",
+              "same_file (lib)",
+              "build-script-build (custom-build)",
+              "zmij (lib)",
+              "walkdir (lib)",
+              "textwrap (lib)",
+              "crossbeam_utils (lib)",
+              "libc (lib)",
+              "encoding_rs_io (lib)",
+              "memmap2 (lib)",
+              "grep_matcher (lib)",
+              "lexopt (lib)",
+              "encoding_rs (lib)",
+              "crossbeam_epoch (lib)",
+              "crossbeam_deque (lib)",
+              "anyhow (lib)",
+              "build-script-build (custom-build)",
+              "regex_syntax (lib)",
+              "serde_core (lib)",
+              "aho_corasick (lib)",
+              "serde (lib)",
+              "serde_json (lib)",
+              "bstr (lib)",
+              "grep_searcher (lib)",
+              "grep_regex (lib)",
+              "regex_automata (lib)",
+              "globset (lib)",
+              "grep_cli (lib)",
+              "grep (lib)",
+              "grep_printer (lib)",
+              "ignore (lib)",
+              "rg (bin)"
+            ],
+            "verify": null,
+            "kache": null,
+            "agents": null,
+            "ferry_report": {
+              "base": {
+                "id": "6892bc2b7efe5909cbbeec8f757ed2c4c76b1d30-ed82577a",
+                "commit": "6892bc2b7efe5909cbbeec8f757ed2c4c76b1d30",
+                "created_unix": 1792875418,
+                "build_secs": 7.542311724,
+                "freshness": "mtime",
+                "isolation": "none",
+                "toolchain": {
+                  "release": "1.99.0",
+                  "channel": "stable",
+                  "host": "x86_64-unknown-linux-gnu",
+                  "rustc_verbose": "rustc 1.99.0 (b940084d7 2026-09-28)\nbinary: rustc\ncommit-hash: b940084d7eb6a299eb4bfeb8e34901bc051e7ac4\ncommit-date: 2026-09-28\nhost: x86_64-unknown-linux-gnu\nrelease: 1.99.0\nLLVM version: 23.1.1",
+                  "cargo_version": "cargo 1.99.0 (5f94df478 2026-08-27)"
+                },
+                "commands": [
+                  "cargo build  --message-format=json"
+                ],
+                "ferry_version": "0.1.0",
+                "dirtied": [],
+                "remap_paths": false,
+                "unit_inputs": "45fabfc5c101d7dc",
+                "seeded_from": null,
+                "command_secs": [
+                  7.4555322969999995
+                ],
+                "incomplete": [],
+                "observed": true,
+                "pruned": null
+              },
+              "reused": false,
+              "warnings": []
+            }
+          }
+        ],
+        "hyperfine": "hyperfine/ferry-off-base.json",
+        "load_before": "4.68 4.52 4.09",
+        "load_after": "6.59 4.99 4.27"
+      },
+      "concurrent": {
+        "runs": 3,
+        "times": [
+          4.1600471720400005,
+          4.08703832704,
+          4.13019479404
+        ],
+        "median": 4.13019479404,
+        "mean": 4.125760097706667,
+        "min": 4.08703832704,
+        "max": 4.1600471720400005,
+        "stddev": 0.036705895449303236,
+        "exit_codes": [
+          0,
+          0,
+          0
+        ],
+        "crates": [
+          null,
+          null,
+          null
+        ],
+        "checks_ok": [
+          true,
+          true,
+          true
+        ],
+        "per_run": [
+          {
+            "crates": null,
+            "crate_list": null,
+            "verify": null,
+            "kache": null,
+            "agents": [
+              {
+                "agent": 1,
+                "rc": 0,
+                "start": 1792875465.078271381,
+                "end": 1792875469.184706518,
+                "elapsed": 4.106435060501099,
+                "crates": 2,
+                "crate_list": [
+                  "ignore (lib)",
+                  "rg (bin)"
+                ],
+                "build_dir_lock_waits": 0,
+                "package_cache_lock_waits": 4,
+                "verify": {
+                  "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/agents/c1/target/debug/deps/libignore-d6807c341156843a.rlib",
+                  "found": [
+                    "FERRY_MARK[ferry_off_concurrent_r0_a1]"
+                  ],
+                  "expected": [
+                    "FERRY_MARK[ferry_off_concurrent_r0_a1]"
+                  ],
+                  "ok": true
+                }
+              },
+              {
+                "agent": 2,
+                "rc": 0,
+                "start": 1792875465.078421881,
+                "end": 1792875469.184789808,
+                "elapsed": 4.106368064880371,
+                "crates": 2,
+                "crate_list": [
+                  "ignore (lib)",
+                  "rg (bin)"
+                ],
+                "build_dir_lock_waits": 0,
+                "package_cache_lock_waits": 3,
+                "verify": {
+                  "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/agents/c2/target/debug/deps/libignore-d6807c341156843a.rlib",
+                  "found": [
+                    "FERRY_MARK[ferry_off_concurrent_r0_a2]"
+                  ],
+                  "expected": [
+                    "FERRY_MARK[ferry_off_concurrent_r0_a2]"
+                  ],
+                  "ok": true
+                }
+              },
+              {
+                "agent": 3,
+                "rc": 0,
+                "start": 1792875465.078525261,
+                "end": 1792875469.227577465,
+                "elapsed": 4.149052143096924,
+                "crates": 2,
+                "crate_list": [
+                  "ignore (lib)",
+                  "rg (bin)"
+                ],
+                "build_dir_lock_waits": 0,
+                "package_cache_lock_waits": 3,
+                "verify": {
+                  "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/agents/c3/target/debug/deps/libignore-d6807c341156843a.rlib",
+                  "found": [
+                    "FERRY_MARK[ferry_off_concurrent_r0_a3]"
+                  ],
+                  "expected": [
+                    "FERRY_MARK[ferry_off_concurrent_r0_a3]"
+                  ],
+                  "ok": true
+                }
+              }
+            ],
+            "ferry_report": null
+          },
+          {
+            "crates": null,
+            "crate_list": null,
+            "verify": null,
+            "kache": null,
+            "agents": [
+              {
+                "agent": 1,
+                "rc": 0,
+                "start": 1792875471.200903082,
+                "end": 1792875475.166257552,
+                "elapsed": 3.9653544425964355,
+                "crates": 2,
+                "crate_list": [
+                  "ignore (lib)",
+                  "rg (bin)"
+                ],
+                "build_dir_lock_waits": 0,
+                "package_cache_lock_waits": 3,
+                "verify": {
+                  "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/agents/c1/target/debug/deps/libignore-d6807c341156843a.rlib",
+                  "found": [
+                    "FERRY_MARK[ferry_off_concurrent_r1_a1]"
+                  ],
+                  "expected": [
+                    "FERRY_MARK[ferry_off_concurrent_r1_a1]"
+                  ],
+                  "ok": true
+                }
+              },
+              {
+                "agent": 2,
+                "rc": 0,
+                "start": 1792875471.200981702,
+                "end": 1792875475.277829702,
+                "elapsed": 4.076848030090332,
+                "crates": 2,
+                "crate_list": [
+                  "ignore (lib)",
+                  "rg (bin)"
+                ],
+                "build_dir_lock_waits": 0,
+                "package_cache_lock_waits": 3,
+                "verify": {
+                  "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/agents/c2/target/debug/deps/libignore-d6807c341156843a.rlib",
+                  "found": [
+                    "FERRY_MARK[ferry_off_concurrent_r1_a2]"
+                  ],
+                  "expected": [
+                    "FERRY_MARK[ferry_off_concurrent_r1_a2]"
+                  ],
+                  "ok": true
+                }
+              },
+              {
+                "agent": 3,
+                "rc": 0,
+                "start": 1792875471.200839012,
+                "end": 1792875475.213038250,
+                "elapsed": 4.01219916343689,
+                "crates": 2,
+                "crate_list": [
+                  "ignore (lib)",
+                  "rg (bin)"
+                ],
+                "build_dir_lock_waits": 0,
+                "package_cache_lock_waits": 4,
+                "verify": {
+                  "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/agents/c3/target/debug/deps/libignore-d6807c341156843a.rlib",
+                  "found": [
+                    "FERRY_MARK[ferry_off_concurrent_r1_a3]"
+                  ],
+                  "expected": [
+                    "FERRY_MARK[ferry_off_concurrent_r1_a3]"
+                  ],
+                  "ok": true
+                }
+              }
+            ],
+            "ferry_report": null
+          },
+          {
+            "crates": null,
+            "crate_list": null,
+            "verify": null,
+            "kache": null,
+            "agents": [
+              {
+                "agent": 1,
+                "rc": 0,
+                "start": 1792875477.198692295,
+                "end": 1792875481.317903319,
+                "elapsed": 4.119210958480835,
+                "crates": 2,
+                "crate_list": [
+                  "ignore (lib)",
+                  "rg (bin)"
+                ],
+                "build_dir_lock_waits": 0,
+                "package_cache_lock_waits": 3,
+                "verify": {
+                  "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/agents/c1/target/debug/deps/libignore-d6807c341156843a.rlib",
+                  "found": [
+                    "FERRY_MARK[ferry_off_concurrent_r2_a1]"
+                  ],
+                  "expected": [
+                    "FERRY_MARK[ferry_off_concurrent_r2_a1]"
+                  ],
+                  "ok": true
+                }
+              },
+              {
+                "agent": 2,
+                "rc": 0,
+                "start": 1792875477.198949675,
+                "end": 1792875481.304583280,
+                "elapsed": 4.105633497238159,
+                "crates": 2,
+                "crate_list": [
+                  "ignore (lib)",
+                  "rg (bin)"
+                ],
+                "build_dir_lock_waits": 0,
+                "package_cache_lock_waits": 4,
+                "verify": {
+                  "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/agents/c2/target/debug/deps/libignore-d6807c341156843a.rlib",
+                  "found": [
+                    "FERRY_MARK[ferry_off_concurrent_r2_a2]"
+                  ],
+                  "expected": [
+                    "FERRY_MARK[ferry_off_concurrent_r2_a2]"
+                  ],
+                  "ok": true
+                }
+              },
+              {
+                "agent": 3,
+                "rc": 0,
+                "start": 1792875477.198729405,
+                "end": 1792875481.304709110,
+                "elapsed": 4.105979681015015,
+                "crates": 2,
+                "crate_list": [
+                  "ignore (lib)",
+                  "rg (bin)"
+                ],
+                "build_dir_lock_waits": 0,
+                "package_cache_lock_waits": 3,
+                "verify": {
+                  "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/agents/c3/target/debug/deps/libignore-d6807c341156843a.rlib",
+                  "found": [
+                    "FERRY_MARK[ferry_off_concurrent_r2_a3]"
+                  ],
+                  "expected": [
+                    "FERRY_MARK[ferry_off_concurrent_r2_a3]"
+                  ],
+                  "ok": true
+                }
+              }
+            ],
+            "ferry_report": null
+          }
+        ],
+        "hyperfine": "hyperfine/ferry-off-concurrent.json",
+        "load_before": "5.06 4.78 4.23",
+        "load_after": "5.60 4.92 4.29"
+      },
+      "disk_after_second_edit": {
+        "path": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/agents/bench/target",
+        "du_bytes": 422420480,
+        "btrfs_total_bytes": 340291584,
+        "btrfs_exclusive_bytes": 116424704,
+        "btrfs_shared_bytes": 161669120,
+        "ferry_private_bytes": 298266624
+      },
+      "disk_after_spawn": {
+        "path": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/agents/bench/target",
+        "du_bytes": 383827968,
+        "btrfs_total_bytes": 382365696,
+        "btrfs_exclusive_bytes": 0,
+        "btrfs_shared_bytes": 248033280
+      },
+      "edit_on_spawn": {
+        "runs": 3,
+        "times": [
+          3.47994902318,
+          3.20395939818,
+          3.10667692018
+        ],
+        "median": 3.20395939818,
+        "mean": 3.26352844718,
+        "min": 3.10667692018,
+        "max": 3.47994902318,
+        "stddev": 0.19363462866590775,
+        "exit_codes": [
+          0,
+          0,
+          0
+        ],
+        "crates": [
+          2,
+          2,
+          2
+        ],
+        "checks_ok": [
+          true,
+          true,
+          true
+        ],
+        "per_run": [
+          {
+            "crates": 2,
+            "crate_list": [
+              "ignore (lib)",
+              "rg (bin)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/agents/bench/target/debug/deps/libignore-d6807c341156843a.rlib",
+              "found": [
+                "FERRY_MARK[ferry_off_edit_on_spawn_r0]"
+              ],
+              "expected": [
+                "FERRY_MARK[ferry_off_edit_on_spawn_r0]"
+              ],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          },
+          {
+            "crates": 2,
+            "crate_list": [
+              "ignore (lib)",
+              "rg (bin)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/agents/bench/target/debug/deps/libignore-d6807c341156843a.rlib",
+              "found": [
+                "FERRY_MARK[ferry_off_edit_on_spawn_r1]"
+              ],
+              "expected": [
+                "FERRY_MARK[ferry_off_edit_on_spawn_r1]"
+              ],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          },
+          {
+            "crates": 2,
+            "crate_list": [
+              "ignore (lib)",
+              "rg (bin)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/agents/bench/target/debug/deps/libignore-d6807c341156843a.rlib",
+              "found": [
+                "FERRY_MARK[ferry_off_edit_on_spawn_r2]"
+              ],
+              "expected": [
+                "FERRY_MARK[ferry_off_edit_on_spawn_r2]"
+              ],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          }
+        ],
+        "hyperfine": "hyperfine/ferry-off-edit_on_spawn.json",
+        "load_before": "6.14 4.92 4.25",
+        "load_after": "5.73 4.87 4.24"
+      },
+      "first_edit": {
+        "runs": 3,
+        "times": [
+          3.1564521666200003,
+          3.4331134636200002,
+          3.3239784616200003
+        ],
+        "median": 3.3239784616200003,
+        "mean": 3.304514697286667,
+        "min": 3.1564521666200003,
+        "max": 3.4331134636200002,
+        "stddev": 0.13935385500928277,
+        "exit_codes": [
+          0,
+          0,
+          0
+        ],
+        "crates": [
+          2,
+          2,
+          2
+        ],
+        "checks_ok": [
+          true,
+          true,
+          true
+        ],
+        "per_run": [
+          {
+            "crates": 2,
+            "crate_list": [
+              "ignore (lib)",
+              "rg (bin)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/agents/bench/target/debug/deps/libignore-d6807c341156843a.rlib",
+              "found": [
+                "FERRY_MARK[ferry_off_first_edit_r0]"
+              ],
+              "expected": [
+                "FERRY_MARK[ferry_off_first_edit_r0]"
+              ],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          },
+          {
+            "crates": 2,
+            "crate_list": [
+              "ignore (lib)",
+              "rg (bin)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/agents/bench/target/debug/deps/libignore-d6807c341156843a.rlib",
+              "found": [
+                "FERRY_MARK[ferry_off_first_edit_r1]"
+              ],
+              "expected": [
+                "FERRY_MARK[ferry_off_first_edit_r1]"
+              ],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          },
+          {
+            "crates": 2,
+            "crate_list": [
+              "ignore (lib)",
+              "rg (bin)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/agents/bench/target/debug/deps/libignore-d6807c341156843a.rlib",
+              "found": [
+                "FERRY_MARK[ferry_off_first_edit_r2]"
+              ],
+              "expected": [
+                "FERRY_MARK[ferry_off_first_edit_r2]"
+              ],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          }
+        ],
+        "hyperfine": "hyperfine/ferry-off-first_edit.json",
+        "load_before": "5.73 4.87 4.24",
+        "load_after": "5.21 4.80 4.23"
+      },
+      "second_edit": {
+        "runs": 3,
+        "times": [
+          0.9395932787800001,
+          0.9254953667800001,
+          0.9557099357800001
+        ],
+        "median": 0.9395932787800001,
+        "mean": 0.94026619378,
+        "min": 0.9254953667800001,
+        "max": 0.9557099357800001,
+        "stddev": 0.015118520295050656,
+        "exit_codes": [
+          0,
+          0,
+          0
+        ],
+        "crates": [
+          2,
+          2,
+          2
+        ],
+        "checks_ok": [
+          true,
+          true,
+          true
+        ],
+        "per_run": [
+          {
+            "crates": 2,
+            "crate_list": [
+              "ignore (lib)",
+              "rg (bin)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/agents/bench/target/debug/deps/libignore-d6807c341156843a.rlib",
+              "found": [
+                "FERRY_MARK[ferry_off_second_edit_r0_a]",
+                "FERRY_MARK[ferry_off_second_edit_r0_b]"
+              ],
+              "expected": [
+                "FERRY_MARK[ferry_off_second_edit_r0_a]",
+                "FERRY_MARK[ferry_off_second_edit_r0_b]"
+              ],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          },
+          {
+            "crates": 2,
+            "crate_list": [
+              "ignore (lib)",
+              "rg (bin)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/agents/bench/target/debug/deps/libignore-d6807c341156843a.rlib",
+              "found": [
+                "FERRY_MARK[ferry_off_second_edit_r1_a]",
+                "FERRY_MARK[ferry_off_second_edit_r1_b]"
+              ],
+              "expected": [
+                "FERRY_MARK[ferry_off_second_edit_r1_a]",
+                "FERRY_MARK[ferry_off_second_edit_r1_b]"
+              ],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          },
+          {
+            "crates": 2,
+            "crate_list": [
+              "ignore (lib)",
+              "rg (bin)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/agents/bench/target/debug/deps/libignore-d6807c341156843a.rlib",
+              "found": [
+                "FERRY_MARK[ferry_off_second_edit_r2_a]",
+                "FERRY_MARK[ferry_off_second_edit_r2_b]"
+              ],
+              "expected": [
+                "FERRY_MARK[ferry_off_second_edit_r2_a]",
+                "FERRY_MARK[ferry_off_second_edit_r2_b]"
+              ],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          }
+        ],
+        "hyperfine": "hyperfine/ferry-off-second_edit.json",
+        "load_before": "5.21 4.80 4.23",
+        "load_after": "5.06 4.78 4.23"
+      },
+      "spawn_build": {
+        "runs": 3,
+        "times": [
+          0.06503617896,
+          0.062436480960000006,
+          0.06163091896000001
+        ],
+        "median": 0.062436480960000006,
+        "mean": 0.06303452629333334,
+        "min": 0.06163091896000001,
+        "max": 0.06503617896,
+        "stddev": 0.0017796608054461696,
+        "exit_codes": [
+          0,
+          0,
+          0
+        ],
+        "crates": [
+          0,
+          0,
+          0
+        ],
+        "checks_ok": [
+          true,
+          true,
+          true
+        ],
+        "per_run": [
+          {
+            "crates": 0,
+            "crate_list": [],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/agents/bench/target/debug/deps/libignore-d6807c341156843a.rlib",
+              "found": [],
+              "expected": [],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          },
+          {
+            "crates": 0,
+            "crate_list": [],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/agents/bench/target/debug/deps/libignore-d6807c341156843a.rlib",
+              "found": [],
+              "expected": [],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          },
+          {
+            "crates": 0,
+            "crate_list": [],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/agents/bench/target/debug/deps/libignore-d6807c341156843a.rlib",
+              "found": [],
+              "expected": [],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          }
+        ],
+        "hyperfine": "hyperfine/ferry-off-spawn_build.json",
+        "load_before": "6.59 4.99 4.27",
+        "load_after": "6.14 4.92 4.25"
+      },
+      "spawn": {
+        "runs": 3,
+        "times": [
+          0.1686189395,
+          0.15989174450000002,
+          0.1711280365
+        ],
+        "median": 0.1686189395,
+        "mean": 0.16654624016666666,
+        "min": 0.15989174450000002,
+        "max": 0.1711280365,
+        "stddev": 0.005897934076616678,
+        "exit_codes": [
+          0,
+          0,
+          0
+        ],
+        "crates": [
+          null,
+          null,
+          null
+        ],
+        "checks_ok": [
+          null,
+          null,
+          null
+        ],
+        "per_run": [
+          {
+            "crates": null,
+            "crate_list": null,
+            "verify": null,
+            "kache": null,
+            "agents": null,
+            "ferry_report": {
+              "agent": {
+                "name": "bench",
+                "state": "ready",
+                "base": "6892bc2b7efe5909cbbeec8f757ed2c4c76b1d30-ed82577a",
+                "from": "6892bc2b7efe5909cbbeec8f757ed2c4c76b1d30",
+                "branch": "ferry/bench",
+                "worktree": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/wt/repo-2cf8c185a0d5383c/bench",
+                "backend": "reflink",
+                "isolation": "none",
+                "freshness": "mtime",
+                "created_unix": 1792875420,
+                "stamp": {
+                  "tracked": 226,
+                  "stamped": 225,
+                  "skipped": 1,
+                  "dirs": 60,
+                  "dirs_stamped": 60
+                },
+                "origin": "cli"
+              },
+              "backend_reason": "btrfs supports copy-on-write clones",
+              "fork": {
+                "files": 1407,
+                "bytes": 380736471,
+                "elapsed_secs": 0.06748508
+              },
+              "elapsed_secs": 0.163003861,
+              "warnings": []
+            }
+          },
+          {
+            "crates": null,
+            "crate_list": null,
+            "verify": null,
+            "kache": null,
+            "agents": null,
+            "ferry_report": {
+              "agent": {
+                "name": "bench",
+                "state": "ready",
+                "base": "6892bc2b7efe5909cbbeec8f757ed2c4c76b1d30-ed82577a",
+                "from": "6892bc2b7efe5909cbbeec8f757ed2c4c76b1d30",
+                "branch": "ferry/bench",
+                "worktree": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/wt/repo-2cf8c185a0d5383c/bench",
+                "backend": "reflink",
+                "isolation": "none",
+                "freshness": "mtime",
+                "created_unix": 1792875421,
+                "stamp": {
+                  "tracked": 226,
+                  "stamped": 225,
+                  "skipped": 1,
+                  "dirs": 60,
+                  "dirs_stamped": 60
+                },
+                "origin": "cli"
+              },
+              "backend_reason": "btrfs supports copy-on-write clones",
+              "fork": {
+                "files": 1407,
+                "bytes": 380736471,
+                "elapsed_secs": 0.070756099
+              },
+              "elapsed_secs": 0.153794144,
+              "warnings": []
+            }
+          },
+          {
+            "crates": null,
+            "crate_list": null,
+            "verify": null,
+            "kache": null,
+            "agents": null,
+            "ferry_report": {
+              "agent": {
+                "name": "bench",
+                "state": "ready",
+                "base": "6892bc2b7efe5909cbbeec8f757ed2c4c76b1d30-ed82577a",
+                "from": "6892bc2b7efe5909cbbeec8f757ed2c4c76b1d30",
+                "branch": "ferry/bench",
+                "worktree": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/wt/repo-2cf8c185a0d5383c/bench",
+                "backend": "reflink",
+                "isolation": "none",
+                "freshness": "mtime",
+                "created_unix": 1792875421,
+                "stamp": {
+                  "tracked": 226,
+                  "stamped": 225,
+                  "skipped": 1,
+                  "dirs": 60,
+                  "dirs_stamped": 60
+                },
+                "origin": "cli"
+              },
+              "backend_reason": "btrfs supports copy-on-write clones",
+              "fork": {
+                "files": 1407,
+                "bytes": 380736471,
+                "elapsed_secs": 0.065829114
+              },
+              "elapsed_secs": 0.165713519,
+              "warnings": []
+            }
+          }
+        ],
+        "hyperfine": "hyperfine/ferry-off-spawn.json",
+        "load_before": "6.59 4.99 4.27",
+        "load_after": "6.59 4.99 4.27"
+      }
+    },
+    "ferry-overlay": {
+      "base_disk": {
+        "path": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/bases/6892bc2b7efe5909cbbeec8f757ed2c4c76b1d30-42c69dbf/target",
+        "du_bytes": 383709184,
+        "btrfs_total_bytes": 248832000,
+        "btrfs_exclusive_bytes": 248832000,
+        "btrfs_shared_bytes": 0
+      },
+      "base": {
+        "runs": 2,
+        "times": [
+          7.63300181424,
+          7.47182287724
+        ],
+        "median": 7.5524123457400005,
+        "mean": 7.5524123457400005,
+        "min": 7.47182287724,
+        "max": 7.63300181424,
+        "stddev": 0.11397071933713922,
+        "exit_codes": [
+          0,
+          0
+        ],
+        "crates": [
+          44,
+          44
+        ],
+        "checks_ok": [
+          null,
+          null
+        ],
+        "per_run": [
+          {
+            "crates": 44,
+            "crate_list": [
+              "cfg_if (lib)",
+              "log (lib)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "itoa (lib)",
+              "same_file (lib)",
+              "build-script-build (custom-build)",
+              "zmij (lib)",
+              "termcolor (lib)",
+              "walkdir (lib)",
+              "memchr (lib)",
+              "build-script-build (custom-build)",
+              "grep_matcher (lib)",
+              "textwrap (lib)",
+              "crossbeam_utils (lib)",
+              "lexopt (lib)",
+              "anyhow (lib)",
+              "crossbeam_epoch (lib)",
+              "crossbeam_deque (lib)",
+              "encoding_rs_io (lib)",
+              "encoding_rs (lib)",
+              "libc (lib)",
+              "memmap2 (lib)",
+              "aho_corasick (lib)",
+              "regex_syntax (lib)",
+              "serde_core (lib)",
+              "serde (lib)",
+              "serde_json (lib)",
+              "bstr (lib)",
+              "grep_searcher (lib)",
+              "grep_regex (lib)",
+              "regex_automata (lib)",
+              "globset (lib)",
+              "grep_cli (lib)",
+              "grep (lib)",
+              "grep_printer (lib)",
+              "ignore (lib)",
+              "rg (bin)"
+            ],
+            "verify": null,
+            "kache": null,
+            "agents": null,
+            "ferry_report": {
+              "base": {
+                "id": "6892bc2b7efe5909cbbeec8f757ed2c4c76b1d30-42c69dbf",
+                "commit": "6892bc2b7efe5909cbbeec8f757ed2c4c76b1d30",
+                "created_unix": 1792875588,
+                "build_secs": 7.569355494,
+                "freshness": "mtime",
+                "isolation": "namespace",
+                "toolchain": {
+                  "release": "1.99.0",
+                  "channel": "stable",
+                  "host": "x86_64-unknown-linux-gnu",
+                  "rustc_verbose": "rustc 1.99.0 (b940084d7 2026-09-28)\nbinary: rustc\ncommit-hash: b940084d7eb6a299eb4bfeb8e34901bc051e7ac4\ncommit-date: 2026-09-28\nhost: x86_64-unknown-linux-gnu\nrelease: 1.99.0\nLLVM version: 23.1.1",
+                  "cargo_version": "cargo 1.99.0 (5f94df478 2026-08-27)"
+                },
+                "commands": [
+                  "cargo build  --message-format=json"
+                ],
+                "ferry_version": "0.1.0",
+                "dirtied": [],
+                "remap_paths": false,
+                "unit_inputs": "45fabfc5c101d7dc",
+                "seeded_from": null,
+                "command_secs": [
+                  7.489572388
+                ],
+                "incomplete": [],
+                "observed": true,
+                "pruned": null
+              },
+              "reused": false,
+              "warnings": []
+            }
+          },
+          {
+            "crates": 44,
+            "crate_list": [
+              "cfg_if (lib)",
+              "log (lib)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "same_file (lib)",
+              "build-script-build (custom-build)",
+              "itoa (lib)",
+              "termcolor (lib)",
+              "build-script-build (custom-build)",
+              "zmij (lib)",
+              "lexopt (lib)",
+              "walkdir (lib)",
+              "memchr (lib)",
+              "textwrap (lib)",
+              "crossbeam_utils (lib)",
+              "grep_matcher (lib)",
+              "build-script-build (custom-build)",
+              "anyhow (lib)",
+              "crossbeam_epoch (lib)",
+              "crossbeam_deque (lib)",
+              "encoding_rs_io (lib)",
+              "encoding_rs (lib)",
+              "libc (lib)",
+              "memmap2 (lib)",
+              "aho_corasick (lib)",
+              "regex_syntax (lib)",
+              "serde_core (lib)",
+              "serde (lib)",
+              "serde_json (lib)",
+              "bstr (lib)",
+              "grep_searcher (lib)",
+              "grep_regex (lib)",
+              "regex_automata (lib)",
+              "globset (lib)",
+              "grep_cli (lib)",
+              "grep (lib)",
+              "grep_printer (lib)",
+              "ignore (lib)",
+              "rg (bin)"
+            ],
+            "verify": null,
+            "kache": null,
+            "agents": null,
+            "ferry_report": {
+              "base": {
+                "id": "6892bc2b7efe5909cbbeec8f757ed2c4c76b1d30-42c69dbf",
+                "commit": "6892bc2b7efe5909cbbeec8f757ed2c4c76b1d30",
+                "created_unix": 1792875596,
+                "build_secs": 7.404128025,
+                "freshness": "mtime",
+                "isolation": "namespace",
+                "toolchain": {
+                  "release": "1.99.0",
+                  "channel": "stable",
+                  "host": "x86_64-unknown-linux-gnu",
+                  "rustc_verbose": "rustc 1.99.0 (b940084d7 2026-09-28)\nbinary: rustc\ncommit-hash: b940084d7eb6a299eb4bfeb8e34901bc051e7ac4\ncommit-date: 2026-09-28\nhost: x86_64-unknown-linux-gnu\nrelease: 1.99.0\nLLVM version: 23.1.1",
+                  "cargo_version": "cargo 1.99.0 (5f94df478 2026-08-27)"
+                },
+                "commands": [
+                  "cargo build  --message-format=json"
+                ],
+                "ferry_version": "0.1.0",
+                "dirtied": [],
+                "remap_paths": false,
+                "unit_inputs": "45fabfc5c101d7dc",
+                "seeded_from": null,
+                "command_secs": [
+                  7.322620905
+                ],
+                "incomplete": [],
+                "observed": true,
+                "pruned": null
+              },
+              "reused": false,
+              "warnings": []
+            }
+          }
+        ],
+        "hyperfine": "hyperfine/ferry-overlay-base.json",
+        "load_before": "7.70 5.62 4.59",
+        "load_after": "7.63 5.72 4.64"
+      },
+      "concurrent": {
+        "runs": 3,
+        "times": [
+          1.55846642886,
+          1.57499205786,
+          1.57220236986
+        ],
+        "median": 1.57220236986,
+        "mean": 1.5685536188600002,
+        "min": 1.55846642886,
+        "max": 1.57499205786,
+        "stddev": 0.008846419691401194,
+        "exit_codes": [
+          0,
+          0,
+          0
+        ],
+        "crates": [
+          null,
+          null,
+          null
+        ],
+        "checks_ok": [
+          true,
+          true,
+          true
+        ],
+        "per_run": [
+          {
+            "crates": null,
+            "crate_list": null,
+            "verify": null,
+            "kache": null,
+            "agents": [
+              {
+                "agent": 1,
+                "rc": 0,
+                "start": 1792875619.269428215,
+                "end": 1792875620.817303026,
+                "elapsed": 1.5478746891021729,
+                "crates": 2,
+                "crate_list": [
+                  "ignore (lib)",
+                  "rg (bin)"
+                ],
+                "build_dir_lock_waits": 0,
+                "package_cache_lock_waits": 3,
+                "verify": {
+                  "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/mnt/target/debug/deps/libignore-d6807c341156843a.rlib",
+                  "found": [
+                    "FERRY_MARK[ferry_overlay_concurrent_r0_a1]"
+                  ],
+                  "expected": [
+                    "FERRY_MARK[ferry_overlay_concurrent_r0_a1]"
+                  ],
+                  "ok": true
+                }
+              },
+              {
+                "agent": 2,
+                "rc": 0,
+                "start": 1792875619.269428215,
+                "end": 1792875620.817670987,
+                "elapsed": 1.5482428073883057,
+                "crates": 2,
+                "crate_list": [
+                  "ignore (lib)",
+                  "rg (bin)"
+                ],
+                "build_dir_lock_waits": 0,
+                "package_cache_lock_waits": 3,
+                "verify": {
+                  "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/mnt/target/debug/deps/libignore-d6807c341156843a.rlib",
+                  "found": [
+                    "FERRY_MARK[ferry_overlay_concurrent_r0_a2]"
+                  ],
+                  "expected": [
+                    "FERRY_MARK[ferry_overlay_concurrent_r0_a2]"
+                  ],
+                  "ok": true
+                }
+              },
+              {
+                "agent": 3,
+                "rc": 0,
+                "start": 1792875619.269815906,
+                "end": 1792875620.817307696,
+                "elapsed": 1.5474917888641357,
+                "crates": 2,
+                "crate_list": [
+                  "ignore (lib)",
+                  "rg (bin)"
+                ],
+                "build_dir_lock_waits": 0,
+                "package_cache_lock_waits": 4,
+                "verify": {
+                  "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/mnt/target/debug/deps/libignore-d6807c341156843a.rlib",
+                  "found": [
+                    "FERRY_MARK[ferry_overlay_concurrent_r0_a3]"
+                  ],
+                  "expected": [
+                    "FERRY_MARK[ferry_overlay_concurrent_r0_a3]"
+                  ],
+                  "ok": true
+                }
+              }
+            ],
+            "ferry_report": null
+          },
+          {
+            "crates": null,
+            "crate_list": null,
+            "verify": null,
+            "kache": null,
+            "agents": [
+              {
+                "agent": 1,
+                "rc": 0,
+                "start": 1792875622.129649341,
+                "end": 1792875623.695183955,
+                "elapsed": 1.5655345916748047,
+                "crates": 2,
+                "crate_list": [
+                  "ignore (lib)",
+                  "rg (bin)"
+                ],
+                "build_dir_lock_waits": 0,
+                "package_cache_lock_waits": 3,
+                "verify": {
+                  "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/mnt/target/debug/deps/libignore-d6807c341156843a.rlib",
+                  "found": [
+                    "FERRY_MARK[ferry_overlay_concurrent_r1_a1]"
+                  ],
+                  "expected": [
+                    "FERRY_MARK[ferry_overlay_concurrent_r1_a1]"
+                  ],
+                  "ok": true
+                }
+              },
+              {
+                "agent": 2,
+                "rc": 0,
+                "start": 1792875622.129690352,
+                "end": 1792875623.695106675,
+                "elapsed": 1.5654163360595703,
+                "crates": 2,
+                "crate_list": [
+                  "ignore (lib)",
+                  "rg (bin)"
+                ],
+                "build_dir_lock_waits": 0,
+                "package_cache_lock_waits": 4,
+                "verify": {
+                  "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/mnt/target/debug/deps/libignore-d6807c341156843a.rlib",
+                  "found": [
+                    "FERRY_MARK[ferry_overlay_concurrent_r1_a2]"
+                  ],
+                  "expected": [
+                    "FERRY_MARK[ferry_overlay_concurrent_r1_a2]"
+                  ],
+                  "ok": true
+                }
+              },
+              {
+                "agent": 3,
+                "rc": 0,
+                "start": 1792875622.129836082,
+                "end": 1792875623.695107515,
+                "elapsed": 1.5652713775634766,
+                "crates": 2,
+                "crate_list": [
+                  "ignore (lib)",
+                  "rg (bin)"
+                ],
+                "build_dir_lock_waits": 0,
+                "package_cache_lock_waits": 3,
+                "verify": {
+                  "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/mnt/target/debug/deps/libignore-d6807c341156843a.rlib",
+                  "found": [
+                    "FERRY_MARK[ferry_overlay_concurrent_r1_a3]"
+                  ],
+                  "expected": [
+                    "FERRY_MARK[ferry_overlay_concurrent_r1_a3]"
+                  ],
+                  "ok": true
+                }
+              }
+            ],
+            "ferry_report": null
+          },
+          {
+            "crates": null,
+            "crate_list": null,
+            "verify": null,
+            "kache": null,
+            "agents": [
+              {
+                "agent": 1,
+                "rc": 0,
+                "start": 1792875624.981904875,
+                "end": 1792875626.543651947,
+                "elapsed": 1.5617468357086182,
+                "crates": 2,
+                "crate_list": [
+                  "ignore (lib)",
+                  "rg (bin)"
+                ],
+                "build_dir_lock_waits": 0,
+                "package_cache_lock_waits": 3,
+                "verify": {
+                  "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/mnt/target/debug/deps/libignore-d6807c341156843a.rlib",
+                  "found": [
+                    "FERRY_MARK[ferry_overlay_concurrent_r2_a1]"
+                  ],
+                  "expected": [
+                    "FERRY_MARK[ferry_overlay_concurrent_r2_a1]"
+                  ],
+                  "ok": true
+                }
+              },
+              {
+                "agent": 2,
+                "rc": 0,
+                "start": 1792875624.981946245,
+                "end": 1792875626.543682587,
+                "elapsed": 1.5617363452911377,
+                "crates": 2,
+                "crate_list": [
+                  "ignore (lib)",
+                  "rg (bin)"
+                ],
+                "build_dir_lock_waits": 0,
+                "package_cache_lock_waits": 4,
+                "verify": {
+                  "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/mnt/target/debug/deps/libignore-d6807c341156843a.rlib",
+                  "found": [
+                    "FERRY_MARK[ferry_overlay_concurrent_r2_a2]"
+                  ],
+                  "expected": [
+                    "FERRY_MARK[ferry_overlay_concurrent_r2_a2]"
+                  ],
+                  "ok": true
+                }
+              },
+              {
+                "agent": 3,
+                "rc": 0,
+                "start": 1792875624.982023105,
+                "end": 1792875626.543618597,
+                "elapsed": 1.5615956783294678,
+                "crates": 2,
+                "crate_list": [
+                  "ignore (lib)",
+                  "rg (bin)"
+                ],
+                "build_dir_lock_waits": 0,
+                "package_cache_lock_waits": 3,
+                "verify": {
+                  "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/mnt/target/debug/deps/libignore-d6807c341156843a.rlib",
+                  "found": [
+                    "FERRY_MARK[ferry_overlay_concurrent_r2_a3]"
+                  ],
+                  "expected": [
+                    "FERRY_MARK[ferry_overlay_concurrent_r2_a3]"
+                  ],
+                  "ok": true
+                }
+              }
+            ],
+            "ferry_report": null
+          }
+        ],
+        "hyperfine": "hyperfine/ferry-overlay-concurrent.json",
+        "load_before": "6.63 5.65 4.65",
+        "load_after": "6.18 5.58 4.63"
+      },
+      "disk_after_second_edit": {
+        "path": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/agents/bench/upper",
+        "du_bytes": 195264512,
+        "btrfs_total_bytes": 195174400,
+        "btrfs_exclusive_bytes": 148361216,
+        "btrfs_shared_bytes": 27697152,
+        "ferry_private_bytes": 195264512
+      },
+      "disk_after_spawn": {
+        "path": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/agents/bench/upper",
+        "du_bytes": 0,
+        "btrfs_total_bytes": 0,
+        "btrfs_exclusive_bytes": 0,
+        "btrfs_shared_bytes": 0
+      },
+      "edit_on_spawn": {
+        "runs": 3,
+        "times": [
+          1.25100032026,
+          1.27401493926,
+          1.25216370426
+        ],
+        "median": 1.25216370426,
+        "mean": 1.2590596545933332,
+        "min": 1.25100032026,
+        "max": 1.27401493926,
+        "stddev": 0.012964712498880962,
+        "exit_codes": [
+          0,
+          0,
+          0
+        ],
+        "crates": [
+          2,
+          2,
+          2
+        ],
+        "checks_ok": [
+          true,
+          true,
+          true
+        ],
+        "per_run": [
+          {
+            "crates": 2,
+            "crate_list": [
+              "ignore (lib)",
+              "rg (bin)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/mnt/target/debug/deps/libignore-d6807c341156843a.rlib",
+              "found": [
+                "FERRY_MARK[ferry_overlay_edit_on_spawn_r0]"
+              ],
+              "expected": [
+                "FERRY_MARK[ferry_overlay_edit_on_spawn_r0]"
+              ],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          },
+          {
+            "crates": 2,
+            "crate_list": [
+              "ignore (lib)",
+              "rg (bin)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/mnt/target/debug/deps/libignore-d6807c341156843a.rlib",
+              "found": [
+                "FERRY_MARK[ferry_overlay_edit_on_spawn_r1]"
+              ],
+              "expected": [
+                "FERRY_MARK[ferry_overlay_edit_on_spawn_r1]"
+              ],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          },
+          {
+            "crates": 2,
+            "crate_list": [
+              "ignore (lib)",
+              "rg (bin)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/mnt/target/debug/deps/libignore-d6807c341156843a.rlib",
+              "found": [
+                "FERRY_MARK[ferry_overlay_edit_on_spawn_r2]"
+              ],
+              "expected": [
+                "FERRY_MARK[ferry_overlay_edit_on_spawn_r2]"
+              ],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          }
+        ],
+        "hyperfine": "hyperfine/ferry-overlay-edit_on_spawn.json",
+        "load_before": "7.18 5.66 4.62",
+        "load_after": "7.96 5.84 4.69"
+      },
+      "first_edit": {
+        "runs": 3,
+        "times": [
+          1.2341196893600002,
+          1.26877968136,
+          1.3454360283600002
+        ],
+        "median": 1.26877968136,
+        "mean": 1.2827784663600001,
+        "min": 1.2341196893600002,
+        "max": 1.3454360283600002,
+        "stddev": 0.056963201439156334,
+        "exit_codes": [
+          0,
+          0,
+          0
+        ],
+        "crates": [
+          2,
+          2,
+          2
+        ],
+        "checks_ok": [
+          true,
+          true,
+          true
+        ],
+        "per_run": [
+          {
+            "crates": 2,
+            "crate_list": [
+              "ignore (lib)",
+              "rg (bin)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/mnt/target/debug/deps/libignore-d6807c341156843a.rlib",
+              "found": [
+                "FERRY_MARK[ferry_overlay_first_edit_r0]"
+              ],
+              "expected": [
+                "FERRY_MARK[ferry_overlay_first_edit_r0]"
+              ],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          },
+          {
+            "crates": 2,
+            "crate_list": [
+              "ignore (lib)",
+              "rg (bin)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/mnt/target/debug/deps/libignore-d6807c341156843a.rlib",
+              "found": [
+                "FERRY_MARK[ferry_overlay_first_edit_r1]"
+              ],
+              "expected": [
+                "FERRY_MARK[ferry_overlay_first_edit_r1]"
+              ],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          },
+          {
+            "crates": 2,
+            "crate_list": [
+              "ignore (lib)",
+              "rg (bin)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/mnt/target/debug/deps/libignore-d6807c341156843a.rlib",
+              "found": [
+                "FERRY_MARK[ferry_overlay_first_edit_r2]"
+              ],
+              "expected": [
+                "FERRY_MARK[ferry_overlay_first_edit_r2]"
+              ],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          }
+        ],
+        "hyperfine": "hyperfine/ferry-overlay-first_edit.json",
+        "load_before": "7.96 5.84 4.69",
+        "load_after": "7.57 5.80 4.68"
+      },
+      "second_edit": {
+        "runs": 3,
+        "times": [
+          1.0552244267,
+          1.0663129907,
+          1.0850393957
+        ],
+        "median": 1.0663129907,
+        "mean": 1.0688589377,
+        "min": 1.0552244267,
+        "max": 1.0850393957,
+        "stddev": 0.015069654233354107,
+        "exit_codes": [
+          0,
+          0,
+          0
+        ],
+        "crates": [
+          2,
+          2,
+          2
+        ],
+        "checks_ok": [
+          true,
+          true,
+          true
+        ],
+        "per_run": [
+          {
+            "crates": 2,
+            "crate_list": [
+              "ignore (lib)",
+              "rg (bin)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/mnt/target/debug/deps/libignore-d6807c341156843a.rlib",
+              "found": [
+                "FERRY_MARK[ferry_overlay_second_edit_r0_a]",
+                "FERRY_MARK[ferry_overlay_second_edit_r0_b]"
+              ],
+              "expected": [
+                "FERRY_MARK[ferry_overlay_second_edit_r0_a]",
+                "FERRY_MARK[ferry_overlay_second_edit_r0_b]"
+              ],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          },
+          {
+            "crates": 2,
+            "crate_list": [
+              "ignore (lib)",
+              "rg (bin)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/mnt/target/debug/deps/libignore-d6807c341156843a.rlib",
+              "found": [
+                "FERRY_MARK[ferry_overlay_second_edit_r1_a]",
+                "FERRY_MARK[ferry_overlay_second_edit_r1_b]"
+              ],
+              "expected": [
+                "FERRY_MARK[ferry_overlay_second_edit_r1_a]",
+                "FERRY_MARK[ferry_overlay_second_edit_r1_b]"
+              ],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          },
+          {
+            "crates": 2,
+            "crate_list": [
+              "ignore (lib)",
+              "rg (bin)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/mnt/target/debug/deps/libignore-d6807c341156843a.rlib",
+              "found": [
+                "FERRY_MARK[ferry_overlay_second_edit_r2_a]",
+                "FERRY_MARK[ferry_overlay_second_edit_r2_b]"
+              ],
+              "expected": [
+                "FERRY_MARK[ferry_overlay_second_edit_r2_a]",
+                "FERRY_MARK[ferry_overlay_second_edit_r2_b]"
+              ],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          }
+        ],
+        "hyperfine": "hyperfine/ferry-overlay-second_edit.json",
+        "load_before": "7.57 5.80 4.68",
+        "load_after": "6.63 5.65 4.65"
+      },
+      "spawn_build": {
+        "runs": 3,
+        "times": [
+          0.08420729386,
+          0.08588554886,
+          0.08423425486
+        ],
+        "median": 0.08423425486,
+        "mean": 0.08477569919333333,
+        "min": 0.08420729386,
+        "max": 0.08588554886,
+        "stddev": 0.0009612525348888949,
+        "exit_codes": [
+          0,
+          0,
+          0
+        ],
+        "crates": [
+          0,
+          0,
+          0
+        ],
+        "checks_ok": [
+          true,
+          true,
+          true
+        ],
+        "per_run": [
+          {
+            "crates": 0,
+            "crate_list": [],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/mnt/target/debug/deps/libignore-d6807c341156843a.rlib",
+              "found": [],
+              "expected": [],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          },
+          {
+            "crates": 0,
+            "crate_list": [],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/mnt/target/debug/deps/libignore-d6807c341156843a.rlib",
+              "found": [],
+              "expected": [],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          },
+          {
+            "crates": 0,
+            "crate_list": [],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/mnt/target/debug/deps/libignore-d6807c341156843a.rlib",
+              "found": [],
+              "expected": [],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          }
+        ],
+        "hyperfine": "hyperfine/ferry-overlay-spawn_build.json",
+        "load_before": "7.18 5.66 4.62",
+        "load_after": "7.18 5.66 4.62"
+      },
+      "spawn": {
+        "runs": 3,
+        "times": [
+          0.10719786814000001,
+          0.10343832614000001,
+          0.10289805514000001
+        ],
+        "median": 0.10343832614000001,
+        "mean": 0.10451141647333334,
+        "min": 0.10289805514000001,
+        "max": 0.10719786814000001,
+        "stddev": 0.002342165687213938,
+        "exit_codes": [
+          0,
+          0,
+          0
+        ],
+        "crates": [
+          null,
+          null,
+          null
+        ],
+        "checks_ok": [
+          null,
+          null,
+          null
+        ],
+        "per_run": [
+          {
+            "crates": null,
+            "crate_list": null,
+            "verify": null,
+            "kache": null,
+            "agents": null,
+            "ferry_report": {
+              "agent": {
+                "name": "bench",
+                "state": "ready",
+                "base": "6892bc2b7efe5909cbbeec8f757ed2c4c76b1d30-42c69dbf",
+                "from": "6892bc2b7efe5909cbbeec8f757ed2c4c76b1d30",
+                "branch": "ferry/bench",
+                "worktree": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/wt/repo-2cf8c185a0d5383c/bench",
+                "backend": "overlay",
+                "isolation": "namespace",
+                "freshness": "mtime",
+                "created_unix": 1792875597,
+                "stamp": {
+                  "tracked": 226,
+                  "stamped": 225,
+                  "skipped": 1,
+                  "dirs": 60,
+                  "dirs_stamped": 60
+                },
+                "origin": "cli"
+              },
+              "backend_reason": "overlayfs works in the namespace sandbox on btrfs",
+              "fork": {
+                "files": 0,
+                "bytes": 0,
+                "elapsed_secs": 0.00004489
+              },
+              "elapsed_secs": 0.10159316,
+              "warnings": []
+            }
+          },
+          {
+            "crates": null,
+            "crate_list": null,
+            "verify": null,
+            "kache": null,
+            "agents": null,
+            "ferry_report": {
+              "agent": {
+                "name": "bench",
+                "state": "ready",
+                "base": "6892bc2b7efe5909cbbeec8f757ed2c4c76b1d30-42c69dbf",
+                "from": "6892bc2b7efe5909cbbeec8f757ed2c4c76b1d30",
+                "branch": "ferry/bench",
+                "worktree": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/wt/repo-2cf8c185a0d5383c/bench",
+                "backend": "overlay",
+                "isolation": "namespace",
+                "freshness": "mtime",
+                "created_unix": 1792875597,
+                "stamp": {
+                  "tracked": 226,
+                  "stamped": 225,
+                  "skipped": 1,
+                  "dirs": 60,
+                  "dirs_stamped": 60
+                },
+                "origin": "cli"
+              },
+              "backend_reason": "overlayfs works in the namespace sandbox on btrfs",
+              "fork": {
+                "files": 0,
+                "bytes": 0,
+                "elapsed_secs": 0.00020203
+              },
+              "elapsed_secs": 0.098287911,
+              "warnings": []
+            }
+          },
+          {
+            "crates": null,
+            "crate_list": null,
+            "verify": null,
+            "kache": null,
+            "agents": null,
+            "ferry_report": {
+              "agent": {
+                "name": "bench",
+                "state": "ready",
+                "base": "6892bc2b7efe5909cbbeec8f757ed2c4c76b1d30-42c69dbf",
+                "from": "6892bc2b7efe5909cbbeec8f757ed2c4c76b1d30",
+                "branch": "ferry/bench",
+                "worktree": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/wt/repo-2cf8c185a0d5383c/bench",
+                "backend": "overlay",
+                "isolation": "namespace",
+                "freshness": "mtime",
+                "created_unix": 1792875597,
+                "stamp": {
+                  "tracked": 226,
+                  "stamped": 225,
+                  "skipped": 1,
+                  "dirs": 60,
+                  "dirs_stamped": 60
+                },
+                "origin": "cli"
+              },
+              "backend_reason": "overlayfs works in the namespace sandbox on btrfs",
+              "fork": {
+                "files": 0,
+                "bytes": 0,
+                "elapsed_secs": 0.00003518
+              },
+              "elapsed_secs": 0.097490188,
+              "warnings": []
+            }
+          }
+        ],
+        "hyperfine": "hyperfine/ferry-overlay-spawn.json",
+        "load_before": "7.63 5.72 4.64",
+        "load_after": "7.18 5.66 4.62"
+      }
+    },
+    "ferry-reflink": {
+      "base_disk": {
+        "path": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/bases/6892bc2b7efe5909cbbeec8f757ed2c4c76b1d30-42c69dbf/target",
+        "du_bytes": 383709184,
+        "btrfs_total_bytes": 382238720,
+        "btrfs_exclusive_bytes": 382238720,
+        "btrfs_shared_bytes": 0
+      },
+      "concurrent": {
+        "runs": 3,
+        "times": [
+          1.42577570818,
+          1.40892162918,
+          1.39250868018
+        ],
+        "median": 1.40892162918,
+        "mean": 1.4090686725133332,
+        "min": 1.39250868018,
+        "max": 1.42577570818,
+        "stddev": 0.01663400145168338,
+        "exit_codes": [
+          0,
+          0,
+          0
+        ],
+        "crates": [
+          null,
+          null,
+          null
+        ],
+        "checks_ok": [
+          true,
+          true,
+          true
+        ],
+        "per_run": [
+          {
+            "crates": null,
+            "crate_list": null,
+            "verify": null,
+            "kache": null,
+            "agents": [
+              {
+                "agent": 1,
+                "rc": 0,
+                "start": 1792875652.249006309,
+                "end": 1792875653.628636804,
+                "elapsed": 1.3796305656433105,
+                "crates": 2,
+                "crate_list": [
+                  "ignore (lib)",
+                  "rg (bin)"
+                ],
+                "build_dir_lock_waits": 0,
+                "package_cache_lock_waits": 4,
+                "verify": {
+                  "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/mnt/target/debug/deps/libignore-d6807c341156843a.rlib",
+                  "found": [
+                    "FERRY_MARK[ferry_reflink_concurrent_r0_a1]"
+                  ],
+                  "expected": [
+                    "FERRY_MARK[ferry_reflink_concurrent_r0_a1]"
+                  ],
+                  "ok": true
+                }
+              },
+              {
+                "agent": 2,
+                "rc": 0,
+                "start": 1792875652.249378291,
+                "end": 1792875653.656954007,
+                "elapsed": 1.4075758457183838,
+                "crates": 2,
+                "crate_list": [
+                  "ignore (lib)",
+                  "rg (bin)"
+                ],
+                "build_dir_lock_waits": 0,
+                "package_cache_lock_waits": 3,
+                "verify": {
+                  "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/mnt/target/debug/deps/libignore-d6807c341156843a.rlib",
+                  "found": [
+                    "FERRY_MARK[ferry_reflink_concurrent_r0_a2]"
+                  ],
+                  "expected": [
+                    "FERRY_MARK[ferry_reflink_concurrent_r0_a2]"
+                  ],
+                  "ok": true
+                }
+              },
+              {
+                "agent": 3,
+                "rc": 0,
+                "start": 1792875652.249258620,
+                "end": 1792875653.665395162,
+                "elapsed": 1.4161367416381836,
+                "crates": 2,
+                "crate_list": [
+                  "ignore (lib)",
+                  "rg (bin)"
+                ],
+                "build_dir_lock_waits": 0,
+                "package_cache_lock_waits": 3,
+                "verify": {
+                  "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/mnt/target/debug/deps/libignore-d6807c341156843a.rlib",
+                  "found": [
+                    "FERRY_MARK[ferry_reflink_concurrent_r0_a3]"
+                  ],
+                  "expected": [
+                    "FERRY_MARK[ferry_reflink_concurrent_r0_a3]"
+                  ],
+                  "ok": true
+                }
+              }
+            ],
+            "ferry_report": null
+          },
+          {
+            "crates": null,
+            "crate_list": null,
+            "verify": null,
+            "kache": null,
+            "agents": [
+              {
+                "agent": 1,
+                "rc": 0,
+                "start": 1792875655.493971612,
+                "end": 1792875656.813922151,
+                "elapsed": 1.3199505805969238,
+                "crates": 2,
+                "crate_list": [
+                  "ignore (lib)",
+                  "rg (bin)"
+                ],
+                "build_dir_lock_waits": 0,
+                "package_cache_lock_waits": 4,
+                "verify": {
+                  "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/mnt/target/debug/deps/libignore-d6807c341156843a.rlib",
+                  "found": [
+                    "FERRY_MARK[ferry_reflink_concurrent_r1_a1]"
+                  ],
+                  "expected": [
+                    "FERRY_MARK[ferry_reflink_concurrent_r1_a1]"
+                  ],
+                  "ok": true
+                }
+              },
+              {
+                "agent": 2,
+                "rc": 0,
+                "start": 1792875655.493683781,
+                "end": 1792875656.892060371,
+                "elapsed": 1.398376703262329,
+                "crates": 2,
+                "crate_list": [
+                  "ignore (lib)",
+                  "rg (bin)"
+                ],
+                "build_dir_lock_waits": 0,
+                "package_cache_lock_waits": 3,
+                "verify": {
+                  "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/mnt/target/debug/deps/libignore-d6807c341156843a.rlib",
+                  "found": [
+                    "FERRY_MARK[ferry_reflink_concurrent_r1_a2]"
+                  ],
+                  "expected": [
+                    "FERRY_MARK[ferry_reflink_concurrent_r1_a2]"
+                  ],
+                  "ok": true
+                }
+              },
+              {
+                "agent": 3,
+                "rc": 0,
+                "start": 1792875655.493962582,
+                "end": 1792875656.830641930,
+                "elapsed": 1.336679458618164,
+                "crates": 2,
+                "crate_list": [
+                  "ignore (lib)",
+                  "rg (bin)"
+                ],
+                "build_dir_lock_waits": 0,
+                "package_cache_lock_waits": 3,
+                "verify": {
+                  "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/mnt/target/debug/deps/libignore-d6807c341156843a.rlib",
+                  "found": [
+                    "FERRY_MARK[ferry_reflink_concurrent_r1_a3]"
+                  ],
+                  "expected": [
+                    "FERRY_MARK[ferry_reflink_concurrent_r1_a3]"
+                  ],
+                  "ok": true
+                }
+              }
+            ],
+            "ferry_report": null
+          },
+          {
+            "crates": null,
+            "crate_list": null,
+            "verify": null,
+            "kache": null,
+            "agents": [
+              {
+                "agent": 1,
+                "rc": 0,
+                "start": 1792875658.682271098,
+                "end": 1792875660.035065903,
+                "elapsed": 1.352794885635376,
+                "crates": 2,
+                "crate_list": [
+                  "ignore (lib)",
+                  "rg (bin)"
+                ],
+                "build_dir_lock_waits": 0,
+                "package_cache_lock_waits": 4,
+                "verify": {
+                  "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/mnt/target/debug/deps/libignore-d6807c341156843a.rlib",
+                  "found": [
+                    "FERRY_MARK[ferry_reflink_concurrent_r2_a1]"
+                  ],
+                  "expected": [
+                    "FERRY_MARK[ferry_reflink_concurrent_r2_a1]"
+                  ],
+                  "ok": true
+                }
+              },
+              {
+                "agent": 2,
+                "rc": 0,
+                "start": 1792875658.682272038,
+                "end": 1792875660.064938711,
+                "elapsed": 1.382666826248169,
+                "crates": 2,
+                "crate_list": [
+                  "ignore (lib)",
+                  "rg (bin)"
+                ],
+                "build_dir_lock_waits": 0,
+                "package_cache_lock_waits": 3,
+                "verify": {
+                  "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/mnt/target/debug/deps/libignore-d6807c341156843a.rlib",
+                  "found": [
+                    "FERRY_MARK[ferry_reflink_concurrent_r2_a2]"
+                  ],
+                  "expected": [
+                    "FERRY_MARK[ferry_reflink_concurrent_r2_a2]"
+                  ],
+                  "ok": true
+                }
+              },
+              {
+                "agent": 3,
+                "rc": 0,
+                "start": 1792875658.682624089,
+                "end": 1792875659.981900246,
+                "elapsed": 1.2992761135101318,
+                "crates": 2,
+                "crate_list": [
+                  "ignore (lib)",
+                  "rg (bin)"
+                ],
+                "build_dir_lock_waits": 0,
+                "package_cache_lock_waits": 3,
+                "verify": {
+                  "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/mnt/target/debug/deps/libignore-d6807c341156843a.rlib",
+                  "found": [
+                    "FERRY_MARK[ferry_reflink_concurrent_r2_a3]"
+                  ],
+                  "expected": [
+                    "FERRY_MARK[ferry_reflink_concurrent_r2_a3]"
+                  ],
+                  "ok": true
+                }
+              }
+            ],
+            "ferry_report": null
+          }
+        ],
+        "hyperfine": "hyperfine/ferry-reflink-concurrent.json",
+        "load_before": "4.68 5.27 4.55",
+        "load_after": "4.51 5.21 4.54"
+      },
+      "disk_after_second_edit": {
+        "path": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/agents/bench/target",
+        "du_bytes": 420413440,
+        "btrfs_total_bytes": 338284544,
+        "btrfs_exclusive_bytes": 67702784,
+        "btrfs_shared_bytes": 186437632,
+        "ferry_private_bytes": 296341504
+      },
+      "disk_after_spawn": {
+        "path": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/agents/bench/target",
+        "du_bytes": 383709184,
+        "btrfs_total_bytes": 382238720,
+        "btrfs_exclusive_bytes": 0,
+        "btrfs_shared_bytes": 252456960
+      },
+      "edit_on_spawn": {
+        "runs": 3,
+        "times": [
+          1.1298130341400001,
+          1.1260888631400001,
+          1.13748774714
+        ],
+        "median": 1.1298130341400001,
+        "mean": 1.1311298814733333,
+        "min": 1.1260888631400001,
+        "max": 1.13748774714,
+        "stddev": 0.005812418110033347,
+        "exit_codes": [
+          0,
+          0,
+          0
+        ],
+        "crates": [
+          2,
+          2,
+          2
+        ],
+        "checks_ok": [
+          true,
+          true,
+          true
+        ],
+        "per_run": [
+          {
+            "crates": 2,
+            "crate_list": [
+              "ignore (lib)",
+              "rg (bin)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/mnt/target/debug/deps/libignore-d6807c341156843a.rlib",
+              "found": [
+                "FERRY_MARK[ferry_reflink_edit_on_spawn_r0]"
+              ],
+              "expected": [
+                "FERRY_MARK[ferry_reflink_edit_on_spawn_r0]"
+              ],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          },
+          {
+            "crates": 2,
+            "crate_list": [
+              "ignore (lib)",
+              "rg (bin)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/mnt/target/debug/deps/libignore-d6807c341156843a.rlib",
+              "found": [
+                "FERRY_MARK[ferry_reflink_edit_on_spawn_r1]"
+              ],
+              "expected": [
+                "FERRY_MARK[ferry_reflink_edit_on_spawn_r1]"
+              ],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          },
+          {
+            "crates": 2,
+            "crate_list": [
+              "ignore (lib)",
+              "rg (bin)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/mnt/target/debug/deps/libignore-d6807c341156843a.rlib",
+              "found": [
+                "FERRY_MARK[ferry_reflink_edit_on_spawn_r2]"
+              ],
+              "expected": [
+                "FERRY_MARK[ferry_reflink_edit_on_spawn_r2]"
+              ],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          }
+        ],
+        "hyperfine": "hyperfine/ferry-reflink-edit_on_spawn.json",
+        "load_before": "5.76 5.50 4.61",
+        "load_after": "5.54 5.46 4.60"
+      },
+      "first_edit": {
+        "runs": 3,
+        "times": [
+          1.15063465582,
+          1.13700455582,
+          1.1141808788199998
+        ],
+        "median": 1.13700455582,
+        "mean": 1.1339400301533333,
+        "min": 1.1141808788199998,
+        "max": 1.15063465582,
+        "stddev": 0.018419092066730102,
+        "exit_codes": [
+          0,
+          0,
+          0
+        ],
+        "crates": [
+          2,
+          2,
+          2
+        ],
+        "checks_ok": [
+          true,
+          true,
+          true
+        ],
+        "per_run": [
+          {
+            "crates": 2,
+            "crate_list": [
+              "ignore (lib)",
+              "rg (bin)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/mnt/target/debug/deps/libignore-d6807c341156843a.rlib",
+              "found": [
+                "FERRY_MARK[ferry_reflink_first_edit_r0]"
+              ],
+              "expected": [
+                "FERRY_MARK[ferry_reflink_first_edit_r0]"
+              ],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          },
+          {
+            "crates": 2,
+            "crate_list": [
+              "ignore (lib)",
+              "rg (bin)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/mnt/target/debug/deps/libignore-d6807c341156843a.rlib",
+              "found": [
+                "FERRY_MARK[ferry_reflink_first_edit_r1]"
+              ],
+              "expected": [
+                "FERRY_MARK[ferry_reflink_first_edit_r1]"
+              ],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          },
+          {
+            "crates": 2,
+            "crate_list": [
+              "ignore (lib)",
+              "rg (bin)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/mnt/target/debug/deps/libignore-d6807c341156843a.rlib",
+              "found": [
+                "FERRY_MARK[ferry_reflink_first_edit_r2]"
+              ],
+              "expected": [
+                "FERRY_MARK[ferry_reflink_first_edit_r2]"
+              ],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          }
+        ],
+        "hyperfine": "hyperfine/ferry-reflink-first_edit.json",
+        "load_before": "5.54 5.46 4.60",
+        "load_after": "4.92 5.33 4.56"
+      },
+      "second_edit": {
+        "runs": 3,
+        "times": [
+          0.87803262012,
+          0.9069128941200001,
+          0.87820932912
+        ],
+        "median": 0.87820932912,
+        "mean": 0.8877182811200001,
+        "min": 0.87803262012,
+        "max": 0.9069128941200001,
+        "stddev": 0.016623257282569436,
+        "exit_codes": [
+          0,
+          0,
+          0
+        ],
+        "crates": [
+          2,
+          2,
+          2
+        ],
+        "checks_ok": [
+          true,
+          true,
+          true
+        ],
+        "per_run": [
+          {
+            "crates": 2,
+            "crate_list": [
+              "ignore (lib)",
+              "rg (bin)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/mnt/target/debug/deps/libignore-d6807c341156843a.rlib",
+              "found": [
+                "FERRY_MARK[ferry_reflink_second_edit_r0_a]",
+                "FERRY_MARK[ferry_reflink_second_edit_r0_b]"
+              ],
+              "expected": [
+                "FERRY_MARK[ferry_reflink_second_edit_r0_a]",
+                "FERRY_MARK[ferry_reflink_second_edit_r0_b]"
+              ],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          },
+          {
+            "crates": 2,
+            "crate_list": [
+              "ignore (lib)",
+              "rg (bin)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/mnt/target/debug/deps/libignore-d6807c341156843a.rlib",
+              "found": [
+                "FERRY_MARK[ferry_reflink_second_edit_r1_a]",
+                "FERRY_MARK[ferry_reflink_second_edit_r1_b]"
+              ],
+              "expected": [
+                "FERRY_MARK[ferry_reflink_second_edit_r1_a]",
+                "FERRY_MARK[ferry_reflink_second_edit_r1_b]"
+              ],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          },
+          {
+            "crates": 2,
+            "crate_list": [
+              "ignore (lib)",
+              "rg (bin)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/mnt/target/debug/deps/libignore-d6807c341156843a.rlib",
+              "found": [
+                "FERRY_MARK[ferry_reflink_second_edit_r2_a]",
+                "FERRY_MARK[ferry_reflink_second_edit_r2_b]"
+              ],
+              "expected": [
+                "FERRY_MARK[ferry_reflink_second_edit_r2_a]",
+                "FERRY_MARK[ferry_reflink_second_edit_r2_b]"
+              ],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          }
+        ],
+        "hyperfine": "hyperfine/ferry-reflink-second_edit.json",
+        "load_before": "4.92 5.33 4.56",
+        "load_after": "4.68 5.27 4.55"
+      },
+      "spawn_build": {
+        "runs": 3,
+        "times": [
+          0.060954502900000006,
+          0.0597597689,
+          0.0580181539
+        ],
+        "median": 0.0597597689,
+        "mean": 0.05957747523333334,
+        "min": 0.0580181539,
+        "max": 0.060954502900000006,
+        "stddev": 0.0014766379373869344,
+        "exit_codes": [
+          0,
+          0,
+          0
+        ],
+        "crates": [
+          0,
+          0,
+          0
+        ],
+        "checks_ok": [
+          true,
+          true,
+          true
+        ],
+        "per_run": [
+          {
+            "crates": 0,
+            "crate_list": [],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/mnt/target/debug/deps/libignore-d6807c341156843a.rlib",
+              "found": [],
+              "expected": [],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          },
+          {
+            "crates": 0,
+            "crate_list": [],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/mnt/target/debug/deps/libignore-d6807c341156843a.rlib",
+              "found": [],
+              "expected": [],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          },
+          {
+            "crates": 0,
+            "crate_list": [],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/mnt/target/debug/deps/libignore-d6807c341156843a.rlib",
+              "found": [],
+              "expected": [],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          }
+        ],
+        "hyperfine": "hyperfine/ferry-reflink-spawn_build.json",
+        "load_before": "5.76 5.50 4.61",
+        "load_after": "5.76 5.50 4.61"
+      },
+      "spawn": {
+        "runs": 3,
+        "times": [
+          0.16355330368,
+          0.15571857068,
+          0.14826743968
+        ],
+        "median": 0.15571857068,
+        "mean": 0.15584643801333334,
+        "min": 0.14826743968,
+        "max": 0.16355330368,
+        "stddev": 0.007643734172367876,
+        "exit_codes": [
+          0,
+          0,
+          0
+        ],
+        "crates": [
+          null,
+          null,
+          null
+        ],
+        "checks_ok": [
+          null,
+          null,
+          null
+        ],
+        "per_run": [
+          {
+            "crates": null,
+            "crate_list": null,
+            "verify": null,
+            "kache": null,
+            "agents": null,
+            "ferry_report": {
+              "agent": {
+                "name": "bench",
+                "state": "ready",
+                "base": "6892bc2b7efe5909cbbeec8f757ed2c4c76b1d30-42c69dbf",
+                "from": "6892bc2b7efe5909cbbeec8f757ed2c4c76b1d30",
+                "branch": "ferry/bench",
+                "worktree": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/wt/repo-2cf8c185a0d5383c/bench",
+                "backend": "reflink",
+                "isolation": "namespace",
+                "freshness": "mtime",
+                "created_unix": 1792875628,
+                "stamp": {
+                  "tracked": 226,
+                  "stamped": 225,
+                  "skipped": 1,
+                  "dirs": 60,
+                  "dirs_stamped": 60
+                },
+                "origin": "cli"
+              },
+              "backend_reason": "btrfs supports copy-on-write clones",
+              "fork": {
+                "files": 1407,
+                "bytes": 380629770,
+                "elapsed_secs": 0.068220251
+              },
+              "elapsed_secs": 0.157449165,
+              "warnings": []
+            }
+          },
+          {
+            "crates": null,
+            "crate_list": null,
+            "verify": null,
+            "kache": null,
+            "agents": null,
+            "ferry_report": {
+              "agent": {
+                "name": "bench",
+                "state": "ready",
+                "base": "6892bc2b7efe5909cbbeec8f757ed2c4c76b1d30-42c69dbf",
+                "from": "6892bc2b7efe5909cbbeec8f757ed2c4c76b1d30",
+                "branch": "ferry/bench",
+                "worktree": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/wt/repo-2cf8c185a0d5383c/bench",
+                "backend": "reflink",
+                "isolation": "namespace",
+                "freshness": "mtime",
+                "created_unix": 1792875628,
+                "stamp": {
+                  "tracked": 226,
+                  "stamped": 225,
+                  "skipped": 1,
+                  "dirs": 60,
+                  "dirs_stamped": 60
+                },
+                "origin": "cli"
+              },
+              "backend_reason": "btrfs supports copy-on-write clones",
+              "fork": {
+                "files": 1407,
+                "bytes": 380629770,
+                "elapsed_secs": 0.065962834
+              },
+              "elapsed_secs": 0.149680382,
+              "warnings": []
+            }
+          },
+          {
+            "crates": null,
+            "crate_list": null,
+            "verify": null,
+            "kache": null,
+            "agents": null,
+            "ferry_report": {
+              "agent": {
+                "name": "bench",
+                "state": "ready",
+                "base": "6892bc2b7efe5909cbbeec8f757ed2c4c76b1d30-42c69dbf",
+                "from": "6892bc2b7efe5909cbbeec8f757ed2c4c76b1d30",
+                "branch": "ferry/bench",
+                "worktree": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/wt/repo-2cf8c185a0d5383c/bench",
+                "backend": "reflink",
+                "isolation": "namespace",
+                "freshness": "mtime",
+                "created_unix": 1792875628,
+                "stamp": {
+                  "tracked": 226,
+                  "stamped": 225,
+                  "skipped": 1,
+                  "dirs": 60,
+                  "dirs_stamped": 60
+                },
+                "origin": "cli"
+              },
+              "backend_reason": "btrfs supports copy-on-write clones",
+              "fork": {
+                "files": 1407,
+                "bytes": 380629770,
+                "elapsed_secs": 0.063246216
+              },
+              "elapsed_secs": 0.143228283,
+              "warnings": []
+            }
+          }
+        ],
+        "hyperfine": "hyperfine/ferry-reflink-spawn.json",
+        "load_before": "5.76 5.50 4.61",
+        "load_after": "5.76 5.50 4.61"
+      }
+    },
+    "ferry-remap": {
+      "base_disk": {
+        "path": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/bases/6892bc2b7efe5909cbbeec8f757ed2c4c76b1d30-a098a1f7/target",
+        "du_bytes": 383475712,
+        "btrfs_total_bytes": 295800832,
+        "btrfs_exclusive_bytes": 295800832,
+        "btrfs_shared_bytes": 0
+      },
+      "base": {
+        "runs": 2,
+        "times": [
+          6.92410263898,
+          6.927230847980001
+        ],
+        "median": 6.925666743480001,
+        "mean": 6.925666743480001,
+        "min": 6.92410263898,
+        "max": 6.927230847980001,
+        "stddev": 0.0022119777968692546,
+        "exit_codes": [
+          0,
+          0
+        ],
+        "crates": [
+          44,
+          44
+        ],
+        "checks_ok": [
+          null,
+          null
+        ],
+        "per_run": [
+          {
+            "crates": 44,
+            "crate_list": [
+              "cfg_if (lib)",
+              "log (lib)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "same_file (lib)",
+              "itoa (lib)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "termcolor (lib)",
+              "zmij (lib)",
+              "lexopt (lib)",
+              "walkdir (lib)",
+              "build-script-build (custom-build)",
+              "grep_matcher (lib)",
+              "crossbeam_utils (lib)",
+              "memchr (lib)",
+              "textwrap (lib)",
+              "anyhow (lib)",
+              "crossbeam_epoch (lib)",
+              "crossbeam_deque (lib)",
+              "encoding_rs_io (lib)",
+              "libc (lib)",
+              "encoding_rs (lib)",
+              "memmap2 (lib)",
+              "aho_corasick (lib)",
+              "regex_syntax (lib)",
+              "serde_core (lib)",
+              "serde (lib)",
+              "serde_json (lib)",
+              "bstr (lib)",
+              "grep_regex (lib)",
+              "grep_searcher (lib)",
+              "regex_automata (lib)",
+              "globset (lib)",
+              "grep_cli (lib)",
+              "grep (lib)",
+              "grep_printer (lib)",
+              "ignore (lib)",
+              "rg (bin)"
+            ],
+            "verify": null,
+            "kache": null,
+            "agents": null,
+            "ferry_report": {
+              "base": {
+                "id": "6892bc2b7efe5909cbbeec8f757ed2c4c76b1d30-a098a1f7",
+                "commit": "6892bc2b7efe5909cbbeec8f757ed2c4c76b1d30",
+                "created_unix": 1792875489,
+                "build_secs": 6.87051079,
+                "freshness": "mtime",
+                "isolation": "none",
+                "toolchain": {
+                  "release": "1.99.0",
+                  "channel": "stable",
+                  "host": "x86_64-unknown-linux-gnu",
+                  "rustc_verbose": "rustc 1.99.0 (b940084d7 2026-09-28)\nbinary: rustc\ncommit-hash: b940084d7eb6a299eb4bfeb8e34901bc051e7ac4\ncommit-date: 2026-09-28\nhost: x86_64-unknown-linux-gnu\nrelease: 1.99.0\nLLVM version: 23.1.1",
+                  "cargo_version": "cargo 1.99.0 (5f94df478 2026-08-27)"
+                },
+                "commands": [
+                  "cargo build  --message-format=json"
+                ],
+                "ferry_version": "0.1.0",
+                "dirtied": [],
+                "remap_paths": true,
+                "unit_inputs": "45fabfc5c101d7dc",
+                "seeded_from": null,
+                "command_secs": [
+                  6.790554064
+                ],
+                "incomplete": [],
+                "observed": true,
+                "pruned": null
+              },
+              "reused": false,
+              "warnings": []
+            }
+          },
+          {
+            "crates": 44,
+            "crate_list": [
+              "cfg_if (lib)",
+              "log (lib)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "itoa (lib)",
+              "same_file (lib)",
+              "build-script-build (custom-build)",
+              "termcolor (lib)",
+              "zmij (lib)",
+              "walkdir (lib)",
+              "build-script-build (custom-build)",
+              "memchr (lib)",
+              "grep_matcher (lib)",
+              "textwrap (lib)",
+              "lexopt (lib)",
+              "crossbeam_utils (lib)",
+              "anyhow (lib)",
+              "crossbeam_epoch (lib)",
+              "crossbeam_deque (lib)",
+              "encoding_rs_io (lib)",
+              "libc (lib)",
+              "encoding_rs (lib)",
+              "memmap2 (lib)",
+              "aho_corasick (lib)",
+              "regex_syntax (lib)",
+              "serde_core (lib)",
+              "serde (lib)",
+              "serde_json (lib)",
+              "bstr (lib)",
+              "grep_searcher (lib)",
+              "grep_regex (lib)",
+              "regex_automata (lib)",
+              "globset (lib)",
+              "grep_cli (lib)",
+              "grep (lib)",
+              "grep_printer (lib)",
+              "ignore (lib)",
+              "rg (bin)"
+            ],
+            "verify": null,
+            "kache": null,
+            "agents": null,
+            "ferry_report": {
+              "base": {
+                "id": "6892bc2b7efe5909cbbeec8f757ed2c4c76b1d30-a098a1f7",
+                "commit": "6892bc2b7efe5909cbbeec8f757ed2c4c76b1d30",
+                "created_unix": 1792875497,
+                "build_secs": 6.872250535,
+                "freshness": "mtime",
+                "isolation": "none",
+                "toolchain": {
+                  "release": "1.99.0",
+                  "channel": "stable",
+                  "host": "x86_64-unknown-linux-gnu",
+                  "rustc_verbose": "rustc 1.99.0 (b940084d7 2026-09-28)\nbinary: rustc\ncommit-hash: b940084d7eb6a299eb4bfeb8e34901bc051e7ac4\ncommit-date: 2026-09-28\nhost: x86_64-unknown-linux-gnu\nrelease: 1.99.0\nLLVM version: 23.1.1",
+                  "cargo_version": "cargo 1.99.0 (5f94df478 2026-08-27)"
+                },
+                "commands": [
+                  "cargo build  --message-format=json"
+                ],
+                "ferry_version": "0.1.0",
+                "dirtied": [],
+                "remap_paths": true,
+                "unit_inputs": "45fabfc5c101d7dc",
+                "seeded_from": null,
+                "command_secs": [
+                  6.785510189
+                ],
+                "incomplete": [],
+                "observed": true,
+                "pruned": null
+              },
+              "reused": false,
+              "warnings": []
+            }
+          }
+        ],
+        "hyperfine": "hyperfine/ferry-remap-base.json",
+        "load_before": "5.39 4.89 4.28",
+        "load_after": "6.27 5.12 4.37"
+      },
+      "concurrent": {
+        "runs": 3,
+        "times": [
+          2.69708269924,
+          2.7532149352400004,
+          2.7879775282400003
+        ],
+        "median": 2.7532149352400004,
+        "mean": 2.746091720906667,
+        "min": 2.69708269924,
+        "max": 2.7879775282400003,
+        "stddev": 0.045864175797279694,
+        "exit_codes": [
+          0,
+          0,
+          0
+        ],
+        "crates": [
+          null,
+          null,
+          null
+        ],
+        "checks_ok": [
+          true,
+          true,
+          true
+        ],
+        "per_run": [
+          {
+            "crates": null,
+            "crate_list": null,
+            "verify": null,
+            "kache": null,
+            "agents": [
+              {
+                "agent": 1,
+                "rc": 0,
+                "start": 1792875531.060756719,
+                "end": 1792875533.719694381,
+                "elapsed": 2.658937692642212,
+                "crates": 2,
+                "crate_list": [
+                  "ignore (lib)",
+                  "rg (bin)"
+                ],
+                "build_dir_lock_waits": 0,
+                "package_cache_lock_waits": 3,
+                "verify": {
+                  "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/wt/repo-2cf8c185a0d5383c/c1/.ferry-target/debug/deps/libignore-3659454e70ed8a54.rlib",
+                  "found": [
+                    "FERRY_MARK[ferry_remap_concurrent_r0_a1]"
+                  ],
+                  "expected": [
+                    "FERRY_MARK[ferry_remap_concurrent_r0_a1]"
+                  ],
+                  "ok": true
+                }
+              },
+              {
+                "agent": 2,
+                "rc": 0,
+                "start": 1792875531.060769499,
+                "end": 1792875533.748279156,
+                "elapsed": 2.687509536743164,
+                "crates": 2,
+                "crate_list": [
+                  "ignore (lib)",
+                  "rg (bin)"
+                ],
+                "build_dir_lock_waits": 0,
+                "package_cache_lock_waits": 4,
+                "verify": {
+                  "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/wt/repo-2cf8c185a0d5383c/c2/.ferry-target/debug/deps/libignore-3659454e70ed8a54.rlib",
+                  "found": [
+                    "FERRY_MARK[ferry_remap_concurrent_r0_a2]"
+                  ],
+                  "expected": [
+                    "FERRY_MARK[ferry_remap_concurrent_r0_a2]"
+                  ],
+                  "ok": true
+                }
+              },
+              {
+                "agent": 3,
+                "rc": 0,
+                "start": 1792875531.060769109,
+                "end": 1792875533.737844765,
+                "elapsed": 2.6770756244659424,
+                "crates": 2,
+                "crate_list": [
+                  "ignore (lib)",
+                  "rg (bin)"
+                ],
+                "build_dir_lock_waits": 0,
+                "package_cache_lock_waits": 3,
+                "verify": {
+                  "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/wt/repo-2cf8c185a0d5383c/c3/.ferry-target/debug/deps/libignore-3659454e70ed8a54.rlib",
+                  "found": [
+                    "FERRY_MARK[ferry_remap_concurrent_r0_a3]"
+                  ],
+                  "expected": [
+                    "FERRY_MARK[ferry_remap_concurrent_r0_a3]"
+                  ],
+                  "ok": true
+                }
+              }
+            ],
+            "ferry_report": null
+          },
+          {
+            "crates": null,
+            "crate_list": null,
+            "verify": null,
+            "kache": null,
+            "agents": [
+              {
+                "agent": 1,
+                "rc": 0,
+                "start": 1792875535.585331091,
+                "end": 1792875538.324314550,
+                "elapsed": 2.738983392715454,
+                "crates": 2,
+                "crate_list": [
+                  "ignore (lib)",
+                  "rg (bin)"
+                ],
+                "build_dir_lock_waits": 0,
+                "package_cache_lock_waits": 3,
+                "verify": {
+                  "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/wt/repo-2cf8c185a0d5383c/c1/.ferry-target/debug/deps/libignore-3659454e70ed8a54.rlib",
+                  "found": [
+                    "FERRY_MARK[ferry_remap_concurrent_r1_a1]"
+                  ],
+                  "expected": [
+                    "FERRY_MARK[ferry_remap_concurrent_r1_a1]"
+                  ],
+                  "ok": true
+                }
+              },
+              {
+                "agent": 2,
+                "rc": 0,
+                "start": 1792875535.585250700,
+                "end": 1792875538.323906508,
+                "elapsed": 2.7386558055877686,
+                "crates": 2,
+                "crate_list": [
+                  "ignore (lib)",
+                  "rg (bin)"
+                ],
+                "build_dir_lock_waits": 0,
+                "package_cache_lock_waits": 4,
+                "verify": {
+                  "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/wt/repo-2cf8c185a0d5383c/c2/.ferry-target/debug/deps/libignore-3659454e70ed8a54.rlib",
+                  "found": [
+                    "FERRY_MARK[ferry_remap_concurrent_r1_a2]"
+                  ],
+                  "expected": [
+                    "FERRY_MARK[ferry_remap_concurrent_r1_a2]"
+                  ],
+                  "ok": true
+                }
+              },
+              {
+                "agent": 3,
+                "rc": 0,
+                "start": 1792875535.585557421,
+                "end": 1792875538.328263511,
+                "elapsed": 2.742706060409546,
+                "crates": 2,
+                "crate_list": [
+                  "ignore (lib)",
+                  "rg (bin)"
+                ],
+                "build_dir_lock_waits": 0,
+                "package_cache_lock_waits": 3,
+                "verify": {
+                  "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/wt/repo-2cf8c185a0d5383c/c3/.ferry-target/debug/deps/libignore-3659454e70ed8a54.rlib",
+                  "found": [
+                    "FERRY_MARK[ferry_remap_concurrent_r1_a3]"
+                  ],
+                  "expected": [
+                    "FERRY_MARK[ferry_remap_concurrent_r1_a3]"
+                  ],
+                  "ok": true
+                }
+              }
+            ],
+            "ferry_report": null
+          },
+          {
+            "crates": null,
+            "crate_list": null,
+            "verify": null,
+            "kache": null,
+            "agents": [
+              {
+                "agent": 1,
+                "rc": 0,
+                "start": 1792875576.278208394,
+                "end": 1792875579.047837653,
+                "elapsed": 2.7696292400360107,
+                "crates": 2,
+                "crate_list": [
+                  "ignore (lib)",
+                  "rg (bin)"
+                ],
+                "build_dir_lock_waits": 0,
+                "package_cache_lock_waits": 3,
+                "verify": {
+                  "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/wt/repo-2cf8c185a0d5383c/c1/.ferry-target/debug/deps/libignore-3659454e70ed8a54.rlib",
+                  "found": [
+                    "FERRY_MARK[ferry_remap_concurrent_r2_a1]"
+                  ],
+                  "expected": [
+                    "FERRY_MARK[ferry_remap_concurrent_r2_a1]"
+                  ],
+                  "ok": true
+                }
+              },
+              {
+                "agent": 2,
+                "rc": 0,
+                "start": 1792875576.278217634,
+                "end": 1792875579.044859035,
+                "elapsed": 2.76664137840271,
+                "crates": 2,
+                "crate_list": [
+                  "ignore (lib)",
+                  "rg (bin)"
+                ],
+                "build_dir_lock_waits": 0,
+                "package_cache_lock_waits": 4,
+                "verify": {
+                  "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/wt/repo-2cf8c185a0d5383c/c2/.ferry-target/debug/deps/libignore-3659454e70ed8a54.rlib",
+                  "found": [
+                    "FERRY_MARK[ferry_remap_concurrent_r2_a2]"
+                  ],
+                  "expected": [
+                    "FERRY_MARK[ferry_remap_concurrent_r2_a2]"
+                  ],
+                  "ok": true
+                }
+              },
+              {
+                "agent": 3,
+                "rc": 0,
+                "start": 1792875576.278493485,
+                "end": 1792875579.054640063,
+                "elapsed": 2.776146650314331,
+                "crates": 2,
+                "crate_list": [
+                  "ignore (lib)",
+                  "rg (bin)"
+                ],
+                "build_dir_lock_waits": 0,
+                "package_cache_lock_waits": 3,
+                "verify": {
+                  "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/wt/repo-2cf8c185a0d5383c/c3/.ferry-target/debug/deps/libignore-3659454e70ed8a54.rlib",
+                  "found": [
+                    "FERRY_MARK[ferry_remap_concurrent_r2_a3]"
+                  ],
+                  "expected": [
+                    "FERRY_MARK[ferry_remap_concurrent_r2_a3]"
+                  ],
+                  "ok": true
+                }
+              }
+            ],
+            "ferry_report": null
+          }
+        ],
+        "hyperfine": "hyperfine/ferry-remap-concurrent.json",
+        "load_before": "4.72 4.86 4.30",
+        "load_after": "7.70 5.62 4.59"
+      },
+      "disk_after_second_edit": {
+        "path": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/agents/bench/target",
+        "du_bytes": 421302272,
+        "btrfs_total_bytes": 339169280,
+        "btrfs_exclusive_bytes": 98820096,
+        "btrfs_shared_bytes": 168878080,
+        "ferry_private_bytes": 297238528
+      },
+      "disk_after_spawn": {
+        "path": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/agents/bench/target",
+        "du_bytes": 383475712,
+        "btrfs_total_bytes": 381997056,
+        "btrfs_exclusive_bytes": 0,
+        "btrfs_shared_bytes": 249647104
+      },
+      "edit_on_spawn": {
+        "runs": 3,
+        "times": [
+          2.03274413806,
+          1.97514108806,
+          2.00010258206
+        ],
+        "median": 2.00010258206,
+        "mean": 2.0026626027266663,
+        "min": 1.97514108806,
+        "max": 2.03274413806,
+        "stddev": 0.0288867291621247,
+        "exit_codes": [
+          0,
+          0,
+          0
+        ],
+        "crates": [
+          2,
+          2,
+          2
+        ],
+        "checks_ok": [
+          true,
+          true,
+          true
+        ],
+        "per_run": [
+          {
+            "crates": 2,
+            "crate_list": [
+              "ignore (lib)",
+              "rg (bin)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/wt/repo-2cf8c185a0d5383c/bench/.ferry-target/debug/deps/libignore-3659454e70ed8a54.rlib",
+              "found": [
+                "FERRY_MARK[ferry_remap_edit_on_spawn_r0]"
+              ],
+              "expected": [
+                "FERRY_MARK[ferry_remap_edit_on_spawn_r0]"
+              ],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          },
+          {
+            "crates": 2,
+            "crate_list": [
+              "ignore (lib)",
+              "rg (bin)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/wt/repo-2cf8c185a0d5383c/bench/.ferry-target/debug/deps/libignore-3659454e70ed8a54.rlib",
+              "found": [
+                "FERRY_MARK[ferry_remap_edit_on_spawn_r1]"
+              ],
+              "expected": [
+                "FERRY_MARK[ferry_remap_edit_on_spawn_r1]"
+              ],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          },
+          {
+            "crates": 2,
+            "crate_list": [
+              "ignore (lib)",
+              "rg (bin)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/wt/repo-2cf8c185a0d5383c/bench/.ferry-target/debug/deps/libignore-3659454e70ed8a54.rlib",
+              "found": [
+                "FERRY_MARK[ferry_remap_edit_on_spawn_r2]"
+              ],
+              "expected": [
+                "FERRY_MARK[ferry_remap_edit_on_spawn_r2]"
+              ],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          }
+        ],
+        "hyperfine": "hyperfine/ferry-remap-edit_on_spawn.json",
+        "load_before": "6.27 5.12 4.37",
+        "load_after": "5.92 5.08 4.36"
+      },
+      "first_edit": {
+        "runs": 3,
+        "times": [
+          2.008158229,
+          2.076503191,
+          2.043633994
+        ],
+        "median": 2.043633994,
+        "mean": 2.042765138,
+        "min": 2.008158229,
+        "max": 2.076503191,
+        "stddev": 0.03418076419211407,
+        "exit_codes": [
+          0,
+          0,
+          0
+        ],
+        "crates": [
+          2,
+          2,
+          2
+        ],
+        "checks_ok": [
+          true,
+          true,
+          true
+        ],
+        "per_run": [
+          {
+            "crates": 2,
+            "crate_list": [
+              "ignore (lib)",
+              "rg (bin)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/wt/repo-2cf8c185a0d5383c/bench/.ferry-target/debug/deps/libignore-3659454e70ed8a54.rlib",
+              "found": [
+                "FERRY_MARK[ferry_remap_first_edit_r0]"
+              ],
+              "expected": [
+                "FERRY_MARK[ferry_remap_first_edit_r0]"
+              ],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          },
+          {
+            "crates": 2,
+            "crate_list": [
+              "ignore (lib)",
+              "rg (bin)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/wt/repo-2cf8c185a0d5383c/bench/.ferry-target/debug/deps/libignore-3659454e70ed8a54.rlib",
+              "found": [
+                "FERRY_MARK[ferry_remap_first_edit_r1]"
+              ],
+              "expected": [
+                "FERRY_MARK[ferry_remap_first_edit_r1]"
+              ],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          },
+          {
+            "crates": 2,
+            "crate_list": [
+              "ignore (lib)",
+              "rg (bin)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/wt/repo-2cf8c185a0d5383c/bench/.ferry-target/debug/deps/libignore-3659454e70ed8a54.rlib",
+              "found": [
+                "FERRY_MARK[ferry_remap_first_edit_r2]"
+              ],
+              "expected": [
+                "FERRY_MARK[ferry_remap_first_edit_r2]"
+              ],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          }
+        ],
+        "hyperfine": "hyperfine/ferry-remap-first_edit.json",
+        "load_before": "5.92 5.08 4.36",
+        "load_after": "5.39 5.00 4.34"
+      },
+      "second_edit": {
+        "runs": 3,
+        "times": [
+          0.92294540892,
+          0.88088047392,
+          0.89024216092
+        ],
+        "median": 0.89024216092,
+        "mean": 0.8980226812533333,
+        "min": 0.88088047392,
+        "max": 0.92294540892,
+        "stddev": 0.022085449092821636,
+        "exit_codes": [
+          0,
+          0,
+          0
+        ],
+        "crates": [
+          2,
+          2,
+          2
+        ],
+        "checks_ok": [
+          true,
+          true,
+          true
+        ],
+        "per_run": [
+          {
+            "crates": 2,
+            "crate_list": [
+              "ignore (lib)",
+              "rg (bin)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/wt/repo-2cf8c185a0d5383c/bench/.ferry-target/debug/deps/libignore-3659454e70ed8a54.rlib",
+              "found": [
+                "FERRY_MARK[ferry_remap_second_edit_r0_a]",
+                "FERRY_MARK[ferry_remap_second_edit_r0_b]"
+              ],
+              "expected": [
+                "FERRY_MARK[ferry_remap_second_edit_r0_a]",
+                "FERRY_MARK[ferry_remap_second_edit_r0_b]"
+              ],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          },
+          {
+            "crates": 2,
+            "crate_list": [
+              "ignore (lib)",
+              "rg (bin)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/wt/repo-2cf8c185a0d5383c/bench/.ferry-target/debug/deps/libignore-3659454e70ed8a54.rlib",
+              "found": [
+                "FERRY_MARK[ferry_remap_second_edit_r1_a]",
+                "FERRY_MARK[ferry_remap_second_edit_r1_b]"
+              ],
+              "expected": [
+                "FERRY_MARK[ferry_remap_second_edit_r1_a]",
+                "FERRY_MARK[ferry_remap_second_edit_r1_b]"
+              ],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          },
+          {
+            "crates": 2,
+            "crate_list": [
+              "ignore (lib)",
+              "rg (bin)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/wt/repo-2cf8c185a0d5383c/bench/.ferry-target/debug/deps/libignore-3659454e70ed8a54.rlib",
+              "found": [
+                "FERRY_MARK[ferry_remap_second_edit_r2_a]",
+                "FERRY_MARK[ferry_remap_second_edit_r2_b]"
+              ],
+              "expected": [
+                "FERRY_MARK[ferry_remap_second_edit_r2_a]",
+                "FERRY_MARK[ferry_remap_second_edit_r2_b]"
+              ],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          }
+        ],
+        "hyperfine": "hyperfine/ferry-remap-second_edit.json",
+        "load_before": "5.39 5.00 4.34",
+        "load_after": "4.72 4.86 4.30"
+      },
+      "spawn_build": {
+        "runs": 3,
+        "times": [
+          0.07289601624000001,
+          0.06037258924,
+          0.060229199239999996
+        ],
+        "median": 0.06037258924,
+        "mean": 0.06449926824,
+        "min": 0.060229199239999996,
+        "max": 0.07289601624000001,
+        "stddev": 0.007272150500687752,
+        "exit_codes": [
+          0,
+          0,
+          0
+        ],
+        "crates": [
+          0,
+          0,
+          0
+        ],
+        "checks_ok": [
+          true,
+          true,
+          true
+        ],
+        "per_run": [
+          {
+            "crates": 0,
+            "crate_list": [],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/wt/repo-2cf8c185a0d5383c/bench/.ferry-target/debug/deps/libignore-3659454e70ed8a54.rlib",
+              "found": [],
+              "expected": [],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          },
+          {
+            "crates": 0,
+            "crate_list": [],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/wt/repo-2cf8c185a0d5383c/bench/.ferry-target/debug/deps/libignore-3659454e70ed8a54.rlib",
+              "found": [],
+              "expected": [],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          },
+          {
+            "crates": 0,
+            "crate_list": [],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/wt/repo-2cf8c185a0d5383c/bench/.ferry-target/debug/deps/libignore-3659454e70ed8a54.rlib",
+              "found": [],
+              "expected": [],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          }
+        ],
+        "hyperfine": "hyperfine/ferry-remap-spawn_build.json",
+        "load_before": "6.27 5.12 4.37",
+        "load_after": "6.27 5.12 4.37"
+      },
+      "spawn": {
+        "runs": 3,
+        "times": [
+          0.17381338522,
+          0.16798563722,
+          0.15417605722
+        ],
+        "median": 0.16798563722,
+        "mean": 0.16532502655333334,
+        "min": 0.15417605722,
+        "max": 0.17381338522,
+        "stddev": 0.010085400318509,
+        "exit_codes": [
+          0,
+          0,
+          0
+        ],
+        "crates": [
+          null,
+          null,
+          null
+        ],
+        "checks_ok": [
+          null,
+          null,
+          null
+        ],
+        "per_run": [
+          {
+            "crates": null,
+            "crate_list": null,
+            "verify": null,
+            "kache": null,
+            "agents": null,
+            "ferry_report": {
+              "agent": {
+                "name": "bench",
+                "state": "ready",
+                "base": "6892bc2b7efe5909cbbeec8f757ed2c4c76b1d30-a098a1f7",
+                "from": "6892bc2b7efe5909cbbeec8f757ed2c4c76b1d30",
+                "branch": "ferry/bench",
+                "worktree": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/wt/repo-2cf8c185a0d5383c/bench",
+                "backend": "reflink",
+                "isolation": "none",
+                "freshness": "mtime",
+                "created_unix": 1792875497,
+                "stamp": {
+                  "tracked": 226,
+                  "stamped": 225,
+                  "skipped": 1,
+                  "dirs": 60,
+                  "dirs_stamped": 60
+                },
+                "origin": "cli"
+              },
+              "backend_reason": "btrfs supports copy-on-write clones",
+              "fork": {
+                "files": 1407,
+                "bytes": 380411359,
+                "elapsed_secs": 0.077299718
+              },
+              "elapsed_secs": 0.168125357,
+              "warnings": []
+            }
+          },
+          {
+            "crates": null,
+            "crate_list": null,
+            "verify": null,
+            "kache": null,
+            "agents": null,
+            "ferry_report": {
+              "agent": {
+                "name": "bench",
+                "state": "ready",
+                "base": "6892bc2b7efe5909cbbeec8f757ed2c4c76b1d30-a098a1f7",
+                "from": "6892bc2b7efe5909cbbeec8f757ed2c4c76b1d30",
+                "branch": "ferry/bench",
+                "worktree": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/wt/repo-2cf8c185a0d5383c/bench",
+                "backend": "reflink",
+                "isolation": "none",
+                "freshness": "mtime",
+                "created_unix": 1792875498,
+                "stamp": {
+                  "tracked": 226,
+                  "stamped": 225,
+                  "skipped": 1,
+                  "dirs": 60,
+                  "dirs_stamped": 60
+                },
+                "origin": "cli"
+              },
+              "backend_reason": "btrfs supports copy-on-write clones",
+              "fork": {
+                "files": 1407,
+                "bytes": 380411359,
+                "elapsed_secs": 0.067094958
+              },
+              "elapsed_secs": 0.161469197,
+              "warnings": []
+            }
+          },
+          {
+            "crates": null,
+            "crate_list": null,
+            "verify": null,
+            "kache": null,
+            "agents": null,
+            "ferry_report": {
+              "agent": {
+                "name": "bench",
+                "state": "ready",
+                "base": "6892bc2b7efe5909cbbeec8f757ed2c4c76b1d30-a098a1f7",
+                "from": "6892bc2b7efe5909cbbeec8f757ed2c4c76b1d30",
+                "branch": "ferry/bench",
+                "worktree": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/wt/repo-2cf8c185a0d5383c/bench",
+                "backend": "reflink",
+                "isolation": "none",
+                "freshness": "mtime",
+                "created_unix": 1792875498,
+                "stamp": {
+                  "tracked": 226,
+                  "stamped": 225,
+                  "skipped": 1,
+                  "dirs": 60,
+                  "dirs_stamped": 60
+                },
+                "origin": "cli"
+              },
+              "backend_reason": "btrfs supports copy-on-write clones",
+              "fork": {
+                "files": 1407,
+                "bytes": 380411359,
+                "elapsed_secs": 0.063553207
+              },
+              "elapsed_secs": 0.148798989,
+              "warnings": []
+            }
+          }
+        ],
+        "hyperfine": "hyperfine/ferry-remap-spawn.json",
+        "load_before": "6.27 5.12 4.37",
+        "load_after": "6.27 5.12 4.37"
+      }
+    },
+    "kache": {
+      "edit_on_spawn": {
+        "runs": 3,
+        "times": [
+          2.8626739594200004,
+          2.83597548142,
+          2.87637123042
+        ],
+        "median": 2.8626739594200004,
+        "mean": 2.8583402237533337,
+        "min": 2.83597548142,
+        "max": 2.87637123042,
+        "stddev": 0.020543614164483196,
+        "exit_codes": [
+          0,
+          0,
+          0
+        ],
+        "crates": [
+          10,
+          10,
+          10
+        ],
+        "checks_ok": [
+          true,
+          true,
+          true
+        ],
+        "per_run": [
+          {
+            "crates": 10,
+            "crate_list": [
+              "build-script-build (custom-build)",
+              "grep_matcher (lib)",
+              "globset (lib)",
+              "grep_regex (lib)",
+              "grep_searcher (lib)",
+              "grep_cli (lib)",
+              "grep_printer (lib)",
+              "grep (lib)",
+              "ignore (lib)",
+              "rg (bin)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/wt/kache/target/debug/deps/libignore-d6807c341156843a.rlib",
+              "found": [
+                "FERRY_MARK[kache_edit_on_spawn_r0]"
+              ],
+              "expected": [
+                "FERRY_MARK[kache_edit_on_spawn_r0]"
+              ],
+              "ok": true
+            },
+            "kache": {
+              "events": 14,
+              "by_result": {
+                "local_hit": 8,
+                "miss": 3,
+                "passthrough": 3
+              },
+              "compiled": [
+                {
+                  "crate": "build_script_run",
+                  "result": "miss",
+                  "reason": null,
+                  "ms": 26
+                },
+                {
+                  "crate": "ignore",
+                  "result": "miss",
+                  "reason": null,
+                  "ms": 821
+                },
+                {
+                  "crate": "rg",
+                  "result": "miss",
+                  "reason": null,
+                  "ms": 1831
+                }
+              ]
+            },
+            "agents": null,
+            "ferry_report": null
+          },
+          {
+            "crates": 10,
+            "crate_list": [
+              "build-script-build (custom-build)",
+              "grep_matcher (lib)",
+              "globset (lib)",
+              "grep_regex (lib)",
+              "grep_searcher (lib)",
+              "grep_cli (lib)",
+              "grep_printer (lib)",
+              "grep (lib)",
+              "ignore (lib)",
+              "rg (bin)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/wt/kache/target/debug/deps/libignore-d6807c341156843a.rlib",
+              "found": [
+                "FERRY_MARK[kache_edit_on_spawn_r1]"
+              ],
+              "expected": [
+                "FERRY_MARK[kache_edit_on_spawn_r1]"
+              ],
+              "ok": true
+            },
+            "kache": {
+              "events": 14,
+              "by_result": {
+                "local_hit": 8,
+                "miss": 3,
+                "passthrough": 3
+              },
+              "compiled": [
+                {
+                  "crate": "build_script_run",
+                  "result": "miss",
+                  "reason": null,
+                  "ms": 31
+                },
+                {
+                  "crate": "ignore",
+                  "result": "miss",
+                  "reason": null,
+                  "ms": 794
+                },
+                {
+                  "crate": "rg",
+                  "result": "miss",
+                  "reason": null,
+                  "ms": 1805
+                }
+              ]
+            },
+            "agents": null,
+            "ferry_report": null
+          },
+          {
+            "crates": 10,
+            "crate_list": [
+              "build-script-build (custom-build)",
+              "grep_matcher (lib)",
+              "globset (lib)",
+              "grep_regex (lib)",
+              "grep_searcher (lib)",
+              "grep_cli (lib)",
+              "grep_printer (lib)",
+              "grep (lib)",
+              "ignore (lib)",
+              "rg (bin)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/wt/kache/target/debug/deps/libignore-d6807c341156843a.rlib",
+              "found": [
+                "FERRY_MARK[kache_edit_on_spawn_r2]"
+              ],
+              "expected": [
+                "FERRY_MARK[kache_edit_on_spawn_r2]"
+              ],
+              "ok": true
+            },
+            "kache": {
+              "events": 14,
+              "by_result": {
+                "local_hit": 8,
+                "miss": 3,
+                "passthrough": 3
+              },
+              "compiled": [
+                {
+                  "crate": "build_script_run",
+                  "result": "miss",
+                  "reason": null,
+                  "ms": 28
+                },
+                {
+                  "crate": "ignore",
+                  "result": "miss",
+                  "reason": null,
+                  "ms": 822
+                },
+                {
+                  "crate": "rg",
+                  "result": "miss",
+                  "reason": null,
+                  "ms": 1839
+                }
+              ]
+            },
+            "agents": null,
+            "ferry_report": null
+          }
+        ],
+        "hyperfine": "hyperfine/kache-edit_on_spawn.json",
+        "load_before": "5.71 4.62 4.10",
+        "load_after": "5.55 4.62 4.11"
+      },
+      "first_edit": {
+        "runs": 3,
+        "times": [
+          3.26516508522,
+          3.32382669822,
+          3.29143444322
+        ],
+        "median": 3.29143444322,
+        "mean": 3.2934754088866662,
+        "min": 3.26516508522,
+        "max": 3.32382669822,
+        "stddev": 0.029384015477463676,
+        "exit_codes": [
+          0,
+          0,
+          0
+        ],
+        "crates": [
+          2,
+          2,
+          2
+        ],
+        "checks_ok": [
+          true,
+          true,
+          true
+        ],
+        "per_run": [
+          {
+            "crates": 2,
+            "crate_list": [
+              "ignore (lib)",
+              "rg (bin)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/wt/kache/target/debug/deps/libignore-d6807c341156843a.rlib",
+              "found": [
+                "FERRY_MARK[kache_first_edit_r0]"
+              ],
+              "expected": [
+                "FERRY_MARK[kache_first_edit_r0]"
+              ],
+              "ok": true
+            },
+            "kache": {
+              "events": 2,
+              "by_result": {
+                "passthrough": 2
+              },
+              "compiled": [
+                {
+                  "crate": "ignore",
+                  "result": "passthrough",
+                  "reason": "adaptive seed",
+                  "ms": 1085
+                },
+                {
+                  "crate": "rg",
+                  "result": "passthrough",
+                  "reason": "adaptive seed",
+                  "ms": 2121
+                }
+              ]
+            },
+            "agents": null,
+            "ferry_report": null
+          },
+          {
+            "crates": 2,
+            "crate_list": [
+              "ignore (lib)",
+              "rg (bin)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/wt/kache/target/debug/deps/libignore-d6807c341156843a.rlib",
+              "found": [
+                "FERRY_MARK[kache_first_edit_r1]"
+              ],
+              "expected": [
+                "FERRY_MARK[kache_first_edit_r1]"
+              ],
+              "ok": true
+            },
+            "kache": {
+              "events": 2,
+              "by_result": {
+                "passthrough": 2
+              },
+              "compiled": [
+                {
+                  "crate": "ignore",
+                  "result": "passthrough",
+                  "reason": "adaptive seed",
+                  "ms": 1090
+                },
+                {
+                  "crate": "rg",
+                  "result": "passthrough",
+                  "reason": "adaptive seed",
+                  "ms": 2163
+                }
+              ]
+            },
+            "agents": null,
+            "ferry_report": null
+          },
+          {
+            "crates": 2,
+            "crate_list": [
+              "ignore (lib)",
+              "rg (bin)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/wt/kache/target/debug/deps/libignore-d6807c341156843a.rlib",
+              "found": [
+                "FERRY_MARK[kache_first_edit_r2]"
+              ],
+              "expected": [
+                "FERRY_MARK[kache_first_edit_r2]"
+              ],
+              "ok": true
+            },
+            "kache": {
+              "events": 2,
+              "by_result": {
+                "passthrough": 2
+              },
+              "compiled": [
+                {
+                  "crate": "ignore",
+                  "result": "passthrough",
+                  "reason": "adaptive seed",
+                  "ms": 1114
+                },
+                {
+                  "crate": "rg",
+                  "result": "passthrough",
+                  "reason": "adaptive seed",
+                  "ms": 2116
+                }
+              ]
+            },
+            "agents": null,
+            "ferry_report": null
+          }
+        ],
+        "hyperfine": "hyperfine/kache-first_edit.json",
+        "load_before": "5.55 4.62 4.11",
+        "load_after": "5.46 4.65 4.13"
+      },
+      "second_edit": {
+        "runs": 3,
+        "times": [
+          0.9121085192800001,
+          0.9018985102800001,
+          2.6243090162800002
+        ],
+        "median": 0.9121085192800001,
+        "mean": 1.479438681946667,
+        "min": 0.9018985102800001,
+        "max": 2.6243090162800002,
+        "stddev": 0.9914999359043519,
+        "exit_codes": [
+          0,
+          0,
+          0
+        ],
+        "crates": [
+          2,
+          2,
+          2
+        ],
+        "checks_ok": [
+          true,
+          true,
+          true
+        ],
+        "per_run": [
+          {
+            "crates": 2,
+            "crate_list": [
+              "ignore (lib)",
+              "rg (bin)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/wt/kache/target/debug/deps/libignore-d6807c341156843a.rlib",
+              "found": [
+                "FERRY_MARK[kache_second_edit_r0_a]",
+                "FERRY_MARK[kache_second_edit_r0_b]"
+              ],
+              "expected": [
+                "FERRY_MARK[kache_second_edit_r0_a]",
+                "FERRY_MARK[kache_second_edit_r0_b]"
+              ],
+              "ok": true
+            },
+            "kache": {
+              "events": 2,
+              "by_result": {
+                "passthrough": 2
+              },
+              "compiled": [
+                {
+                  "crate": "ignore",
+                  "result": "passthrough",
+                  "reason": "adaptive active",
+                  "ms": 277
+                },
+                {
+                  "crate": "rg",
+                  "result": "passthrough",
+                  "reason": "adaptive active",
+                  "ms": 558
+                }
+              ]
+            },
+            "agents": null,
+            "ferry_report": null
+          },
+          {
+            "crates": 2,
+            "crate_list": [
+              "ignore (lib)",
+              "rg (bin)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/wt/kache/target/debug/deps/libignore-d6807c341156843a.rlib",
+              "found": [
+                "FERRY_MARK[kache_second_edit_r1_a]",
+                "FERRY_MARK[kache_second_edit_r1_b]"
+              ],
+              "expected": [
+                "FERRY_MARK[kache_second_edit_r1_a]",
+                "FERRY_MARK[kache_second_edit_r1_b]"
+              ],
+              "ok": true
+            },
+            "kache": {
+              "events": 2,
+              "by_result": {
+                "passthrough": 2
+              },
+              "compiled": [
+                {
+                  "crate": "ignore",
+                  "result": "passthrough",
+                  "reason": "adaptive active",
+                  "ms": 269
+                },
+                {
+                  "crate": "rg",
+                  "result": "passthrough",
+                  "reason": "adaptive active",
+                  "ms": 555
+                }
+              ]
+            },
+            "agents": null,
+            "ferry_report": null
+          },
+          {
+            "crates": 2,
+            "crate_list": [
+              "ignore (lib)",
+              "rg (bin)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/wt/kache/target/debug/deps/libignore-d6807c341156843a.rlib",
+              "found": [
+                "FERRY_MARK[kache_second_edit_r2_a]",
+                "FERRY_MARK[kache_second_edit_r2_b]"
+              ],
+              "expected": [
+                "FERRY_MARK[kache_second_edit_r2_a]",
+                "FERRY_MARK[kache_second_edit_r2_b]"
+              ],
+              "ok": true
+            },
+            "kache": {
+              "events": 2,
+              "by_result": {
+                "passthrough": 2
+              },
+              "compiled": [
+                {
+                  "crate": "ignore",
+                  "result": "passthrough",
+                  "reason": "adaptive active",
+                  "ms": 355
+                },
+                {
+                  "crate": "rg",
+                  "result": "passthrough",
+                  "reason": "adaptive active",
+                  "ms": 2191
+                }
+              ]
+            },
+            "agents": null,
+            "ferry_report": null
+          }
+        ],
+        "hyperfine": "hyperfine/kache-second_edit.json",
+        "load_before": "5.46 4.65 4.13",
+        "load_after": "4.68 4.52 4.09"
+      },
+      "spawn_build": {
+        "runs": 3,
+        "times": [
+          0.27560826020000007,
+          0.2665118732,
+          0.24278135320000002
+        ],
+        "median": 0.2665118732,
+        "mean": 0.2616338288666667,
+        "min": 0.24278135320000002,
+        "max": 0.27560826020000007,
+        "stddev": 0.016948390578020587,
+        "exit_codes": [
+          0,
+          0,
+          0
+        ],
+        "crates": [
+          10,
+          10,
+          10
+        ],
+        "checks_ok": [
+          true,
+          true,
+          true
+        ],
+        "per_run": [
+          {
+            "crates": 10,
+            "crate_list": [
+              "grep_matcher (lib)",
+              "build-script-build (custom-build)",
+              "globset (lib)",
+              "grep_regex (lib)",
+              "grep_searcher (lib)",
+              "ignore (lib)",
+              "grep_cli (lib)",
+              "grep_printer (lib)",
+              "grep (lib)",
+              "rg (bin)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/wt/kache/target/debug/deps/libignore-d6807c341156843a.rlib",
+              "found": [],
+              "expected": [],
+              "ok": true
+            },
+            "kache": {
+              "events": 14,
+              "by_result": {
+                "local_hit": 11,
+                "passthrough": 3
+              },
+              "compiled": []
+            },
+            "agents": null,
+            "ferry_report": null
+          },
+          {
+            "crates": 10,
+            "crate_list": [
+              "grep_matcher (lib)",
+              "build-script-build (custom-build)",
+              "globset (lib)",
+              "grep_searcher (lib)",
+              "grep_regex (lib)",
+              "ignore (lib)",
+              "grep_printer (lib)",
+              "grep_cli (lib)",
+              "grep (lib)",
+              "rg (bin)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/wt/kache/target/debug/deps/libignore-d6807c341156843a.rlib",
+              "found": [],
+              "expected": [],
+              "ok": true
+            },
+            "kache": {
+              "events": 14,
+              "by_result": {
+                "local_hit": 11,
+                "passthrough": 3
+              },
+              "compiled": []
+            },
+            "agents": null,
+            "ferry_report": null
+          },
+          {
+            "crates": 10,
+            "crate_list": [
+              "grep_matcher (lib)",
+              "build-script-build (custom-build)",
+              "globset (lib)",
+              "grep_searcher (lib)",
+              "grep_regex (lib)",
+              "ignore (lib)",
+              "grep_cli (lib)",
+              "grep_printer (lib)",
+              "grep (lib)",
+              "rg (bin)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/wt/kache/target/debug/deps/libignore-d6807c341156843a.rlib",
+              "found": [],
+              "expected": [],
+              "ok": true
+            },
+            "kache": {
+              "events": 14,
+              "by_result": {
+                "local_hit": 11,
+                "passthrough": 3
+              },
+              "compiled": []
+            },
+            "agents": null,
+            "ferry_report": null
+          }
+        ],
+        "hyperfine": "hyperfine/kache-spawn_build.json",
+        "load_before": "5.71 4.62 4.10",
+        "load_after": "5.71 4.62 4.10"
+      },
+      "store_disk": {
+        "path": "/home/pat/Projects/ferry/bench/work/ripgrep/kache/cache",
+        "du_bytes": 436383744,
+        "btrfs_total_bytes": 434737152,
+        "btrfs_exclusive_bytes": 193806336,
+        "btrfs_shared_bytes": 93028352
+      },
+      "warm_build": {
+        "note": "single untimed-by-hyperfine build that fills the kache store",
+        "seconds": 6.417645215988159,
+        "crates": 44
+      }
+    },
+    "naive": {
+      "edit_on_spawn": {
+        "runs": 3,
+        "times": [
+          3.68696416502,
+          3.59778867102,
+          3.67451873802
+        ],
+        "median": 3.67451873802,
+        "mean": 3.6530905246866667,
+        "min": 3.59778867102,
+        "max": 3.68696416502,
+        "stddev": 0.04829537687532987,
+        "exit_codes": [
+          0,
+          0,
+          0
+        ],
+        "crates": [
+          10,
+          10,
+          10
+        ],
+        "checks_ok": [
+          true,
+          true,
+          true
+        ],
+        "per_run": [
+          {
+            "crates": 10,
+            "crate_list": [
+              "grep_matcher (lib)",
+              "build-script-build (custom-build)",
+              "grep_searcher (lib)",
+              "grep_regex (lib)",
+              "globset (lib)",
+              "grep_cli (lib)",
+              "grep (lib)",
+              "grep_printer (lib)",
+              "ignore (lib)",
+              "rg (bin)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/wt/naive/target/debug/deps/libignore-d6807c341156843a.rlib",
+              "found": [
+                "FERRY_MARK[naive_edit_on_spawn_r0]"
+              ],
+              "expected": [
+                "FERRY_MARK[naive_edit_on_spawn_r0]"
+              ],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          },
+          {
+            "crates": 10,
+            "crate_list": [
+              "grep_matcher (lib)",
+              "build-script-build (custom-build)",
+              "grep_searcher (lib)",
+              "grep_regex (lib)",
+              "globset (lib)",
+              "grep_cli (lib)",
+              "grep (lib)",
+              "grep_printer (lib)",
+              "ignore (lib)",
+              "rg (bin)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/wt/naive/target/debug/deps/libignore-d6807c341156843a.rlib",
+              "found": [
+                "FERRY_MARK[naive_edit_on_spawn_r1]"
+              ],
+              "expected": [
+                "FERRY_MARK[naive_edit_on_spawn_r1]"
+              ],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          },
+          {
+            "crates": 10,
+            "crate_list": [
+              "grep_matcher (lib)",
+              "build-script-build (custom-build)",
+              "grep_regex (lib)",
+              "grep_searcher (lib)",
+              "globset (lib)",
+              "grep_cli (lib)",
+              "grep (lib)",
+              "grep_printer (lib)",
+              "ignore (lib)",
+              "rg (bin)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/wt/naive/target/debug/deps/libignore-d6807c341156843a.rlib",
+              "found": [
+                "FERRY_MARK[naive_edit_on_spawn_r2]"
+              ],
+              "expected": [
+                "FERRY_MARK[naive_edit_on_spawn_r2]"
+              ],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          }
+        ],
+        "hyperfine": "hyperfine/naive-edit_on_spawn.json",
+        "load_before": "5.96 4.35 3.98",
+        "load_after": "5.72 4.37 3.99"
+      },
+      "first_edit": {
+        "runs": 3,
+        "times": [
+          0.8531387969600001,
+          0.8943734589600001,
+          0.86625504596
+        ],
+        "median": 0.86625504596,
+        "mean": 0.8712557672933334,
+        "min": 0.8531387969600001,
+        "max": 0.8943734589600001,
+        "stddev": 0.021067267216081997,
+        "exit_codes": [
+          0,
+          0,
+          0
+        ],
+        "crates": [
+          2,
+          2,
+          2
+        ],
+        "checks_ok": [
+          true,
+          true,
+          true
+        ],
+        "per_run": [
+          {
+            "crates": 2,
+            "crate_list": [
+              "ignore (lib)",
+              "rg (bin)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/wt/naive/target/debug/deps/libignore-d6807c341156843a.rlib",
+              "found": [
+                "FERRY_MARK[naive_first_edit_r0]"
+              ],
+              "expected": [
+                "FERRY_MARK[naive_first_edit_r0]"
+              ],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          },
+          {
+            "crates": 2,
+            "crate_list": [
+              "ignore (lib)",
+              "rg (bin)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/wt/naive/target/debug/deps/libignore-d6807c341156843a.rlib",
+              "found": [
+                "FERRY_MARK[naive_first_edit_r1]"
+              ],
+              "expected": [
+                "FERRY_MARK[naive_first_edit_r1]"
+              ],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          },
+          {
+            "crates": 2,
+            "crate_list": [
+              "ignore (lib)",
+              "rg (bin)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/wt/naive/target/debug/deps/libignore-d6807c341156843a.rlib",
+              "found": [
+                "FERRY_MARK[naive_first_edit_r2]"
+              ],
+              "expected": [
+                "FERRY_MARK[naive_first_edit_r2]"
+              ],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          }
+        ],
+        "hyperfine": "hyperfine/naive-first_edit.json",
+        "load_before": "5.72 4.37 3.99",
+        "load_after": "6.41 4.58 4.07"
+      },
+      "spawn_build": {
+        "runs": 3,
+        "times": [
+          3.53284578786,
+          3.87624068086,
+          3.74864808486
+        ],
+        "median": 3.74864808486,
+        "mean": 3.719244851193333,
+        "min": 3.53284578786,
+        "max": 3.87624068086,
+        "stddev": 0.17357541803827764,
+        "exit_codes": [
+          0,
+          0,
+          0
+        ],
+        "crates": [
+          10,
+          10,
+          10
+        ],
+        "checks_ok": [
+          true,
+          true,
+          true
+        ],
+        "per_run": [
+          {
+            "crates": 10,
+            "crate_list": [
+              "grep_matcher (lib)",
+              "build-script-build (custom-build)",
+              "grep_regex (lib)",
+              "grep_searcher (lib)",
+              "globset (lib)",
+              "grep_cli (lib)",
+              "grep (lib)",
+              "grep_printer (lib)",
+              "ignore (lib)",
+              "rg (bin)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/wt/naive/target/debug/deps/libignore-d6807c341156843a.rlib",
+              "found": [],
+              "expected": [],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          },
+          {
+            "crates": 10,
+            "crate_list": [
+              "build-script-build (custom-build)",
+              "grep_matcher (lib)",
+              "grep_searcher (lib)",
+              "grep_regex (lib)",
+              "globset (lib)",
+              "grep_cli (lib)",
+              "grep (lib)",
+              "grep_printer (lib)",
+              "ignore (lib)",
+              "rg (bin)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/wt/naive/target/debug/deps/libignore-d6807c341156843a.rlib",
+              "found": [],
+              "expected": [],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          },
+          {
+            "crates": 10,
+            "crate_list": [
+              "grep_matcher (lib)",
+              "build-script-build (custom-build)",
+              "grep_searcher (lib)",
+              "grep_regex (lib)",
+              "globset (lib)",
+              "grep_cli (lib)",
+              "grep (lib)",
+              "grep_printer (lib)",
+              "ignore (lib)",
+              "rg (bin)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/wt/naive/target/debug/deps/libignore-d6807c341156843a.rlib",
+              "found": [],
+              "expected": [],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          }
+        ],
+        "hyperfine": "hyperfine/naive-spawn_build.json",
+        "load_before": "4.87 4.08 3.89",
+        "load_after": "5.96 4.35 3.98"
+      }
+    },
+    "refresh": {
+      "cold_base": {
+        "runs": 2,
+        "times": [
+          7.0901447131,
+          7.7381137861000004
+        ],
+        "median": 7.4141292496,
+        "mean": 7.4141292496,
+        "min": 7.0901447131,
+        "max": 7.7381137861000004,
+        "stddev": 0.4581833255174614,
+        "exit_codes": [
+          0,
+          0
+        ],
+        "crates": [
+          44,
+          44
+        ],
+        "checks_ok": [
+          true,
+          true
+        ],
+        "per_run": [
+          {
+            "crates": 44,
+            "crate_list": [
+              "cfg_if (lib)",
+              "log (lib)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "itoa (lib)",
+              "termcolor (lib)",
+              "build-script-build (custom-build)",
+              "same_file (lib)",
+              "build-script-build (custom-build)",
+              "zmij (lib)",
+              "lexopt (lib)",
+              "walkdir (lib)",
+              "crossbeam_utils (lib)",
+              "build-script-build (custom-build)",
+              "textwrap (lib)",
+              "memchr (lib)",
+              "grep_matcher (lib)",
+              "crossbeam_epoch (lib)",
+              "crossbeam_deque (lib)",
+              "anyhow (lib)",
+              "encoding_rs_io (lib)",
+              "libc (lib)",
+              "encoding_rs (lib)",
+              "memmap2 (lib)",
+              "aho_corasick (lib)",
+              "regex_syntax (lib)",
+              "serde_core (lib)",
+              "serde (lib)",
+              "serde_json (lib)",
+              "bstr (lib)",
+              "grep_searcher (lib)",
+              "grep_regex (lib)",
+              "regex_automata (lib)",
+              "globset (lib)",
+              "grep_cli (lib)",
+              "grep (lib)",
+              "grep_printer (lib)",
+              "ignore (lib)",
+              "rg (bin)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/bases/79bcbf5a80045d3722a97ad083069304dfb1e60c-42c69dbf/target/debug/deps/libignore-d6807c341156843a.rlib",
+              "found": [
+                "FERRY_MARK[refresh_commit_r0]"
+              ],
+              "expected": [
+                "FERRY_MARK[refresh_commit_r0]"
+              ],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": {
+              "base": {
+                "id": "79bcbf5a80045d3722a97ad083069304dfb1e60c-42c69dbf",
+                "commit": "79bcbf5a80045d3722a97ad083069304dfb1e60c",
+                "created_unix": 1792875674,
+                "build_secs": 7.029197039,
+                "freshness": "mtime",
+                "isolation": "namespace",
+                "toolchain": {
+                  "release": "1.99.0",
+                  "channel": "stable",
+                  "host": "x86_64-unknown-linux-gnu",
+                  "rustc_verbose": "rustc 1.99.0 (b940084d7 2026-09-28)\nbinary: rustc\ncommit-hash: b940084d7eb6a299eb4bfeb8e34901bc051e7ac4\ncommit-date: 2026-09-28\nhost: x86_64-unknown-linux-gnu\nrelease: 1.99.0\nLLVM version: 23.1.1",
+                  "cargo_version": "cargo 1.99.0 (5f94df478 2026-08-27)"
+                },
+                "commands": [
+                  "cargo build  --message-format=json"
+                ],
+                "ferry_version": "0.1.0",
+                "dirtied": [],
+                "remap_paths": false,
+                "unit_inputs": "45fabfc5c101d7dc",
+                "seeded_from": null,
+                "command_secs": [
+                  6.949159102
+                ],
+                "incomplete": [],
+                "observed": true,
+                "pruned": null
+              },
+              "reused": false,
+              "warnings": []
+            }
+          },
+          {
+            "crates": 44,
+            "crate_list": [
+              "cfg_if (lib)",
+              "log (lib)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "itoa (lib)",
+              "build-script-build (custom-build)",
+              "termcolor (lib)",
+              "same_file (lib)",
+              "build-script-build (custom-build)",
+              "zmij (lib)",
+              "lexopt (lib)",
+              "memchr (lib)",
+              "walkdir (lib)",
+              "grep_matcher (lib)",
+              "build-script-build (custom-build)",
+              "crossbeam_utils (lib)",
+              "textwrap (lib)",
+              "crossbeam_epoch (lib)",
+              "crossbeam_deque (lib)",
+              "anyhow (lib)",
+              "encoding_rs_io (lib)",
+              "libc (lib)",
+              "encoding_rs (lib)",
+              "memmap2 (lib)",
+              "aho_corasick (lib)",
+              "regex_syntax (lib)",
+              "serde_core (lib)",
+              "serde (lib)",
+              "serde_json (lib)",
+              "bstr (lib)",
+              "grep_searcher (lib)",
+              "grep_regex (lib)",
+              "regex_automata (lib)",
+              "globset (lib)",
+              "grep_cli (lib)",
+              "grep (lib)",
+              "grep_printer (lib)",
+              "ignore (lib)",
+              "rg (bin)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/bases/79bcbf5a80045d3722a97ad083069304dfb1e60c-42c69dbf/target/debug/deps/libignore-d6807c341156843a.rlib",
+              "found": [
+                "FERRY_MARK[refresh_commit_r0]"
+              ],
+              "expected": [
+                "FERRY_MARK[refresh_commit_r0]"
+              ],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": {
+              "base": {
+                "id": "79bcbf5a80045d3722a97ad083069304dfb1e60c-42c69dbf",
+                "commit": "79bcbf5a80045d3722a97ad083069304dfb1e60c",
+                "created_unix": 1792875682,
+                "build_secs": 7.675788998,
+                "freshness": "mtime",
+                "isolation": "namespace",
+                "toolchain": {
+                  "release": "1.99.0",
+                  "channel": "stable",
+                  "host": "x86_64-unknown-linux-gnu",
+                  "rustc_verbose": "rustc 1.99.0 (b940084d7 2026-09-28)\nbinary: rustc\ncommit-hash: b940084d7eb6a299eb4bfeb8e34901bc051e7ac4\ncommit-date: 2026-09-28\nhost: x86_64-unknown-linux-gnu\nrelease: 1.99.0\nLLVM version: 23.1.1",
+                  "cargo_version": "cargo 1.99.0 (5f94df478 2026-08-27)"
+                },
+                "commands": [
+                  "cargo build  --message-format=json"
+                ],
+                "ferry_version": "0.1.0",
+                "dirtied": [],
+                "remap_paths": false,
+                "unit_inputs": "45fabfc5c101d7dc",
+                "seeded_from": null,
+                "command_secs": [
+                  7.597331056
+                ],
+                "incomplete": [],
+                "observed": true,
+                "pruned": null
+              },
+              "reused": false,
+              "warnings": []
+            }
+          }
+        ],
+        "hyperfine": "hyperfine/refresh-cold_base.json",
+        "load_before": "4.23 5.14 4.52",
+        "load_after": "4.86 5.20 4.55"
+      },
+      "commits": {
+        "previous": "6892bc2b7efe5909cbbeec8f757ed2c4c76b1d30",
+        "refreshed": "79bcbf5a80045d3722a97ad083069304dfb1e60c"
+      },
+      "seeded_base": {
+        "runs": 3,
+        "times": [
+          1.32339452102,
+          1.3490049260199999,
+          1.33776349302
+        ],
+        "median": 1.33776349302,
+        "mean": 1.33672098002,
+        "min": 1.32339452102,
+        "max": 1.3490049260199999,
+        "stddev": 0.012836990927876425,
+        "exit_codes": [
+          0,
+          0,
+          0
+        ],
+        "crates": [
+          2,
+          2,
+          2
+        ],
+        "checks_ok": [
+          true,
+          true,
+          true
+        ],
+        "per_run": [
+          {
+            "crates": 2,
+            "crate_list": [
+              "ignore (lib)",
+              "rg (bin)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/bases/79bcbf5a80045d3722a97ad083069304dfb1e60c-42c69dbf/target/debug/deps/libignore-d6807c341156843a.rlib",
+              "found": [
+                "FERRY_MARK[refresh_commit_r0]"
+              ],
+              "expected": [
+                "FERRY_MARK[refresh_commit_r0]"
+              ],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": {
+              "base": {
+                "id": "79bcbf5a80045d3722a97ad083069304dfb1e60c-42c69dbf",
+                "commit": "79bcbf5a80045d3722a97ad083069304dfb1e60c",
+                "created_unix": 1792875663,
+                "build_secs": 1.263453401,
+                "freshness": "mtime",
+                "isolation": "namespace",
+                "toolchain": {
+                  "release": "1.99.0",
+                  "channel": "stable",
+                  "host": "x86_64-unknown-linux-gnu",
+                  "rustc_verbose": "rustc 1.99.0 (b940084d7 2026-09-28)\nbinary: rustc\ncommit-hash: b940084d7eb6a299eb4bfeb8e34901bc051e7ac4\ncommit-date: 2026-09-28\nhost: x86_64-unknown-linux-gnu\nrelease: 1.99.0\nLLVM version: 23.1.1",
+                  "cargo_version": "cargo 1.99.0 (5f94df478 2026-08-27)"
+                },
+                "commands": [
+                  "cargo build  --message-format=json"
+                ],
+                "ferry_version": "0.1.0",
+                "dirtied": [],
+                "remap_paths": false,
+                "unit_inputs": "45fabfc5c101d7dc",
+                "seeded_from": "6892bc2b7efe5909cbbeec8f757ed2c4c76b1d30-42c69dbf",
+                "command_secs": [
+                  1.115380644
+                ],
+                "incomplete": [],
+                "observed": true,
+                "pruned": null
+              },
+              "reused": false,
+              "warnings": []
+            }
+          },
+          {
+            "crates": 2,
+            "crate_list": [
+              "ignore (lib)",
+              "rg (bin)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/bases/79bcbf5a80045d3722a97ad083069304dfb1e60c-42c69dbf/target/debug/deps/libignore-d6807c341156843a.rlib",
+              "found": [
+                "FERRY_MARK[refresh_commit_r0]"
+              ],
+              "expected": [
+                "FERRY_MARK[refresh_commit_r0]"
+              ],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": {
+              "base": {
+                "id": "79bcbf5a80045d3722a97ad083069304dfb1e60c-42c69dbf",
+                "commit": "79bcbf5a80045d3722a97ad083069304dfb1e60c",
+                "created_unix": 1792875664,
+                "build_secs": 1.289086777,
+                "freshness": "mtime",
+                "isolation": "namespace",
+                "toolchain": {
+                  "release": "1.99.0",
+                  "channel": "stable",
+                  "host": "x86_64-unknown-linux-gnu",
+                  "rustc_verbose": "rustc 1.99.0 (b940084d7 2026-09-28)\nbinary: rustc\ncommit-hash: b940084d7eb6a299eb4bfeb8e34901bc051e7ac4\ncommit-date: 2026-09-28\nhost: x86_64-unknown-linux-gnu\nrelease: 1.99.0\nLLVM version: 23.1.1",
+                  "cargo_version": "cargo 1.99.0 (5f94df478 2026-08-27)"
+                },
+                "commands": [
+                  "cargo build  --message-format=json"
+                ],
+                "ferry_version": "0.1.0",
+                "dirtied": [],
+                "remap_paths": false,
+                "unit_inputs": "45fabfc5c101d7dc",
+                "seeded_from": "6892bc2b7efe5909cbbeec8f757ed2c4c76b1d30-42c69dbf",
+                "command_secs": [
+                  1.126263666
+                ],
+                "incomplete": [],
+                "observed": true,
+                "pruned": null
+              },
+              "reused": false,
+              "warnings": []
+            }
+          },
+          {
+            "crates": 2,
+            "crate_list": [
+              "ignore (lib)",
+              "rg (bin)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/ferry/home/repo-2cf8c185a0d5383c/bases/79bcbf5a80045d3722a97ad083069304dfb1e60c-42c69dbf/target/debug/deps/libignore-d6807c341156843a.rlib",
+              "found": [
+                "FERRY_MARK[refresh_commit_r0]"
+              ],
+              "expected": [
+                "FERRY_MARK[refresh_commit_r0]"
+              ],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": {
+              "base": {
+                "id": "79bcbf5a80045d3722a97ad083069304dfb1e60c-42c69dbf",
+                "commit": "79bcbf5a80045d3722a97ad083069304dfb1e60c",
+                "created_unix": 1792875666,
+                "build_secs": 1.278914076,
+                "freshness": "mtime",
+                "isolation": "namespace",
+                "toolchain": {
+                  "release": "1.99.0",
+                  "channel": "stable",
+                  "host": "x86_64-unknown-linux-gnu",
+                  "rustc_verbose": "rustc 1.99.0 (b940084d7 2026-09-28)\nbinary: rustc\ncommit-hash: b940084d7eb6a299eb4bfeb8e34901bc051e7ac4\ncommit-date: 2026-09-28\nhost: x86_64-unknown-linux-gnu\nrelease: 1.99.0\nLLVM version: 23.1.1",
+                  "cargo_version": "cargo 1.99.0 (5f94df478 2026-08-27)"
+                },
+                "commands": [
+                  "cargo build  --message-format=json"
+                ],
+                "ferry_version": "0.1.0",
+                "dirtied": [],
+                "remap_paths": false,
+                "unit_inputs": "45fabfc5c101d7dc",
+                "seeded_from": "6892bc2b7efe5909cbbeec8f757ed2c4c76b1d30-42c69dbf",
+                "command_secs": [
+                  1.121545232
+                ],
+                "incomplete": [],
+                "observed": true,
+                "pruned": null
+              },
+              "reused": false,
+              "warnings": []
+            }
+          }
+        ],
+        "hyperfine": "hyperfine/refresh-seeded_base.json",
+        "load_before": "4.51 5.21 4.54",
+        "load_after": "4.23 5.14 4.52"
+      }
+    },
+    "shared": {
+      "concurrent": {
+        "runs": 3,
+        "times": [
+          6.2333682188,
+          6.6630578398,
+          7.2507339448
+        ],
+        "median": 6.6630578398,
+        "mean": 6.715720001133334,
+        "min": 6.2333682188,
+        "max": 7.2507339448,
+        "stddev": 0.5107232445631396,
+        "exit_codes": [
+          0,
+          0,
+          0
+        ],
+        "crates": [
+          null,
+          null,
+          null
+        ],
+        "checks_ok": [
+          null,
+          null,
+          null
+        ],
+        "per_run": [
+          {
+            "crates": null,
+            "crate_list": null,
+            "verify": null,
+            "kache": null,
+            "agents": [
+              {
+                "agent": 1,
+                "rc": 0,
+                "start": 1792875301.418523764,
+                "end": 1792875307.641277491,
+                "elapsed": 6.2227537631988525,
+                "crates": 1,
+                "crate_list": [
+                  "rg (bin)"
+                ],
+                "build_dir_lock_waits": 1,
+                "package_cache_lock_waits": 3,
+                "verify": null
+              },
+              {
+                "agent": 2,
+                "rc": 0,
+                "start": 1792875301.418566264,
+                "end": 1792875305.703948469,
+                "elapsed": 4.285382270812988,
+                "crates": 1,
+                "crate_list": [
+                  "rg (bin)"
+                ],
+                "build_dir_lock_waits": 1,
+                "package_cache_lock_waits": 3,
+                "verify": null
+              },
+              {
+                "agent": 3,
+                "rc": 0,
+                "start": 1792875301.418791145,
+                "end": 1792875303.801167250,
+                "elapsed": 2.382376194000244,
+                "crates": 2,
+                "crate_list": [
+                  "ignore (lib)",
+                  "rg (bin)"
+                ],
+                "build_dir_lock_waits": 0,
+                "package_cache_lock_waits": 4,
+                "verify": null
+              }
+            ],
+            "ferry_report": null
+          },
+          {
+            "crates": null,
+            "crate_list": null,
+            "verify": null,
+            "kache": null,
+            "agents": [
+              {
+                "agent": 1,
+                "rc": 0,
+                "start": 1792875308.180747464,
+                "end": 1792875310.712486921,
+                "elapsed": 2.5317394733428955,
+                "crates": 2,
+                "crate_list": [
+                  "ignore (lib)",
+                  "rg (bin)"
+                ],
+                "build_dir_lock_waits": 0,
+                "package_cache_lock_waits": 4,
+                "verify": null
+              },
+              {
+                "agent": 2,
+                "rc": 0,
+                "start": 1792875308.180254302,
+                "end": 1792875312.746990359,
+                "elapsed": 4.566736221313477,
+                "crates": 1,
+                "crate_list": [
+                  "rg (bin)"
+                ],
+                "build_dir_lock_waits": 1,
+                "package_cache_lock_waits": 3,
+                "verify": null
+              },
+              {
+                "agent": 3,
+                "rc": 0,
+                "start": 1792875308.180503053,
+                "end": 1792875314.833864832,
+                "elapsed": 6.653361558914185,
+                "crates": 1,
+                "crate_list": [
+                  "rg (bin)"
+                ],
+                "build_dir_lock_waits": 1,
+                "package_cache_lock_waits": 3,
+                "verify": null
+              }
+            ],
+            "ferry_report": null
+          },
+          {
+            "crates": null,
+            "crate_list": null,
+            "verify": null,
+            "kache": null,
+            "agents": [
+              {
+                "agent": 1,
+                "rc": 0,
+                "start": 1792875315.351593601,
+                "end": 1792875322.590645269,
+                "elapsed": 7.239051818847656,
+                "crates": 1,
+                "crate_list": [
+                  "rg (bin)"
+                ],
+                "build_dir_lock_waits": 1,
+                "package_cache_lock_waits": 4,
+                "verify": null
+              },
+              {
+                "agent": 2,
+                "rc": 0,
+                "start": 1792875315.351968262,
+                "end": 1792875318.768184270,
+                "elapsed": 3.4162158966064453,
+                "crates": 2,
+                "crate_list": [
+                  "ignore (lib)",
+                  "rg (bin)"
+                ],
+                "build_dir_lock_waits": 0,
+                "package_cache_lock_waits": 2,
+                "verify": null
+              },
+              {
+                "agent": 3,
+                "rc": 0,
+                "start": 1792875315.351871331,
+                "end": 1792875320.665547434,
+                "elapsed": 5.313676118850708,
+                "crates": 1,
+                "crate_list": [
+                  "rg (bin)"
+                ],
+                "build_dir_lock_waits": 1,
+                "package_cache_lock_waits": 3,
+                "verify": null
+              }
+            ],
+            "ferry_report": null
+          }
+        ],
+        "hyperfine": "hyperfine/shared-concurrent.json",
+        "load_before": "5.80 4.51 4.05",
+        "load_after": "5.46 4.54 4.07"
+      },
+      "contamination": {
+        "a_crates": 2,
+        "a_crate_list": [
+          "ignore (lib)",
+          "rg (bin)"
+        ],
+        "b_crates": 1,
+        "b_crate_list": [
+          "rg (bin)"
+        ],
+        "b_rlib": "/home/pat/Projects/ferry/bench/work/ripgrep/shared-target/debug/deps/libignore-d6807c341156843a.rlib",
+        "b_rlib_markers": [
+          "FERRY_MARK[shared_contamination_r0_a]"
+        ],
+        "b_has_own_edit": false,
+        "b_has_a_edit": true
+      }
+    }
+  }
+}

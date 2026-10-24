@@ -185,7 +185,7 @@ recompiles from scratch. `ferry doctor` tells you which row you are in.
 | Shared `CARGO_TARGET_DIR` | warm | depends on the other agents | builds wait on Cargo's lock; one agent can silently get another's code |
 | sccache | registry crates hit; workspace crates miss, because the key includes absolute paths | not incremental: sccache does not cache incremental units | correct, with a target dir per worktree |
 | kache 1.2.2 | warm: content-addressed `RUSTC_WRAPPER` with path-normalized keys | not incremental: restored artifacts carry no incremental state | correct, with a target dir per worktree |
-| **Ferry** | warm, 0 crates rebuilt | incremental on Linux with user namespaces; dependencies only elsewhere | correct: each agent has its own fork |
+| **Ferry** | warm, 0 crates rebuilt | incremental on Linux with user namespaces; elsewhere unchanged crates are reused and the edited crates recompile from scratch (the experimental remap-paths mode keeps most of a library's incremental state) | correct: each agent has its own fork |
 
 kache is complementary rather than a competitor: it shares artifacts across
 machines, commits and CI through remote stores, which Ferry does not do at
@@ -198,9 +198,44 @@ own cross-workspace cache is a 2026 project goal and not usable yet.
 
 <!-- BENCH:RESULTS -->
 
-Results for the Ferry binary will be published here and in the
-[Benchmarks](https://patwrall.github.io/ferry/benchmarks.html) chapter, with
-the hardware, OS, filesystem and toolchain of every run.
+**ripgrep, Ferry at `d7fb5cb`:** ripgrep at 6892bc2, debug `cargo build`,
+44 units (34 crates; each build script counts as its own unit). Hardware: AMD
+Ryzen 5 3600X (6 cores, 12 threads), 31 GiB RAM, btrfs, NixOS 26.11, Linux
+6.18, rustc 1.99.0. Each value is the median of 3 runs (2 for steps with a
+cold build). The machine was a desktop in use, not idle: load average 1.2
+before and 4.9 after, on 12 logical CPUs. The edit appends a documented
+`pub fn` to `crates/ignore`, which forces `ignore` and `rg` to rebuild.
+
+| Scenario (new agent, then one edit) | Time | Units compiled |
+|---|---|---|
+| Cold worktree, empty target | 7.06 s | 44 |
+| Copied warm target (`cp -a`), fresh checkout | 3.67 s | 10 |
+| kache 1.2.2, warm local store | 2.86 s | 10, of which 8 restored from its store |
+| Ferry, sandbox off | 3.20 s | 2 |
+| Ferry, sandbox off, [remap-paths](https://patwrall.github.io/ferry/remap-paths.html) | 2.00 s | 2 |
+| Ferry, namespace sandbox, overlay backend | 1.25 s | 2 |
+| Ferry, namespace sandbox, reflink backend | 1.13 s | 2 |
+
+From the same run:
+
+- **Spawn and first build:** `ferry spawn` takes 0.10–0.17 s. The agent's
+  first build without an edit takes 0.06–0.08 s and compiles nothing.
+- **Three agents with different edits building at once:** 1.41 s (reflink)
+  and 1.57 s (overlay), against 6.66 s for three worktrees sharing one
+  `CARGO_TARGET_DIR`.
+- **Refreshing the base after a commit:** 1.34 s seeded from the previous
+  base, against 7.41 s for `ferry base --cold`.
+- **Steady state:** later edits in the same agent take 0.88–1.07 s with
+  kache and in every Ferry scenario, so Ferry's gain is in a new agent's
+  first edits.
+- **Sandbox off:** the agent reuses every unchanged crate, but `ignore` and
+  `rg` recompile from scratch. kache compiles the same two, and is faster
+  here. Remap-paths keeps most of the library's incremental state; on Linux
+  the `rg` binary, built with debug info, still recompiles from scratch.
+
+All steps, the disk usage, and min/max values are in
+[`bench/results/ripgrep/results.md`](bench/results/ripgrep/results.md).
+Other workspaces and macOS have not been published yet.
 
 Before Ferry was written, a bash prototype measured the approach.
 **Prototype (bash) on ripgrep, 2 vCPU:** ripgrep at 6892bc2 (39 crates, debug

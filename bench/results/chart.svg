@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="346" viewBox="0 0 760 346" font-family="system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" role="img" aria-label="First edit after spawning a new agent">
+<title>First edit after spawning a new agent</title>
+<text x="0.0" y="24.0" font-size="17" text-anchor="start" font-weight="600" fill="#7b7b7b">First edit after spawning a new agent</text>
+<text x="0.0" y="44.0" font-size="12" text-anchor="start" font-weight="normal" fill="#7b7b7b">Median wall time of the first build that includes the agent&#x27;s edit. Lower is better.</text>
+<text x="0.0" y="84.0" font-size="14" text-anchor="start" font-weight="600" fill="#7b7b7b">ripgrep</text>
+<text x="236.0" y="84.0" font-size="11" text-anchor="start" font-weight="normal" fill="#7b7b7b">edit crates/ignore/src/lib.rs · cargo build · median of 2, 3 runs</text>
+<line x1="236.0" y1="94.0" x2="236.0" y2="262.0" stroke="#7b7b7b" stroke-opacity="0.35" stroke-width="1"/>
+<text x="236.0" y="276.0" font-size="11" text-anchor="middle" font-weight="normal" fill="#7b7b7b">0</text>
+<line x1="329.5" y1="94.0" x2="329.5" y2="262.0" stroke="#7b7b7b" stroke-opacity="0.35" stroke-width="1"/>
+<text x="329.5" y="276.0" font-size="11" text-anchor="middle" font-weight="normal" fill="#7b7b7b">2</text>
+<line x1="423.0" y1="94.0" x2="423.0" y2="262.0" stroke="#7b7b7b" stroke-opacity="0.35" stroke-width="1"/>
+<text x="423.0" y="276.0" font-size="11" text-anchor="middle" font-weight="normal" fill="#7b7b7b">4</text>
+<line x1="516.5" y1="94.0" x2="516.5" y2="262.0" stroke="#7b7b7b" stroke-opacity="0.35" stroke-width="1"/>
+<text x="516.5" y="276.0" font-size="11" text-anchor="middle" font-weight="normal" fill="#7b7b7b">6</text>
+<line x1="610.0" y1="94.0" x2="610.0" y2="262.0" stroke="#7b7b7b" stroke-opacity="0.35" stroke-width="1"/>
+<text x="610.0" y="276.0" font-size="11" text-anchor="middle" font-weight="normal" fill="#7b7b7b">8</text>
+<text x="610.0" y="290.0" font-size="11" text-anchor="end" font-weight="normal" fill="#7b7b7b">seconds</text>
+<text x="226.0" y="112.5" font-size="13" text-anchor="end" font-weight="normal" fill="#7b7b7b">Cold worktree</text>
+<g><title>Cold worktree: median 7.063 s (min 7.019, max 7.107, n=2) · 44 crates</title>
+<path d="M236.0,99.0H562.2Q566.2,99.0 566.2,103.0V113.0Q566.2,117.0 562.2,117.0H236.0Z" fill="#8c8c87"/>
+</g>
+<text x="572.2" y="112.5" font-size="12" text-anchor="start" font-weight="normal" fill="#7b7b7b">7.06 s · 44 crates</text>
+<text x="226.0" y="140.5" font-size="13" text-anchor="end" font-weight="normal" fill="#7b7b7b">Naive copied target</text>
+<g><title>Naive copied target: median 3.675 s (min 3.598, max 3.687, n=3) · 10 crates</title>
+<path d="M236.0,127.0H403.8Q407.8,127.0 407.8,131.0V141.0Q407.8,145.0 403.8,145.0H236.0Z" fill="#8c8c87"/>
+</g>
+<text x="413.8" y="140.5" font-size="12" text-anchor="start" font-weight="normal" fill="#7b7b7b">3.67 s · 10 crates</text>
+<text x="226.0" y="168.5" font-size="13" text-anchor="end" font-weight="normal" fill="#7b7b7b">kache 1.2.2</text>
+<g><title>kache 1.2.2: median 2.863 s (min 2.836, max 2.876, n=3) · 10 crates</title>
+<path d="M236.0,155.0H365.8Q369.8,155.0 369.8,159.0V169.0Q369.8,173.0 365.8,173.0H236.0Z" fill="#8c8c87"/>
+</g>
+<text x="375.8" y="168.5" font-size="12" text-anchor="start" font-weight="normal" fill="#7b7b7b">2.86 s · 10 crates</text>
+<text x="226.0" y="196.5" font-size="13" text-anchor="end" font-weight="600" fill="#7b7b7b">Ferry, crate-level (sandbox off)</text>
+<g><title>Ferry, crate-level (sandbox off): median 3.204 s (min 3.107, max 3.480, n=3) · 2 crates</title>
+<path d="M236.0,183.0H381.8Q385.8,183.0 385.8,187.0V197.0Q385.8,201.0 381.8,201.0H236.0Z" fill="#3987e5"/>
+</g>
+<text x="391.8" y="196.5" font-size="12" text-anchor="start" font-weight="normal" fill="#7b7b7b">3.20 s · 2 crates</text>
+<text x="226.0" y="224.5" font-size="13" text-anchor="end" font-weight="600" fill="#7b7b7b">Ferry, remap-paths (sandbox off)</text>
+<g><title>Ferry, remap-paths (sandbox off): median 2.000 s (min 1.975, max 2.033, n=3) · 2 crates</title>
+<path d="M236.0,211.0H325.5Q329.5,211.0 329.5,215.0V225.0Q329.5,229.0 325.5,229.0H236.0Z" fill="#3987e5"/>
+</g>
+<text x="335.5" y="224.5" font-size="12" text-anchor="start" font-weight="normal" fill="#7b7b7b">2.00 s · 2 crates</text>
+<text x="226.0" y="252.5" font-size="13" text-anchor="end" font-weight="600" fill="#7b7b7b">Ferry</text>
+<g><title>Ferry: median 1.252 s (min 1.251, max 1.274, n=3) · 2 crates</title>
+<path d="M236.0,239.0H290.5Q294.5,239.0 294.5,243.0V253.0Q294.5,257.0 290.5,257.0H236.0Z" fill="#3987e5"/>
+</g>
+<text x="300.5" y="252.5" font-size="12" text-anchor="start" font-weight="normal" fill="#7b7b7b">1.25 s · 2 crates</text>
+<line x1="236.0" y1="94.0" x2="236.0" y2="262.0" stroke="#7b7b7b" stroke-width="1"/>
+<text x="0.0" y="318.0" font-size="11" text-anchor="start" font-weight="normal" fill="#7b7b7b">AMD Ryzen 5 3600X 6-Core Processor, 6 cores / 12 threads, btrfs, rustc 1.99.0 (b940084d7 2026-09-28)</text>
+<text x="0.0" y="334.0" font-size="11" text-anchor="start" font-weight="normal" fill="#7b7b7b">Each group has its own axis. Bars: median; hover for min, max and run count. Desktop machine, not a lab.</text>
+</svg>
