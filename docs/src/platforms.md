@@ -84,8 +84,7 @@ allowed, put `FERRY_HOME` on a volume, because overlayfs cannot use the
 container's overlay root filesystem as its upper layer. See
 [Containers](troubleshooting.md#containers) for the seccomp profile and a
 devcontainer example. These container facts come from the profiles' sources
-and probes during Ferry's research; Ferry itself has not been tested in
-containers.
+and standalone probes; Ferry itself has not been tested in containers.
 
 ### Filesystems
 

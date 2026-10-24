@@ -29,7 +29,7 @@ export PATH="$(brew --prefix)/opt/coreutils/libexec/gnubin:$PATH"
 bench/run.sh --workspace tests/fixtures/workspace --name fixture \
   --edit leaf/src/lib.rs --runs 2
 
-# ripgrep, the prototype's protocol (research/RESULTS.md).
+# ripgrep, the prototype's protocol.
 bench/run.sh --workspace https://github.com/BurntSushi/ripgrep --rev 6892bc2 \
   --edit crates/ignore/src/lib.rs --runs 5
 
@@ -108,7 +108,7 @@ the workspace crates at the new path, which gives them fresh incremental state.
 | `cold` | `git worktree add` plus an empty target dir. Its `first_edit` is the ideal: incremental at the same path. |
 | `naive` | a new worktree (fresh checkout mtimes) plus `cp -a` of a warm target built in another worktree. GNU cp 9+ reflinks where it can, so this is also what `cp --reflink` (Worktrunk's `copy-ignored`) gives. |
 | `shared` | N worktrees with one shared `CARGO_TARGET_DIR`: (a) N agents with different edits build at once (wall time, per-agent elapsed, crates, and lock waits split into Cargo's build-directory lock and the package-cache lock); (b) contamination: B edits, A edits differently and builds, then B builds; reports B's crates compiled and whether B's rlib holds A's edit, B's, or both (single run). |
-| `kache` | kache 1.2.2 as `RUSTC_WRAPPER` with its daemon running and isolated dirs (`KACHE_CACHE_DIR`, `KACHE_RUNTIME_DIR`, `KACHE_CONFIG`, `KACHE_HOST_CONFIG=`, `XDG_CACHE_HOME`, a short `KACHE_SOCKET_PATH`), as in `research/kache-and-prior-art.md`. The store is warmed by one build in another worktree; each agent is a new worktree with an empty target. Cargo reports restored crates as compiled, so kache's own per-crate events (`events.jsonl`: hits, misses, passthroughs and why) are recorded for every timed build. |
+| `kache` | kache 1.2.2 as `RUSTC_WRAPPER` with its daemon running and isolated dirs (`KACHE_CACHE_DIR`, `KACHE_RUNTIME_DIR`, `KACHE_CONFIG`, `KACHE_HOST_CONFIG=`, `XDG_CACHE_HOME`, a short `KACHE_SOCKET_PATH`). The store is warmed by one build in another worktree; each agent is a new worktree with an empty target. Cargo reports restored crates as compiled, so kache's own per-crate events (`events.jsonl`: hits, misses, passthroughs and why) are recorded for every timed build. |
 | `ferry-off` | `FERRY_SANDBOX=off`, backend `auto` (reflink on btrfs, clonefile on APFS), `FERRY_REMAP_PATHS=0`: crate-level reuse only, no canonical path. |
 | `ferry-remap` | as `ferry-off` with `FERRY_REMAP_PATHS=1`: builds go through `ferry-rustc` ([remap-paths](../docs/src/remap-paths.md)), so rustc's incremental state for library crates survives the agent's new path (on Linux, binaries with debug info still recompile from scratch). |
 | `ferry-overlay`, `ferry-reflink`, `ferry-copy` | `FERRY_SANDBOX=namespace` with that `FERRY_BACKEND`. They share one base. |
@@ -223,4 +223,4 @@ depend on the runner label (`env.json` records them for each run), so:
 - Concurrent builds also contend on Cargo's shared package-cache lock in
   `~/.cargo`, even with separate target dirs; the lock-wait columns show it.
 - kache is benchmarked as released (1.2.2). Its unreleased main branch adds
-  incremental seeds between worktrees (see `research/kache-and-prior-art.md`).
+  incremental seeds between worktrees.

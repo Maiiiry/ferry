@@ -7,8 +7,7 @@
 //! adds `-Zremap-cwd-prefix=.` and rewrites absolute worktree and target paths
 //! in rustc's argv to relative ones, for workspace members only. The target
 //! dir is reached through a link inside the source root, so the relative path
-//! from source to target is identical in the base and every agent. See
-//! research/macos-and-path-independent-incremental.md.
+//! from source to target is identical in the base and every agent.
 
 use std::ffi::{OsStr, OsString};
 use std::fs;
