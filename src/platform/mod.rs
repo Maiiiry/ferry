@@ -89,8 +89,14 @@ impl Capabilities {
     /// Probes everything. `store_root` must exist; probes create and remove
     /// scratch files under it.
     pub fn detect(store_root: &Path) -> Self {
-        let _ = store_root;
-        todo!("platform::Capabilities::detect")
+        #[cfg(target_os = "linux")]
+        {
+            linux::detect(store_root)
+        }
+        #[cfg(target_os = "macos")]
+        {
+            macos::detect(store_root)
+        }
     }
 
     pub fn sysctl(&self, name: &str) -> Option<&str> {
@@ -103,12 +109,36 @@ impl Capabilities {
 
 /// Filesystem type of `path`.
 pub fn fs_info(path: &Path) -> FsInfo {
-    let _ = path;
-    todo!("platform::fs_info")
+    #[cfg(target_os = "linux")]
+    {
+        linux::fs_info(path)
+    }
+    #[cfg(target_os = "macos")]
+    {
+        macos::fs_info(path)
+    }
 }
 
-/// Tries a copy-on-write clone between two scratch files in `dir`.
+/// Tries a copy-on-write clone between two scratch files in `dir`, using the
+/// same call the reflink backend uses.
 pub fn probe_reflink(dir: &Path) -> Probe {
-    let _ = dir;
-    todo!("platform::probe_reflink")
+    let scratch = dir.join(format!(".ferry-reflink-probe-{}", std::process::id()));
+    let result = (|| {
+        std::fs::create_dir_all(&scratch).map_err(|e| ("create scratch dir", e))?;
+        let (src, dst) = (scratch.join("src"), scratch.join("dst"));
+        std::fs::write(&src, b"ferry reflink probe").map_err(|e| ("write", e))?;
+        #[cfg(target_os = "linux")]
+        crate::fork::reflink::clone_file(&src, &dst).map_err(|e| ("FICLONE", e))?;
+        #[cfg(target_os = "macos")]
+        crate::fork::clonefile::clone_file(&src, &dst).map_err(|e| ("clonefile", e))?;
+        Ok::<(), (&str, std::io::Error)>(())
+    })();
+    let _ = std::fs::remove_dir_all(&scratch);
+    match result {
+        Ok(()) => Probe::Ok,
+        Err((stage, e)) => Probe::Failed {
+            stage: stage.into(),
+            error: e.to_string(),
+        },
+    }
 }

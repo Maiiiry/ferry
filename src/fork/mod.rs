@@ -15,16 +15,16 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 
 use crate::config::BackendPref;
-use crate::platform::Capabilities;
+use crate::platform::{Capabilities, Os, Probe};
 use crate::sandbox::Isolation;
 
 #[cfg(target_os = "macos")]
-mod clonefile;
+pub(crate) mod clonefile;
 mod copy;
 #[cfg(target_os = "linux")]
 mod overlay;
 #[cfg(target_os = "linux")]
-mod reflink;
+pub(crate) mod reflink;
 pub(crate) mod tree;
 
 #[derive(Debug, thiserror::Error)]
@@ -131,8 +131,20 @@ pub trait Backend: std::fmt::Debug {
 
 /// The backend implementation for `kind` on this platform.
 pub fn backend(kind: BackendKind) -> Result<Box<dyn Backend>, ForkError> {
-    let _ = kind;
-    todo!("fork::backend")
+    match kind {
+        BackendKind::Copy => Ok(Box::new(copy::Copy)),
+        #[cfg(target_os = "linux")]
+        BackendKind::Reflink => Ok(Box::new(reflink::Reflink)),
+        #[cfg(target_os = "macos")]
+        BackendKind::Reflink => Ok(Box::new(clonefile::Clonefile)),
+        #[cfg(target_os = "linux")]
+        BackendKind::Overlay => Ok(Box::new(overlay::Overlay)),
+        #[allow(unreachable_patterns)]
+        other => Err(ForkError::Unavailable {
+            backend: other,
+            reason: "not implemented on this platform".into(),
+        }),
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -153,8 +165,63 @@ pub fn select(
     caps: &Capabilities,
     isolation: Isolation,
 ) -> Result<Choice, ForkError> {
-    let _ = (pref, caps, isolation);
-    todo!("fork::select")
+    let fs = &caps.store_fs.name;
+    let reflink = match &caps.reflink {
+        Probe::Ok => Ok(format!("{fs} supports copy-on-write clones")),
+        other => Err(format!(
+            "no copy-on-write clones on {fs} ({})",
+            probe_reason(other)
+        )),
+    };
+    let overlay = if caps.os != Os::Linux {
+        Err("overlayfs is Linux-only".to_owned())
+    } else if isolation != Isolation::Namespace {
+        Err("overlayfs needs the namespace sandbox, which is not in use".to_owned())
+    } else {
+        match &caps.overlay {
+            Probe::Ok => Ok(format!(
+                "overlayfs over the base inside the agent's namespace ({fs} has no reflinks)"
+            )),
+            other => Err(format!("overlayfs unavailable ({})", probe_reason(other))),
+        }
+    };
+    let choose = |kind, result: Result<String, String>| match result {
+        Ok(reason) => Ok(Choice { kind, reason }),
+        Err(reason) => Err(ForkError::Unavailable {
+            backend: kind,
+            reason,
+        }),
+    };
+    match pref {
+        BackendPref::Reflink => choose(BackendKind::Reflink, reflink),
+        BackendPref::Overlay => choose(BackendKind::Overlay, overlay),
+        BackendPref::Copy => Ok(Choice {
+            kind: BackendKind::Copy,
+            reason: "requested by configuration".into(),
+        }),
+        BackendPref::Auto => match (reflink, overlay) {
+            (Ok(reason), _) => Ok(Choice {
+                kind: BackendKind::Reflink,
+                reason,
+            }),
+            (Err(_), Ok(reason)) => Ok(Choice {
+                kind: BackendKind::Overlay,
+                reason,
+            }),
+            (Err(no_reflink), Err(no_overlay)) => Ok(Choice {
+                kind: BackendKind::Copy,
+                reason: format!("full copy: {no_reflink}; {no_overlay}"),
+            }),
+        },
+    }
+}
+
+fn probe_reason(probe: &Probe) -> String {
+    match probe {
+        Probe::Ok => "ok".into(),
+        Probe::Unsupported { reason } => reason.clone(),
+        Probe::Failed { stage, error } => format!("{stage}: {error}"),
+    }
 }
 
 /// Removes everything a fork created under the agent dir.
@@ -181,5 +248,104 @@ mod duration_secs {
 
     pub fn serialize<S: serde::Serializer>(d: &Duration, s: S) -> Result<S::Ok, S::Error> {
         s.serialize_f64(d.as_secs_f64())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::platform::FsInfo;
+
+    fn caps(reflink: bool, overlay: bool) -> Capabilities {
+        let probe = |ok: bool| {
+            if ok {
+                Probe::Ok
+            } else {
+                Probe::Failed {
+                    stage: "test".into(),
+                    error: "unavailable".into(),
+                }
+            }
+        };
+        Capabilities {
+            os: Os::current(),
+            kernel: "test".into(),
+            store_fs: FsInfo {
+                name: "testfs".into(),
+            },
+            reflink: probe(reflink),
+            userns: probe(overlay),
+            overlay: probe(overlay),
+            sysctls: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn auto_prefers_reflink_then_overlay_then_copy() {
+        let ns = Isolation::Namespace;
+        assert_eq!(
+            select(BackendPref::Auto, &caps(true, true), ns)
+                .unwrap()
+                .kind,
+            BackendKind::Reflink
+        );
+        let expected = if cfg!(target_os = "linux") {
+            BackendKind::Overlay
+        } else {
+            BackendKind::Copy
+        };
+        assert_eq!(
+            select(BackendPref::Auto, &caps(false, true), ns)
+                .unwrap()
+                .kind,
+            expected
+        );
+        let copy = select(BackendPref::Auto, &caps(false, false), ns).unwrap();
+        assert_eq!(copy.kind, BackendKind::Copy);
+        assert!(copy.reason.contains("testfs"), "{}", copy.reason);
+    }
+
+    #[test]
+    fn overlay_requires_namespace_isolation() {
+        let c = caps(false, true);
+        assert_eq!(
+            select(BackendPref::Auto, &c, Isolation::None).unwrap().kind,
+            BackendKind::Copy
+        );
+        assert!(matches!(
+            select(BackendPref::Overlay, &c, Isolation::None),
+            Err(ForkError::Unavailable {
+                backend: BackendKind::Overlay,
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn explicit_unavailable_backend_is_an_error() {
+        let c = caps(false, false);
+        assert!(select(BackendPref::Reflink, &c, Isolation::Namespace).is_err());
+        assert!(select(BackendPref::Overlay, &c, Isolation::Namespace).is_err());
+        assert_eq!(
+            select(BackendPref::Copy, &c, Isolation::Namespace)
+                .unwrap()
+                .kind,
+            BackendKind::Copy
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn reflink_clone_when_supported() {
+        let dir = tempfile::tempdir().unwrap();
+        let (a, b) = (dir.path().join("a"), dir.path().join("b"));
+        std::fs::write(&a, b"shared extents").unwrap();
+        match reflink::clone_file(&a, &b) {
+            Ok(()) => assert_eq!(std::fs::read(&b).unwrap(), b"shared extents"),
+            Err(e) => eprintln!(
+                "skipping reflink_clone_when_supported: {e} on {}",
+                dir.path().display()
+            ),
+        }
     }
 }
