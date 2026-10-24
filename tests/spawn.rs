@@ -26,6 +26,26 @@ fn an_agent_ahead_of_the_base_is_told_how_to_catch_up() {
     assert_eq!(repo.app("a").marker, "LEAF_V2");
 }
 
+/// `ferry base` and the watcher build HEAD, which would not help an agent
+/// started from another branch.
+#[test]
+fn an_agent_from_another_branch_is_told_to_build_a_base_for_it() {
+    let repo = TestRepo::new();
+    repo.base();
+    repo.git(repo.root(), ["checkout", "-q", "-b", "feature-x"]);
+    repo.set_marker(repo.root(), "FEATURE_X");
+    let feature = repo.commit_all("feature x");
+    repo.git(repo.root(), ["checkout", "-q", "main"]);
+    let spawn = repo.ferry_json(["spawn", "a", "--from", "feature-x"]);
+    let warnings = spawn["warnings"].to_string();
+    assert!(
+        warnings.contains(&format!("`ferry base --rev {}`", &feature[..12])),
+        "{spawn}"
+    );
+    assert!(!warnings.contains("--watch"), "{spawn}");
+    assert_eq!(repo.app("a").marker, "FEATURE_X");
+}
+
 #[test]
 fn an_edit_rebuilds_only_the_edited_crate_and_its_dependents() {
     let repo = TestRepo::new();

@@ -472,8 +472,14 @@ fn other_commit_hint(ctx: &Context, base: &BaseMeta, from: &CommitId) -> Result<
             return Ok(format!("; a base for {} is being built", short(from)));
         }
     }
+    // Both build HEAD, which helps only an agent that starts there.
+    let how = if ctx.repo.resolve_commit("HEAD").ok().as_ref() == Some(from) {
+        "`ferry base` (or keep `ferry base --watch` running)".to_owned()
+    } else {
+        format!("`ferry base --rev {}`", short(from))
+    };
     Ok(format!(
-        "; base {} is at {}, not {}: run `ferry base` (or keep `ferry base --watch` running)",
+        "; base {} is at {}, not {}: run {how}",
         base.id.short(),
         short(&base.commit),
         short(from)
