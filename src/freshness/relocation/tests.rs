@@ -516,6 +516,22 @@ fn unreadable_dirs_below_the_target_are_removed() {
 }
 
 #[test]
+fn unreadable_package_dirs_of_the_new_layout_are_removed() {
+    let s = Synth::new();
+    for (pkg, meta, hash) in [
+        ("clean", "1111111111111111", 1),
+        ("plain", "2222222222222222", 2),
+    ] {
+        s.member(U::new(pkg, meta, hash).layout(Layout::New), &[]);
+    }
+    let locked = s.target.join("debug/build/plain");
+    fs::set_permissions(&locked, fs::Permissions::from_mode(0o000)).unwrap();
+    let removed = s.removed(true);
+    fs::set_permissions(&locked, fs::Permissions::from_mode(0o700)).unwrap();
+    assert_eq!(removed, ["debug/build/plain"]);
+}
+
+#[test]
 fn units_are_their_hash_files_and_unparsable_ones_are_removed() {
     let s = Synth::new();
     for layout in [Layout::Old, Layout::New] {
@@ -629,30 +645,51 @@ fn cargo_records_naming_old_paths_flag_their_unit() {
 }
 
 #[test]
-fn source_paths_in_dep_info_flag_members_but_not_vendored_inputs() {
+fn source_paths_in_dep_info_flag_their_unit() {
     let s = Synth::new();
     let absolute = format!("{}/app/src/gen.rs", s.src());
     let member = U::new("app", "1111111111111111", 1);
     let flagged = s.compile(member, "lib-app", &["app/src/lib.rs", &absolute], &[], &[]);
-    // A vendored crate: absolute inputs under the checkout, never tracked
-    // by Cargo, and not a member.
-    let vendored = format!("{}/vendor/v/src/lib.rs", s.src());
-    s.compile(
-        U::new("v", "2222222222222222", 2),
+    // A vendored crate: Cargo hashes the absolute path of a package that is
+    // not under the workspace root, so it rebuilds every unit at the
+    // agent's checkout anyway, and its run must rerun from scratch.
+    let script = U::new("v", "2222222222222222", 2);
+    let script_dir = s.compile(
+        script,
+        "build-script-build-script-build",
+        &[&format!("{}/vendor/v/build.rs", s.src())],
+        &[],
+        &["build_script_build-2222222222222222"],
+    );
+    let run = U::new("v", "3333333333333333", 3).deps(&[2]);
+    s.run(run, "");
+    let lib = U::new("v", "4444444444444444", 4).deps(&[3]);
+    let lib_dir = s.compile(
+        lib,
         "lib-v",
-        &[&vendored],
+        &[&format!("{}/vendor/v/src/lib.rs", s.src())],
         &[],
         &[],
     );
     let manifest = format!("{}/vendor/w", s.src());
     let env_dep = s.compile(
-        U::new("w", "3333333333333333", 3),
+        U::new("w", "5555555555555555", 5),
         "lib-w",
         &[&format!("{manifest}/src/lib.rs")],
         &[("CARGO_MANIFEST_DIR", &manifest)],
         &[],
     );
-    assert_eq!(s.removed(true), sorted(vec![flagged, env_dep]));
+    assert_eq!(
+        s.removed(true),
+        sorted(
+            [
+                vec![flagged, script_dir, lib_dir, env_dep],
+                run_removal(run)
+            ]
+            .concat()
+        )
+    );
+    assert_eq!(s.why(true, &run.fingerprint_dir()), Some(Capture::Rerun));
 }
 
 #[test]
@@ -777,6 +814,70 @@ fn build_script_directives_may_only_name_out_dirs() {
     assert_eq!(s.removed(true), sorted(run_removal(unit)));
 }
 
+/// Cargo rewrites a replayed run's old `OUT_DIR`, but the linker already
+/// baked link arguments (an rpath) into the package's binaries.
+#[test]
+fn link_arguments_may_only_name_live_out_dirs() {
+    let s = Synth::new();
+    let t = s.tgt();
+    let mut linked = Vec::new();
+    for (i, directive) in [
+        "rustc-link-arg=-Wl,-rpath,",
+        "rustc-link-arg-bins=-Wl,-rpath,",
+        "rustc-link-arg-bin=app=-Wl,-rpath,",
+        "rustc-link-arg-tests=-Wl,-rpath,",
+        "rustc-link-arg-examples=-Wl,-rpath,",
+        "rustc-link-arg-benches=-Wl,-rpath,",
+        "rustc-cdylib-link-arg=-Wl,-rpath,",
+        // Only rustc reads the search path, after the rewrite.
+        "rustc-link-search=native=",
+    ]
+    .iter()
+    .enumerate()
+    {
+        let layout = if i % 2 == 0 { Layout::Old } else { Layout::New };
+        let meta = format!("{:016x}", i + 1);
+        let unit = U::new("nat", &meta, i as u64 + 1).layout(layout);
+        let out = format!("{t}/{}", unit.run_out_dir());
+        s.run(unit, &format!("cargo::{directive}{out}\n"));
+        if directive.contains("link-arg") {
+            linked.extend(run_removal(unit));
+        }
+    }
+    // A live OUT_DIR outlives the binaries that load from it.
+    assert_eq!(s.removed(true), Vec::<String>::new());
+    assert_eq!(s.removed(false), sorted(linked));
+}
+
+/// Cargo replaces the exact `root-output` string, not another spelling of
+/// the same directory.
+#[test]
+fn only_the_recorded_spelling_of_an_out_dir_is_rewritten() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path().canonicalize().unwrap();
+    // Through a link to a name with a space, the canonical spelling's needle
+    // is a suffix of the given one's, which is dropped.
+    fs::create_dir_all(root.join("My Ferry/repo-0123456789abcdef")).unwrap();
+    symlink(root.join("My Ferry"), root.join("link")).unwrap();
+    let s = Synth::at(tmp, root.clone(), root.join("link/repo-0123456789abcdef"));
+    let canonical = U::new("nat", "1111111111111111", 1);
+    let out = root
+        .join("My Ferry/repo-0123456789abcdef/bases")
+        .join(ID)
+        .join("target")
+        .join(canonical.run_out_dir());
+    s.run(
+        canonical,
+        &format!("cargo::rustc-link-search=native={}\n", out.display()),
+    );
+    let given = U::new("given", "2222222222222222", 2);
+    let out = format!("{}/{}", s.tgt(), given.run_out_dir());
+    s.run(given, &format!("cargo::rustc-link-search=native={out}\n"));
+    // A live OUT_DIR is still there under either spelling.
+    assert_eq!(s.removed(true), Vec::<String>::new());
+    assert_eq!(s.removed(false), sorted(run_removal(canonical)));
+}
+
 #[test]
 fn out_dir_contents_may_only_name_live_out_dirs() {
     let s = Synth::new();
@@ -840,6 +941,99 @@ fn out_dir_contents_may_only_name_live_out_dirs() {
         sorted([flagged, run_removal(own)].concat())
     );
     fs::set_permissions(&secret, fs::Permissions::from_mode(0o600)).unwrap();
+}
+
+/// Files are scanned `CHUNK` bytes at a time, but a path is seen whole.
+#[test]
+fn paths_across_scan_pieces_are_seen_whole() {
+    let s = Synth::new();
+    let t = s.tgt();
+    // `bytes` with `path` across the first piece boundary, between zeros.
+    let across = |path: &str| {
+        let mut bytes = vec![0; CHUNK - path.len() / 2];
+        bytes.extend_from_slice(path.as_bytes());
+        bytes.resize(bytes.len() + 100, 0);
+        bytes
+    };
+    let src = U::new("src", "1111111111111111", 1);
+    let out = s.run(src, "");
+    s.put(
+        &format!("{out}/data.bin"),
+        across(&format!("{}/x", s.src())),
+    );
+    // Climbs out of its own OUT_DIR only after the boundary.
+    let climb = U::new("climb", "2222222222222222", 2);
+    let out = s.run(climb, "");
+    let path = format!("{t}/{out}/{}{}x", "sub/".repeat(40), "../".repeat(45));
+    s.put(&format!("{out}/paths.bin"), across(&path));
+    // A run of path bytes longer than a piece cannot be checked.
+    let long = U::new("long", "3333333333333333", 3);
+    let out = s.run(long, "");
+    let mut bytes = format!("{t}/{out}/").into_bytes();
+    bytes.resize(3 * CHUNK, b'a');
+    s.put(&format!("{out}/long.txt"), bytes);
+    let fine = U::new("fine", "4444444444444444", 4);
+    let out = s.run(fine, "");
+    s.put(
+        &format!("{out}/data.bin"),
+        across(&format!("{t}/{out}/data.txt")),
+    );
+    assert_eq!(
+        s.removed(true),
+        sorted(
+            [src, climb, long]
+                .into_iter()
+                .flat_map(run_removal)
+                .collect()
+        )
+    );
+}
+
+/// Peak resident memory of this test process, in bytes.
+#[cfg(target_os = "linux")]
+fn peak_rss() -> u64 {
+    let status = fs::read_to_string("/proc/self/status").unwrap();
+    let kib = status
+        .lines()
+        .find_map(|l| l.strip_prefix("VmHWM:"))
+        .unwrap();
+    kib.trim()
+        .trim_end_matches("kB")
+        .trim()
+        .parse::<u64>()
+        .unwrap()
+        * 1024
+}
+
+/// Some crates download prebuilt libraries of gigabytes into `OUT_DIR`.
+#[cfg(target_os = "linux")]
+#[test]
+fn large_files_are_scanned_in_bounded_memory() {
+    const SIZE: u64 = 128 << 20;
+    let s = Synth::new();
+    let sparse = |rel: &str| {
+        let path = s.target.join(rel);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::File::create(&path).unwrap().set_len(SIZE).unwrap();
+    };
+    let run = U::new("torch", "1111111111111111", 1);
+    let out = s.run(run, "");
+    sparse(&format!("{out}/libtorch.so"));
+    // A generated input outside every OUT_DIR, and a shared library output.
+    let lib = U::new("torch", "2222222222222222", 2).deps(&[1]);
+    let generated = format!("{}/gen/big.rs", s.tgt());
+    s.compile(
+        lib,
+        "lib-torch",
+        &["torch/src/lib.rs", &generated],
+        &[],
+        &["libtorch-2222222222222222.so"],
+    );
+    sparse("gen/big.rs");
+    sparse("debug/deps/libtorch-2222222222222222.so");
+    assert_eq!(s.removed(true), Vec::<String>::new());
+    let peak = peak_rss();
+    assert!(peak < SIZE / 2, "peak RSS {} MiB", peak >> 20);
 }
 
 #[test]
@@ -1323,6 +1517,15 @@ fn plans_are_cached_only_when_they_fit() {
         }
         .fits(ID)
     );
+    // Bases outlive a Ferry upgrade, which may change a rule without
+    // bumping RELOCATION_RULES.
+    assert!(
+        !RelocationPlan {
+            ferry: "0.0.0-older".into(),
+            ..plan.clone()
+        }
+        .fits(ID)
+    );
     assert!(plan.cacheable());
     let odd = PathBuf::from(OsString::from_vec(b"debug/.fingerprint/\xff".to_vec()));
     let uncacheable = RelocationPlan {
@@ -1581,6 +1784,54 @@ fn a_build_script_above_a_relocated_build_dependency_reruns_from_scratch() {
     assert_eq!(out_dirs.len(), 1);
     assert!(out_dirs[0].starts_with(&m.target));
     assert_eq!(fs::read(out_dirs[0].join("runs")).unwrap(), b"x");
+}
+
+/// C5: Cargo rebuilds a vendored crate at the agent's checkout, because it
+/// hashes the absolute path of a package outside the workspace root; its
+/// script must not rerun over the base's `OUT_DIR`.
+#[test]
+fn a_vendored_build_script_reruns_from_scratch() {
+    let script = format!(
+        "fn main() {{\n    let out = std::env::var(\"OUT_DIR\").unwrap();\n    \
+         let state = std::path::Path::new(&out).join(\"state\");\n    \
+         if let Ok(old) = std::fs::read_to_string(&state) {{\n        \
+         assert_eq!(old, out, \"rerun into another build's OUT_DIR\");\n    }}\n    \
+         std::fs::write(&state, &out).unwrap();\n{COUNTING}}}\n"
+    );
+    let Some(m) = Moved::build(&[
+        ("Cargo.toml", &format!("{WORKSPACE}\"app\"]\n")),
+        (
+            ".cargo/config.toml",
+            "[source.crates-io]\nreplace-with = \"vendored\"\n\n\
+             [source.vendored]\ndirectory = \"vendor\"\n",
+        ),
+        (
+            "app/Cargo.toml",
+            &manifest("app", "\n[dependencies]\nvsys = \"0.1\"\n"),
+        ),
+        (
+            "app/src/main.rs",
+            "fn main() {\n    println!(\"{}\", vsys::V);\n}\n",
+        ),
+        ("vendor/vsys/Cargo.toml", &manifest("vsys", "")),
+        (
+            "vendor/vsys/.cargo-checksum.json",
+            "{\"files\":{},\"package\":null}",
+        ),
+        ("vendor/vsys/build.rs", &script),
+        ("vendor/vsys/src/lib.rs", "pub const V: u32 = 7;\n"),
+    ]) else {
+        return;
+    };
+    m.relocate();
+    let (built, out_dirs) = m.build_once();
+    assert!(built.contains(&unit("vsys", "lib", false)), "{built:?}");
+    assert_eq!(out_dirs.len(), 1);
+    assert!(out_dirs[0].starts_with(&m.target), "{out_dirs:?}");
+    assert_eq!(fs::read(out_dirs[0].join("runs")).unwrap(), b"x");
+    assert_eq!(m.run("app"), "7");
+    let (again, _) = m.build_once();
+    assert!(again.iter().all(|(_, _, fresh)| *fresh), "{again:?}");
 }
 
 /// C3: reading the live base's `OUT_DIR` at run time needs no rebuild until

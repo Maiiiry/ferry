@@ -764,3 +764,92 @@ fn an_include_outside_the_package_follows_the_agent() {
     assert_eq!(field(&app_output(&repo, "a"), "shared"), "v2");
     repo.build("a").assert_rebuilt(&[]);
 }
+
+#[cfg(target_os = "linux")]
+const NAT_BUILD: &str = "use std::process::Command;\n\nfn main() {\n    \
+     let out = std::env::var(\"OUT_DIR\").unwrap();\n    \
+     std::fs::write(format!(\"{out}/nat.c\"), \"int nat_answer(void) { return 42; }\\n\").unwrap();\n    \
+     let built = Command::new(\"cc\")\n        .args([\"-shared\", \"-fPIC\", \"-g0\", \"-o\"])\n        \
+     .arg(format!(\"{out}/libnat.so\"))\n        .arg(format!(\"{out}/nat.c\"))\n        \
+     .status()\n        .unwrap();\n    assert!(built.success());\n    \
+     println!(\"cargo::rerun-if-changed=build.rs\");\n    \
+     println!(\"cargo::rustc-link-search=native={out}\");\n    \
+     println!(\"cargo::rustc-link-lib=dylib=nat\");\n    \
+     println!(\"cargo::rustc-link-arg=-Wl,-rpath,{out}\");\n}\n";
+
+/// `natbin` loads a library its build script built in `OUT_DIR`, through an
+/// rpath that the linker baked into the binary.
+#[cfg(target_os = "linux")]
+fn add_rpath_binary(repo: &TestRepo) {
+    add_member(
+        repo,
+        "natbin",
+        "",
+        &[
+            ("build.rs", NAT_BUILD),
+            (
+                "src/main.rs",
+                "extern \"C\" {\n    fn nat_answer() -> i32;\n}\n\n\
+                 fn main() {\n    println!(\"answer={}\", unsafe { nat_answer() });\n}\n",
+            ),
+        ],
+    );
+}
+
+#[cfg(target_os = "linux")]
+fn natbin_answer(repo: &TestRepo, target: &Path) -> String {
+    field(&run_exe(repo, &target.join("debug/natbin"), &[]), "answer")
+}
+
+/// I19 (I13 with an rpath): the seeded refresh relinks a binary whose rpath
+/// leads into the seed's `OUT_DIR`, so it still starts after gc collects the
+/// seed.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_seeded_base_relinks_binaries_with_an_rpath_into_the_seed() {
+    let repo = sandbox_off();
+    add_rpath_binary(&repo);
+    let first = commit_and_base(&repo, "a binary with an rpath");
+    edit(&repo, "side/src/lib.rs", |lib| {
+        format!("{lib}\npub fn more() {{}}\n")
+    });
+    repo.commit_all("touch side");
+    let refresh = repo.ferry_json(["base"]);
+    assert_eq!(refresh["base"]["seeded_from"], first.as_str(), "{refresh}");
+    let second = str_of(&refresh["base"]["id"]).to_owned();
+    let gc = repo.ferry_json(["gc"]);
+    assert_eq!(gc["removed"], serde_json::json!([first]), "{gc}");
+
+    assert_eq!(
+        natbin_answer(&repo, &repo.base_dir(&second).join("target")),
+        "42"
+    );
+    repo.spawn("a");
+    repo.build("a").assert_rebuilt(&[]);
+    assert_eq!(natbin_answer(&repo, &repo.agent_target("a")), "42");
+}
+
+/// I20 (I14 with an rpath): a binary linked in the namespace sandbox loads
+/// from the canonical target, an empty mountpoint on the host, so an agent
+/// without the sandbox relinks it.
+#[cfg(target_os = "linux")]
+#[test]
+fn an_agent_without_the_sandbox_relinks_binaries_with_an_rpath_into_the_canonical_target() {
+    let repo = TestRepo::with_env(&[("FERRY_SANDBOX", "namespace")]);
+    if !repo.require_userns() {
+        return;
+    }
+    add_rpath_binary(&repo);
+    commit_and_base(&repo, "a binary with an rpath");
+    let spawned = common::run(
+        repo.ferry_cmd(["--json", "spawn", "a"])
+            .env("FERRY_SANDBOX", "off"),
+    )
+    .ok()
+    .json();
+    assert_eq!(spawned["agent"]["isolation"], "none", "{spawned}");
+
+    repo.build("a").assert_rebuilt(&["natbin"]);
+    assert_eq!(natbin_answer(&repo, &repo.agent_target("a")), "42");
+    repo.build("a").assert_rebuilt(&[]);
+}

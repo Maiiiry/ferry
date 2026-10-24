@@ -297,9 +297,9 @@ something recorded in the target shows an old path, and removes the rest.
 | Rule | Reads | Flags a unit when |
 |---|---|---|
 | R1 | its `dep-*` and fingerprint JSON | they name any old path (a workspace file outside the package on Cargo <= 1.100, an absolute `rerun-if-changed`, the base checkout's git dir) |
-| R2 | rustc's dep-info | an `env!` value names a checkout path, or a workspace member has an absolute input in one |
+| R2 | rustc's dep-info | an `env!` value or an absolute input names a checkout path (a vendored crate, or a path package outside the workspace root, rebuilds anyway, because Cargo hashes its absolute source path) |
 | R3 | `env!` values in rustc's dep-info | one names a target path that is not exempt (`CARGO_BIN_EXE_*`, `CARGO_TARGET_TMPDIR`, a profile dir) |
-| R4 | a build script's directives | they name an old path other than its own `OUT_DIR`, which Cargo rewrites when it replays them |
+| R4 | a build script's directives | they name an old path other than its own `OUT_DIR` spelled as in `root-output`, the string Cargo rewrites when it replays them; or a link argument (an rpath) names a dead `OUT_DIR`, which the linker already baked into the package's binaries |
 | R5 | every file and symlink in an `OUT_DIR` | one names an old path that is not exempt, or cannot be read |
 | R6 | generated files outside `OUT_DIR`s that a compile included | one names an old path that is not exempt |
 | R7 | proc-macro libraries, local macros' sources | it can invoke a proc macro that may read a path from the environment |
@@ -317,9 +317,9 @@ run it depends on: the base's bytes there equal the fork's until that run
 reruns, and then the unit rebuilds in the same build. Every other target path
 is *dead*: a namespace base's `mnt/target` (an empty mountpoint on the host),
 and the target of a seed, which gc may collect. A dead path is exempt only in
-a script's own directives, which Cargo rewrites, and where a registry crate
-includes from its own `OUT_DIR` at compile time (serde's
-`include!(concat!(env!("OUT_DIR"), ...))`).
+a script's own directives other than link arguments, where Cargo rewrites the
+exact `root-output` string, and where a registry crate includes from its own
+`OUT_DIR` at compile time (serde's `include!(concat!(env!("OUT_DIR"), ...))`).
 
 A removed compile unit loses its fingerprint dir, so its dependents go stale
 in the same build. Every build-script run that depends on a removed unit (a
@@ -334,7 +334,9 @@ costs a cold build, never a wrong one; a store path without a plain suffix of
 
 `ferry base` computes the plan of a base built without the namespace before
 writing `base.json` and stores it as `relocation.json`, so a spawn only
-deletes what it lists. For a namespace base, spawn computes the plan on the
+deletes what it lists (it recomputes the plan after a Ferry upgrade). Files
+are scanned a megabyte at a time, so a library of gigabytes in an `OUT_DIR`
+costs time, not memory. For a namespace base, spawn computes the plan on the
 base's target, with every target path dead. A seeded refresh without the
 namespace applies a dead plan to its clone of the seed's target before the
 warm build, so the new base never depends on the seed's.
@@ -354,6 +356,9 @@ dynamic variable names. What the plan cannot see:
   run time, without naming a listed variable;
 - behaviour that depends on location without recording a path: existence
   checks, or reads through `../..` out of the worktree;
+- paths that a program derives at run time from an exempt live `OUT_DIR`
+  with `..`, such as `Path::new(env!("OUT_DIR")).join("../../../helper")`,
+  which leads to the base's binary instead of the agent's;
 - path variables outside the list read by proc macros, such as `[env]`
   entries with `relative = true`;
 - a registry crate that includes from a dead `OUT_DIR` and also reads it at

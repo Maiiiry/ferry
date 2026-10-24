@@ -9,10 +9,12 @@
 //!
 //! - R1: Cargo's own records (`dep-*`, the fingerprint JSON) name one.
 //! - R2: rustc's dep-info names a checkout path, as an `env!` value or as an
-//!   absolute input of a workspace member.
+//!   absolute input.
 //! - R3: an `env!` value names a target path that is not exempt (below).
-//! - R4: a build script's directives name one, other than its own `OUT_DIR`,
-//!   which Cargo rewrites whenever it replays them.
+//! - R4: a build script's directives name one, other than its own `OUT_DIR`
+//!   as Cargo recorded it, which Cargo rewrites whenever it replays them. A
+//!   dead (below) `OUT_DIR` may not stay in a link argument even so: the
+//!   linker baked it into the package's binaries already.
 //! - R5: a file or symlink in a build script's `OUT_DIR` names one.
 //! - R6: a generated file outside every `OUT_DIR` that a compile included
 //!   names one.
@@ -41,7 +43,7 @@
 use std::collections::{BTreeSet, HashMap};
 use std::ffi::{OsStr, OsString};
 use std::fs;
-use std::io;
+use std::io::{self, Read};
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::path::{Path, PathBuf};
 
@@ -109,6 +111,9 @@ pub struct Removal {
 pub struct RelocationPlan {
     /// [`RELOCATION_RULES`] when the plan was made.
     pub rules: u32,
+    /// The Ferry version that made the plan. Bases survive an upgrade, which
+    /// may change a rule without bumping [`RELOCATION_RULES`].
+    pub ferry: String,
     /// The [`Origin::live`] the plan was made for.
     pub live: Option<String>,
     /// Empty the target instead: an old root has nothing to search for.
@@ -128,7 +133,9 @@ impl RelocationPlan {
     /// Whether a stored plan is the one these rules make for forks of the
     /// live base `live`.
     pub fn fits(&self, live: &str) -> bool {
-        self.rules == RELOCATION_RULES && self.live.as_deref() == Some(live)
+        self.rules == RELOCATION_RULES
+            && self.ferry == env!("CARGO_PKG_VERSION")
+            && self.live.as_deref() == Some(live)
     }
 }
 
@@ -168,6 +175,7 @@ impl RelocationReport {
 pub fn plan_relocation(target: &Path, origin: &Origin) -> Result<RelocationPlan> {
     let mut plan = RelocationPlan {
         rules: RELOCATION_RULES,
+        ferry: env!("CARGO_PKG_VERSION").to_owned(),
         live: origin.live.clone(),
         clear: false,
         remove: Vec::new(),
@@ -423,14 +431,17 @@ impl Needles {
         Class::Dead
     }
 
-    /// `x` from its first old root on, which is what any spelling of `x`
-    /// with the same root shares.
-    fn tail<'x>(&self, x: &'x [u8]) -> Option<&'x [u8]> {
-        self.finders
-            .iter()
-            .filter_map(|(finder, _)| finder.find(x))
-            .min()
-            .map(|at| &x[at..])
+    /// Adds the live target paths in `hay` to `live`; whether `hay` names
+    /// any other old path.
+    fn other_than_live(&self, hay: &[u8], live: &mut Vec<Vec<u8>>) -> bool {
+        let mut other = false;
+        for (_, class) in self.hits(hay) {
+            match class {
+                Class::Target { live: true, rel } => live.push(rel.to_vec()),
+                _ => other = true,
+            }
+        }
+        other
     }
 }
 
@@ -450,12 +461,33 @@ fn plain_suffix(path: &[u8]) -> &[u8] {
     }
 }
 
-/// Whether the occurrence at `at` in `hay` is `tail` or a path below it.
-fn under_tail(hay: &[u8], at: usize, tail: &[u8]) -> bool {
-    hay[at..]
-        .strip_prefix(tail)
-        .is_some_and(|rest| at_end(rest) && !climbs(plain_prefix(rest)))
+/// E1: whether the occurrence at `at` in `line` lies in a copy of
+/// `root_output` that names that directory or a path below it. Cargo
+/// replaces exactly that string when it replays the run
+/// (`BuildOutput::parse`), so another spelling of the same directory keeps
+/// its old path.
+fn in_root_output(line: &[u8], at: usize, root_output: &[u8]) -> bool {
+    memmem::find_iter(line, root_output).any(|start| {
+        let end = start + root_output.len();
+        let rest = &line[end..];
+        (start..end).contains(&at) && at_end(rest) && !climbs(plain_prefix(rest))
+    })
 }
+
+/// Build-script directives whose values the linker bakes into the package's
+/// binaries (an rpath), where Cargo's rewrite of a replayed run's `OUT_DIR`
+/// never reaches. Search paths (`rustc-link-search`, `rustc-flags`) only
+/// reach rustc, after the rewrite.
+const LINK_ARGS: &[&str] = &[
+    "rustc-link-arg",
+    "rustc-link-arg-bins",
+    "rustc-link-arg-bin",
+    "rustc-link-arg-tests",
+    "rustc-link-arg-examples",
+    "rustc-link-arg-benches",
+    "rustc-link-arg-cdylib",
+    "rustc-cdylib-link-arg",
+];
 
 /// What rustc's dep-info file records for a compile.
 #[derive(Debug, Default)]
@@ -818,8 +850,12 @@ impl Inventory {
     fn new_layout(&mut self, target: &Path, profile: &Path, build: &[OsString]) {
         let dir = target.join(profile);
         for pkg in build {
-            for hash in names(&dir.join("build").join(pkg), true) {
-                if !is_unit_hash(hash.as_bytes()) {
+            let Ok(hashes) = entries(&dir.join("build").join(pkg)) else {
+                self.unchecked(vec![profile.join("build").join(pkg)]);
+                continue;
+            };
+            for (hash, kind) in hashes {
+                if !kind.is_dir() || !is_unit_hash(hash.as_bytes()) {
                     continue;
                 }
                 let unit_dir = profile.join("build").join(pkg).join(&hash);
@@ -1042,6 +1078,35 @@ fn names(dir: &Path, dirs: bool) -> Vec<OsString> {
         .collect()
 }
 
+/// How much of a file a scan reads at a time.
+const CHUNK: usize = 1 << 20;
+
+/// Calls `scan` with consecutive pieces of the file at `path`, so that a
+/// library of gigabytes in an `OUT_DIR` costs no more memory than a small
+/// one. A piece ends after a byte that is not plain, or at the end of the
+/// file, so no needle or literal, nor the plain path after a needle, is ever
+/// split. Fails on a run of plain bytes longer than `CHUNK`, which no path
+/// is.
+fn scan_file(path: &Path, mut scan: impl FnMut(&[u8])) -> io::Result<()> {
+    let mut file = fs::File::open(path)?;
+    let mut buf = Vec::new();
+    loop {
+        if (&mut file).take(CHUNK as u64).read_to_end(&mut buf)? == 0 {
+            scan(&buf);
+            return Ok(());
+        }
+        let end = buf.iter().rposition(|&b| !plain(b)).map_or(0, |i| i + 1);
+        if buf.len() - end > CHUNK {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "a run of path bytes longer than any path",
+            ));
+        }
+        scan(&buf[..end]);
+        buf.drain(..end);
+    }
+}
+
 /// Literal names of path variables in a proc macro's library. Class M
 /// variables hold the same value for a registry unit in the base and an
 /// agent; class X variables differ for every unit (Ferry sets the first
@@ -1121,7 +1186,6 @@ struct Planner<'a> {
     deps: Vec<Vec<usize>>,
     rdeps: Vec<Vec<usize>>,
     flags: Vec<Option<Capture>>,
-    member: Vec<bool>,
     local: Vec<bool>,
     /// For each unit, the runs it depends on (itself included, for a run),
     /// once needed.
@@ -1164,23 +1228,16 @@ impl<'a> Planner<'a> {
                 }
             }
         }
-        let member: Vec<bool> = units
-            .iter()
-            .map(|u| {
-                u.dep_info()
-                    .is_some_and(|info| info.inputs.iter().any(|i| !i.starts_with(b"/")))
-            })
-            .collect();
+        // A workspace member (Cargo passes relative inputs only for packages
+        // under the workspace root), or a package in the checkout.
         let local = units
             .iter()
-            .zip(&member)
-            .map(|(u, &member)| {
-                member
-                    || u.dep_info().is_some_and(|info| {
-                        info.inputs
-                            .iter()
-                            .any(|i| needles.hits(i).any(|(_, c)| c == Class::Src))
+            .map(|u| {
+                u.dep_info().is_some_and(|info| {
+                    info.inputs.iter().any(|i| {
+                        !i.starts_with(b"/") || needles.hits(i).any(|(_, c)| c == Class::Src)
                     })
+                })
             })
             .collect();
         Self {
@@ -1191,7 +1248,6 @@ impl<'a> Planner<'a> {
             deps,
             rdeps,
             flags,
-            member,
             local,
             reached: vec![None; n],
         }
@@ -1252,11 +1308,14 @@ impl<'a> Planner<'a> {
                 }
             }
         }
-        if self.member[i]
-            && info
-                .inputs
-                .iter()
-                .any(|input| self.needles.hits(input).any(|(_, c)| c == Class::Src))
+        // A member's inputs are relative. Cargo hashes the absolute source
+        // path of every other package (`path_args`), so a vendored crate or
+        // a path package outside the workspace root rebuilds at the agent's
+        // checkout anyway; flagging it also removes the runs above it.
+        if info
+            .inputs
+            .iter()
+            .any(|input| self.needles.hits(input).any(|(_, c)| c == Class::Src))
         {
             why = why.or(Some(Capture::SourcePath));
         }
@@ -1287,18 +1346,16 @@ impl<'a> Planner<'a> {
                 }
             }
         }
+        let needles = self.needles;
         for rel in files {
             let path = self.target.join(os(&rel));
-            let Ok(contents) = fs::read(&path) else {
+            let mut live = Vec::new();
+            let scanned = scan_file(&path, |piece| {
+                flagged |= needles.other_than_live(piece, &mut live);
+            });
+            if scanned.is_err() {
                 flagged = true;
                 break;
-            };
-            let mut live = Vec::new();
-            for (_, class) in self.needles.hits(&contents) {
-                match class {
-                    Class::Target { live: true, rel } => live.push(rel.to_vec()),
-                    _ => flagged = true,
-                }
             }
             if live.iter().any(|rel| !self.in_reached_out_dir(i, rel)) {
                 flagged = true;
@@ -1321,10 +1378,7 @@ impl<'a> Planner<'a> {
             self.flag(i, Capture::CannotCheck);
             return;
         };
-        let tail = run
-            .root_output
-            .as_deref()
-            .and_then(|r| self.needles.tail(r));
+        let root_output = run.root_output.as_deref();
         let mut flagged = false;
         let mut live = Vec::new();
         for line in stdout.split(|&b| b == b'\n') {
@@ -1342,11 +1396,15 @@ impl<'a> Planner<'a> {
             if matches!(key, "warning" | "error") {
                 continue;
             }
+            let linked = LINK_ARGS.contains(&key);
             let line = text.as_bytes();
             for (at, class) in self.needles.hits(line) {
                 match class {
                     Class::Src => flagged = true,
-                    _ if tail.is_some_and(|t| under_tail(line, at, t)) => {}
+                    // The rewrite never reaches what the linker baked into
+                    // the package's binaries.
+                    Class::Target { live: false, .. } | Class::Dead if linked => flagged = true,
+                    _ if root_output.is_some_and(|r| in_root_output(line, at, r)) => {}
                     Class::Target { live: true, rel } => live.push(rel.to_vec()),
                     Class::Target { .. } | Class::Dead => flagged = true,
                 }
@@ -1362,6 +1420,7 @@ impl<'a> Planner<'a> {
         let Some(run) = self.units[i].run_files() else {
             return;
         };
+        let needles = self.needles;
         let mut live = Vec::new();
         let mut flagged = false;
         let mut stack = vec![run.out_dir.clone()];
@@ -1377,33 +1436,31 @@ impl<'a> Planner<'a> {
                     stack.push(rel.join(&name));
                     continue;
                 }
-                let contents = if kind.is_file() {
-                    fs::read(&path).ok()
+                let checked = if kind.is_file() {
+                    scan_file(&path, |piece| {
+                        flagged |= needles.other_than_live(piece, &mut live);
+                    })
+                    .is_ok()
                 } else if kind.is_symlink() {
-                    fs::read_link(&path).ok().and_then(|link| {
+                    fs::read_link(&path).is_ok_and(|link| {
                         let link = link.into_os_string().into_vec();
                         if link.starts_with(b"/") {
-                            return Some(link);
+                            flagged |= needles.other_than_live(&link, &mut live);
+                            return true;
                         }
                         let mut resolved = rel.as_os_str().as_bytes().to_vec();
                         resolved.push(b'/');
                         resolved.extend_from_slice(&link);
                         // A relative link may lead anywhere in the target,
                         // but no further.
-                        normalize(&resolved).map(|_| Vec::new())
+                        normalize(&resolved).is_some()
                     })
                 } else {
-                    None
+                    false
                 };
-                let Some(contents) = contents else {
-                    flagged = true;
+                flagged |= !checked;
+                if flagged {
                     break;
-                };
-                for (_, class) in self.needles.hits(&contents) {
-                    match class {
-                        Class::Target { live: true, rel } => live.push(rel.to_vec()),
-                        _ => flagged = true,
-                    }
                 }
             }
             if flagged {
@@ -1437,17 +1494,15 @@ impl<'a> Planner<'a> {
             }
             let mut lib = SharedLib::default();
             for path in shared {
-                match fs::read(path) {
-                    Ok(bytes) => {
-                        lib.proc_macro |= memmem::find(&bytes, PROC_MACRO_DECLS).is_some();
-                        for literal in literals_in(&bytes) {
-                            if !lib.literals.contains(&literal) {
-                                lib.literals.push(literal);
-                            }
+                let scanned = scan_file(path, |piece| {
+                    lib.proc_macro |= memmem::find(piece, PROC_MACRO_DECLS).is_some();
+                    for literal in literals_in(piece) {
+                        if !lib.literals.contains(&literal) {
+                            lib.literals.push(literal);
                         }
                     }
-                    Err(_) => lib.unreadable = true,
-                }
+                });
+                lib.unreadable |= scanned.is_err();
             }
             libs.push(Some(lib));
         }
