@@ -172,3 +172,31 @@ fn bisect_does_not_trigger_builds() {
     std::thread::sleep(Duration::from_millis(1000));
     assert_eq!(watcher.events("building").len(), 1);
 }
+
+#[test]
+fn a_revision_that_does_not_resolve_is_refused_at_startup() {
+    let repo = TestRepo::new();
+    let mut child = repo
+        .ferry_cmd(["base", "--watch", "--rev", "nosuch"])
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let exited = common::eventually_for(Duration::from_secs(30), || {
+        child.try_wait().unwrap().is_some()
+    });
+    if !exited {
+        let _ = child.kill();
+    }
+    let output = child.wait_with_output().unwrap();
+    assert!(
+        exited,
+        "the watcher kept polling a revision that does not exist"
+    );
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("`nosuch` does not name a commit"),
+        "{stderr}"
+    );
+}

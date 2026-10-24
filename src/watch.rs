@@ -57,6 +57,9 @@ pub fn watch(
     opts: &WatchOptions,
     on_event: &mut dyn FnMut(&Event),
 ) -> Result<std::convert::Infallible> {
+    // Later polls ignore a revision that does not resolve (a branch being
+    // recreated, say); a typo would never build anything.
+    ctx.repo.resolve_commit(&opts.rev)?;
     let lock_path = ctx.store.watch_lock();
     let Some(_lock) = FileLock::try_exclusive(&lock_path)? else {
         let pids = crate::sandbox::lock_holders(&lock_path);

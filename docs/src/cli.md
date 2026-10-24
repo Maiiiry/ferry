@@ -125,8 +125,9 @@ deleted from the seed's units, or `null`).
 Runs in the foreground until interrupted (run it in a terminal tab, a
 systemd or launchd user service, or a devcontainer's `postStartCommand`), so
 the current base follows `--rev` (default `HEAD`; `--rev origin/main` follows
-fetches). It polls the revision, and once a new commit has been seen on two
-polls in a row it runs `ferry base --rev <commit>` in a child process. Polls
+fetches; a revision that names no commit at startup is refused). It polls
+the revision, and once a new commit has been seen on two polls in a row it
+runs `ferry base --rev <commit>` in a child process. Polls
 are skipped while a rebase, merge, cherry-pick, revert or bisect is in
 progress. A build for a commit that fails keeps the previous base current and
 is not retried until the revision moves again; a build is never cut short

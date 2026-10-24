@@ -392,9 +392,9 @@ fn parse_interval(value: &str) -> Result<std::time::Duration, String> {
     value
         .parse::<f64>()
         .ok()
-        .filter(|secs| secs.is_finite() && *secs > 0.0)
-        .map(std::time::Duration::from_secs_f64)
-        .ok_or_else(|| format!("`{value}` is not a positive number of seconds"))
+        .and_then(|secs| std::time::Duration::try_from_secs_f64(secs).ok())
+        .filter(|interval| !interval.is_zero())
+        .ok_or_else(|| format!("`{value}` is not a positive number of seconds, at most 1e19"))
 }
 
 /// The human summary of a `ferry base`.
@@ -764,6 +764,9 @@ mod tests {
         assert!(parse(&["--interval", "1"]).is_err());
         assert!(parse(&["--gc"]).is_err());
         assert!(parse(&["--watch", "--interval", "0"]).is_err());
+        // Too long for a `Duration`, and too short to be anything but zero.
+        assert!(parse(&["--watch", "--interval", "1e20"]).is_err());
+        assert!(parse(&["--watch", "--interval", "1e-300"]).is_err());
         assert!(parse(&["--cold"]).is_ok());
     }
 

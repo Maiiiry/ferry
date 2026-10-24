@@ -202,10 +202,11 @@ needs one writable-root entry for it plus the worktree (its working directory).
 
 ### `ferry base --watch [--rev R] [--interval S] [--gc]`
 
-A foreground poller. It takes `<store>/watch.lock` (a second watcher is
-refused, naming the holder), then every `S` seconds (default 2) resolves `R`
-with one `git rev-parse`, skipping polls while the watcher's worktree is in
-a rebase, merge, cherry-pick, revert or bisect. A commit seen on two polls
+A foreground poller. It refuses an `R` that names no commit, takes
+`<store>/watch.lock` (a second watcher is refused, naming the holder), then
+every `S` seconds (default 2) resolves `R` with one `git rev-parse`,
+skipping polls while the watcher's worktree is in a rebase, merge,
+cherry-pick, revert or bisect. A commit seen on two polls
 in a row that is neither the current base's commit at startup nor the last
 one built or failed is built by a child `ferry --json base --rev <commit>`
 (building enters the sandbox for the rest of the process, and the child
