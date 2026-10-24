@@ -1,0 +1,16 @@
+# Ferry settings for Codex. Merge into ~/.codex/config.toml.
+#
+# Codex's workspace-write sandbox lets commands write to the working directory
+# (the agent's worktree) and temp dirs. cargo running through Ferry also writes
+# to the agent's fork and to Ferry's canonical mount points, which live in
+# Ferry's store, so the store's parent directory must be a writable root.
+#
+# Find the path with:  dirname "$(ferry shim)"   (run inside the repository)
+# Default: $XDG_CACHE_HOME/ferry, or ~/.cache/ferry on Linux,
+#          ~/Library/Caches/ferry on macOS, or $FERRY_HOME when it is set.
+# Use the absolute path; replace /home/you with your home directory.
+
+sandbox_mode = "workspace-write"
+
+[sandbox_workspace_write]
+writable_roots = ["/home/you/.cache/ferry"]
