@@ -48,6 +48,9 @@ cargo install ferry-rs --locked
 
 # Prebuilt binary for Linux or macOS
 curl --proto '=https' --tlsv1.2 -LsSf https://github.com/patwrall/ferry/releases/latest/download/ferry-rs-installer.sh | sh
+
+# Homebrew
+brew install patwrall/tap/ferry
 ```
 
 Or build from source: `git clone https://github.com/patwrall/ferry && cargo install --path ferry --locked`.
