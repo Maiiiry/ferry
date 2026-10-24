@@ -14,9 +14,8 @@ Linux (btrfs), with paths shortened.
   and `rustc` your repository selects, including `rust-toolchain.toml`.
 - For incremental reuse on an agent's first edit: Linux with unprivileged user
   namespaces. `ferry doctor` tells you whether you have them. Without them Ferry
-  still works, reusing dependencies but rebuilding the workspace's own crates
-  once per agent (see
-  [Platform support](platforms.md)).
+  still works, reusing unchanged crates but recompiling an edited one from
+  scratch (see [Platform support](platforms.md)).
 
 ## Install
 

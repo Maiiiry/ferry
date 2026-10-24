@@ -161,17 +161,17 @@ Ferry is not a security sandbox: agents run with your user's full privileges
 | Platform | Fork | Builds run | First edit after spawn |
 |---|---|---|---|
 | Linux with unprivileged user namespaces | overlay, reflink or copy | in a namespace sandbox at canonical paths | incremental reuse |
-| Ubuntu 24.04 and later | as above, once the AppArmor profile from `ferry doctor --apparmor-profile` is loaded for a root-owned `ferry` binary | as above; without the profile, at host paths | incremental reuse with the profile; dependency reuse without |
-| Containers (Docker's default seccomp blocks namespaces) | reflink or copy | at host paths | dependency reuse |
-| macOS | `clonefile` (APFS) or copy | at host paths: no canonical path | dependency reuse; incremental state is lost on the first edit. The experimental remap-paths mode reused 12 of 13 library codegen units after a fork on Linux, against 0 of 13 without; unverified on a real Mac |
+| Ubuntu 24.04 and later | as above, once the AppArmor profile from `ferry doctor --apparmor-profile` is loaded for a root-owned `ferry` binary | as above; without the profile, at host paths | incremental reuse with the profile; crate-level reuse without |
+| Containers (Docker's default seccomp blocks namespaces) | reflink or copy | at host paths | crate-level reuse |
+| macOS | `clonefile` (APFS) or copy | at host paths: no canonical path | crate-level reuse; incremental state is lost on the first edit. The experimental remap-paths mode reused 12 of 13 library codegen units after a fork on Linux, against 0 of 13 without; unverified on a real Mac |
 | Windows | unsupported | | Ferry does not compile there (compile-time error) |
 
 Incremental reuse means nothing unchanged is rebuilt and an edited crate
-recompiles only what changed. Dependency reuse means registry and git
-dependencies are not rebuilt, but the workspace's own crates rebuild once
-after spawn: without the namespace sandbox any of them may have captured the
-base's absolute paths where Cargo cannot see it (a build script or proc macro
-reading `CARGO_MANIFEST_DIR`). `ferry doctor` tells you which row you are in.
+recompiles only what changed. Crate-level reuse means unchanged crates are not
+rebuilt either, except the few that captured the base's absolute paths where
+Cargo never checks them again (a build script or proc macro reading
+`CARGO_MANIFEST_DIR`), which rebuild once after spawn; an edited crate
+recompiles from scratch. `ferry doctor` tells you which row you are in.
 [Platform support](https://patwrall.github.io/ferry/platforms.html).
 
 ## Comparison
@@ -219,8 +219,9 @@ more than the absolute times.
 
 - **The incremental win needs Linux user namespaces.** Where they are blocked
   (Ubuntu 24.04+ without the AppArmor profile, Docker's default seccomp
-  profile, hardened systems), agents reuse only dependencies: the workspace's
-  own crates rebuild once after spawn.
+  profile, hardened systems), agents reuse unchanged crates but recompile an
+  edited crate from scratch, and the few crates that captured the base's
+  absolute paths rebuild once after spawn.
 - **Overlay copy-up costs disk.** An agent's first write to a file copies it
   into the agent's upper layer; relinked binaries and incremental session
   files make up most of it. On ext4 that is a full copy; on btrfs and XFS the

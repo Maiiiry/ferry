@@ -102,15 +102,18 @@ process in the namespace exits. On the host, `<store>/mnt/src` and
 
 Without namespaces (macOS, or Linux where they are blocked or `sandbox = "off"`),
 agents build at their own paths. A crate can capture the base's absolute
-paths in ways Cargo never sees: a build script that writes its
-`CARGO_MANIFEST_DIR` into generated code, or a proc macro that reads it from
-the environment (the `rust-embed` and `include_dir` pattern). Reusing such a
-crate would make the agent read the base's files. So the agent's first build
-recompiles every crate of the workspace and its path dependencies, while
-registry and git dependencies stay reused. The first edit also loses rustc's
-incremental state. The experimental [remap-paths mode](remap-paths.md)
-recovers most of the incremental reuse, which also makes those recompiles
-cheaper.
+paths in ways Cargo never checks again: a build script that writes its
+`CARGO_MANIFEST_DIR` into generated code, a proc macro that reads it from
+the environment (the `rust-embed` pattern), a test that bakes in the path of
+the binary it runs. Reusing such a crate would make the agent read the base's
+files. So spawn looks for those captures in what Cargo and rustc recorded in
+the target dir (dep-info, build-script output and `OUT_DIR`s, proc-macro
+libraries) and makes only the crates that have one rebuild, with the build
+scripts that would rerun because of them; every other crate, the workspace's
+included, stays reused. The first edit still loses rustc's incremental state.
+The experimental [remap-paths mode](remap-paths.md) recovers most of it. The
+rules, and what they cannot see, are in the
+[architecture](architecture.md#sandbox-linux) chapter.
 
 ## Routing cargo: `ferry run` and the shim
 

@@ -16,8 +16,8 @@ incremental cache is tied to absolute paths in two ways:
 
 So the first edit of a crate in a new agent recompiles it from scratch. Cargo
 itself is fine with the move (it hashes workspace paths relatively); Ferry
-still rebuilds the workspace's own crates once after spawn, because code can
-capture absolute paths where Cargo cannot see it (see
+still rebuilds the crates that captured the base's absolute paths once after
+spawn, because Cargo never checks those again (see
 [How it works](how-it-works.md#canonical-paths-keeping-incremental-state)).
 
 ## What it does
