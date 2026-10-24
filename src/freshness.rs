@@ -91,8 +91,6 @@ pub enum SkipReason {
     ContentDiffers,
     /// The file is missing from the agent or the base working tree.
     Missing,
-    /// The file changed between verification and stamping.
-    ChangedDuringStamp,
 }
 
 /// Files and directories proven identical to the base, ready to stamp.

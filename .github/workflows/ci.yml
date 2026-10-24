@@ -88,6 +88,10 @@ jobs:
       # rust-toolchain and rust-cache export CARGO_INCREMENTAL=0 through
       # GITHUB_ENV, which would switch off the incremental reuse the tests check.
       - name: cargo test
+        env:
+          # Fail instead of skipping tests when a capability these runners
+          # have goes undetected.
+          FERRY_TEST_REQUIRE: ${{ runner.os == 'Linux' && 'userns,overlay' || 'reflink' }}
         run: |
           unset CARGO_INCREMENTAL
           cargo test --locked
