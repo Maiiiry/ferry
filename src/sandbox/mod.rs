@@ -107,6 +107,10 @@ pub struct Plan {
     /// concurrent runs join one mount instead of mounting the same upper dir
     /// twice (which overlayfs does not support).
     pub ns_record: Option<PathBuf>,
+    /// Experimental remap mode (no namespace): the `ferry-rustc` wrapper
+    /// path. Builds then reach the target dir through
+    /// `<src>/.ferry-target`; see `remap`.
+    pub remap_wrapper: Option<PathBuf>,
 }
 
 impl Plan {
@@ -119,12 +123,15 @@ impl Plan {
     }
 
     /// The target dir builds see (`CARGO_TARGET_DIR`).
-    pub fn build_target(&self) -> &Path {
+    pub fn build_target(&self) -> PathBuf {
         match (&self.isolation, &self.target) {
-            (Isolation::Namespace, _) => &self.canonical_target,
-            (Isolation::None, TargetSpec::Dir(dir)) => dir,
+            (Isolation::Namespace, _) => self.canonical_target.clone(),
+            (Isolation::None, _) if self.remap_wrapper.is_some() => {
+                self.src.join(crate::remap::TARGET_LINK)
+            }
+            (Isolation::None, TargetSpec::Dir(dir)) => dir.clone(),
             // Unreachable by construction: overlay targets require a namespace.
-            (Isolation::None, TargetSpec::Overlay { upper, .. }) => upper,
+            (Isolation::None, TargetSpec::Overlay { upper, .. }) => upper.clone(),
         }
     }
 

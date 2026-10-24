@@ -157,9 +157,10 @@ pub struct Choice {
 /// Chooses a backend. An explicit preference that cannot be honoured is an
 /// error, never a silent fallback.
 ///
-/// `auto` order: reflink when the store's filesystem supports it; overlay
-/// when the agent runs in a namespace sandbox and overlayfs works there;
-/// otherwise copy.
+/// `auto` order: overlay when the agent runs in a namespace sandbox and
+/// overlayfs works there (O(1) fork, and copy-up is itself a reflink when the
+/// store is on btrfs or XFS); otherwise reflink when the store's filesystem
+/// supports it; otherwise copy.
 pub fn select(
     pref: BackendPref,
     caps: &Capabilities,
@@ -180,7 +181,7 @@ pub fn select(
     } else {
         match &caps.overlay {
             Probe::Ok => Ok(format!(
-                "overlayfs over the base inside the agent's namespace ({fs} has no reflinks)"
+                "overlayfs over the base inside the agent's namespace (on {fs})"
             )),
             other => Err(format!("overlayfs unavailable ({})", probe_reason(other))),
         }
@@ -199,18 +200,18 @@ pub fn select(
             kind: BackendKind::Copy,
             reason: "requested by configuration".into(),
         }),
-        BackendPref::Auto => match (reflink, overlay) {
+        BackendPref::Auto => match (overlay, reflink) {
             (Ok(reason), _) => Ok(Choice {
-                kind: BackendKind::Reflink,
-                reason,
-            }),
-            (Err(_), Ok(reason)) => Ok(Choice {
                 kind: BackendKind::Overlay,
                 reason,
             }),
-            (Err(no_reflink), Err(no_overlay)) => Ok(Choice {
+            (Err(_), Ok(reason)) => Ok(Choice {
+                kind: BackendKind::Reflink,
+                reason,
+            }),
+            (Err(no_overlay), Err(no_reflink)) => Ok(Choice {
                 kind: BackendKind::Copy,
-                reason: format!("full copy: {no_reflink}; {no_overlay}"),
+                reason: format!("full copy: {no_overlay}; {no_reflink}"),
             }),
         },
     }
@@ -281,25 +282,21 @@ mod tests {
     }
 
     #[test]
-    fn auto_prefers_reflink_then_overlay_then_copy() {
+    fn auto_prefers_overlay_then_reflink_then_copy() {
         let ns = Isolation::Namespace;
-        assert_eq!(
-            select(BackendPref::Auto, &caps(true, true), ns)
+        let auto = |reflink, overlay, isolation| {
+            select(BackendPref::Auto, &caps(reflink, overlay), isolation)
                 .unwrap()
-                .kind,
-            BackendKind::Reflink
-        );
-        let expected = if cfg!(target_os = "linux") {
+                .kind
+        };
+        let overlay_if_linux = if cfg!(target_os = "linux") {
             BackendKind::Overlay
         } else {
-            BackendKind::Copy
+            BackendKind::Reflink
         };
-        assert_eq!(
-            select(BackendPref::Auto, &caps(false, true), ns)
-                .unwrap()
-                .kind,
-            expected
-        );
+        assert_eq!(auto(true, true, ns), overlay_if_linux);
+        assert_eq!(auto(true, true, Isolation::None), BackendKind::Reflink);
+        assert_eq!(auto(true, false, ns), BackendKind::Reflink);
         let copy = select(BackendPref::Auto, &caps(false, false), ns).unwrap();
         assert_eq!(copy.kind, BackendKind::Copy);
         assert!(copy.reason.contains("testfs"), "{}", copy.reason);

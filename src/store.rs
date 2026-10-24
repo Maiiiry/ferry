@@ -10,7 +10,7 @@
 //!     base.json  src/  target/
 //!   bases/<id>.lock             held while the base is being built
 //!   agents/<name>/
-//!     agent.json  lock  src/  target/ | upper/ work/  ns.json
+//!     agent.json  lock  target/ | upper/ work/ mount.lock ns.json
 //! ```
 
 use std::fmt;
@@ -54,7 +54,9 @@ pub struct AgentPaths {
     pub dir: PathBuf,
     pub meta: PathBuf,
     pub lock: PathBuf,
-    pub default_worktree: PathBuf,
+    /// Held (shared) by every process using the agent's overlay mount; see
+    /// `sandbox::linux`.
+    pub mount_lock: PathBuf,
     pub target: PathBuf,
     pub upper: PathBuf,
     pub work: PathBuf,
@@ -100,6 +102,14 @@ impl Store {
         &self.root
     }
 
+    /// The repository key this store is named after.
+    pub fn key(&self) -> &str {
+        self.root
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("repo")
+    }
+
     /// Where the agent worktree is bind-mounted inside a namespace sandbox.
     /// Every base and agent of this repository builds at this same path, which
     /// is what keeps rustc's incremental state (absolute paths) reusable.
@@ -131,7 +141,7 @@ impl Store {
         AgentPaths {
             meta: dir.join("agent.json"),
             lock: dir.join("lock"),
-            default_worktree: dir.join("src"),
+            mount_lock: dir.join("mount.lock"),
             target: dir.join("target"),
             upper: dir.join("upper"),
             work: dir.join("work"),
@@ -234,6 +244,23 @@ pub fn default_store_parent() -> Option<PathBuf> {
         .filter(|p| p.is_absolute())
         .or_else(|| home.map(|h| h.join(".cache")))
         .map(|c| c.join("ferry"))
+}
+
+/// Platform data directory for agent worktrees:
+/// `$XDG_DATA_HOME/ferry/worktrees` or `~/.local/share/ferry/worktrees` on
+/// Linux, `~/Library/Application Support/ferry/worktrees` on macOS.
+pub fn default_worktree_parent() -> Option<PathBuf> {
+    let home = std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .filter(|p| p.is_absolute());
+    if cfg!(target_os = "macos") {
+        return home.map(|h| h.join("Library/Application Support/ferry/worktrees"));
+    }
+    std::env::var_os("XDG_DATA_HOME")
+        .map(PathBuf::from)
+        .filter(|p| p.is_absolute())
+        .or_else(|| home.map(|h| h.join(".local/share")))
+        .map(|d| d.join("ferry/worktrees"))
 }
 
 /// A validated agent name. It becomes a directory name and part of a git

@@ -482,6 +482,9 @@ fn doctor_cmd(
     if apparmor_profile {
         let exe = std::env::current_exe().context("cannot locate the ferry binary")?;
         let exe = std::fs::canonicalize(&exe).unwrap_or(exe);
+        if let Some(problem) = doctor::apparmor_path_problem(&exe) {
+            output::warning(&problem);
+        }
         print!("{}", doctor::apparmor_profile(&exe));
         return Ok(ExitCode::SUCCESS);
     }

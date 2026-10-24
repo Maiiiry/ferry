@@ -42,6 +42,10 @@ pub struct BaseMeta {
     /// (build scripts writing outside `OUT_DIR`). Agents do not get these
     /// files, so they are reported as a warning.
     pub dirtied: Vec<String>,
+    /// Built through the experimental `ferry-rustc` path-remapping wrapper;
+    /// agents must use it too or rustc discards the incremental state.
+    #[serde(default)]
+    pub remap_paths: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -85,9 +89,18 @@ pub fn build(ctx: &Context, rev: &str) -> Result<BuildReport> {
     let host_toolchain = Toolchain::detect(&ctx.repo.main_worktree)?;
     let freshness = freshness::resolve_mode(ctx.settings.freshness, &host_toolchain)?;
     let isolation = resolve_isolation(ctx, &mut warnings)?;
+    let remap = isolation == Isolation::None && ctx.settings.remap_paths && {
+        match crate::remap::supported(&host_toolchain) {
+            Ok(()) => true,
+            Err(why) => {
+                warnings.push(format!("remap-paths disabled: {why}"));
+                false
+            }
+        }
+    };
     let id = BaseId::new(
         commit.as_str(),
-        fingerprint(ctx, &commit, &host_toolchain, freshness, isolation)?,
+        fingerprint(ctx, &commit, &host_toolchain, freshness, isolation, remap)?,
     );
     let paths = ctx.store.base(&id);
 
@@ -114,7 +127,13 @@ pub fn build(ctx: &Context, rev: &str) -> Result<BuildReport> {
     let toolchain = Toolchain::detect(&paths.src)?;
     fs::create_dir_all(&paths.target).at("create directory", &paths.target)?;
 
-    let plan = build_plan(ctx, &paths, isolation);
+    let remap_wrapper = if remap {
+        crate::remap::prepare(&paths.src, &paths.target)?;
+        Some(crate::remap::ensure_wrapper(ctx)?)
+    } else {
+        None
+    };
+    let plan = build_plan(ctx, &paths, isolation, remap_wrapper);
     let commands = ctx.settings.warm_commands.clone();
     if let Err(e) = run_warm_commands(&plan, freshness, &commands) {
         // The process may now be inside the sandbox, but host paths are
@@ -142,6 +161,7 @@ pub fn build(ctx: &Context, rev: &str) -> Result<BuildReport> {
         commands,
         ferry_version: env!("CARGO_PKG_VERSION").to_owned(),
         dirtied,
+        remap_paths: remap,
     };
     // Writing base.json is what makes the base ready (and immutable).
     fsutil::write_json_atomic(&paths.meta, &base)?;
@@ -302,6 +322,7 @@ fn fingerprint(
     toolchain: &Toolchain,
     freshness: FreshnessMode,
     isolation: Isolation,
+    remap: bool,
 ) -> Result<u64> {
     let mut input = Vec::new();
     input.extend_from_slice(toolchain.rustc_verbose.as_bytes());
@@ -320,11 +341,16 @@ fn fingerprint(
         input.extend_from_slice(cmd.as_bytes());
         input.push(0);
     }
-    input.extend_from_slice(format!("{freshness:?}/{isolation:?}").as_bytes());
+    input.extend_from_slice(format!("{freshness:?}/{isolation:?}/remap={remap}").as_bytes());
     Ok(fnv1a64(&input))
 }
 
-fn build_plan(ctx: &Context, paths: &BasePaths, isolation: Isolation) -> Plan {
+fn build_plan(
+    ctx: &Context,
+    paths: &BasePaths,
+    isolation: Isolation,
+    remap_wrapper: Option<std::path::PathBuf>,
+) -> Plan {
     Plan {
         isolation,
         src: paths.src.clone(),
@@ -332,6 +358,7 @@ fn build_plan(ctx: &Context, paths: &BasePaths, isolation: Isolation) -> Plan {
         canonical_src: ctx.store.canonical_src(),
         canonical_target: ctx.store.canonical_target(),
         ns_record: None,
+        remap_wrapper,
     }
 }
 

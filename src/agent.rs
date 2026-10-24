@@ -151,7 +151,13 @@ pub fn spawn(ctx: &Context, name: &AgentName, opts: SpawnOptions) -> Result<Spaw
         Some(p) => std::env::current_dir()
             .at("read", "current directory")?
             .join(p),
-        None => paths.default_worktree.clone(),
+        None => ctx
+            .settings
+            .worktree_parent
+            .as_ref()
+            .ok_or(Error::NoStoreDir)?
+            .join(ctx.store.key())
+            .join(name.as_str()),
     };
 
     let (base, mut meta, _agent_lock) = {
@@ -261,6 +267,9 @@ fn populate(
                 "{} unit(s) captured the base's absolute paths (e.g. env!(\"CARGO_MANIFEST_DIR\")) and will rebuild",
                 invalidated.len()
             ));
+        }
+        if base.remap_paths {
+            crate::remap::prepare(&meta.worktree, &paths.target)?;
         }
     }
 
@@ -493,6 +502,7 @@ pub fn plan(ctx: &Context, meta: &AgentMeta) -> Result<Plan> {
     let base_target = ctx.store.base(&meta.base).target;
     let fork_paths = fork_paths(&paths, &base_target);
     let target = fork::backend(meta.backend)?.target_spec(&fork_paths);
+    let remap = meta.isolation == Isolation::None && base::load(ctx, &meta.base)?.remap_paths;
     Ok(Plan {
         isolation: meta.isolation,
         src: meta.worktree.clone(),
@@ -500,6 +510,11 @@ pub fn plan(ctx: &Context, meta: &AgentMeta) -> Result<Plan> {
         canonical_src: ctx.store.canonical_src(),
         canonical_target: ctx.store.canonical_target(),
         ns_record: (meta.backend == BackendKind::Overlay).then(|| paths.ns_record.clone()),
+        remap_wrapper: if remap {
+            Some(crate::remap::ensure_wrapper(ctx)?)
+        } else {
+            None
+        },
     })
 }
 
@@ -517,6 +532,9 @@ pub fn cargo_env(plan: &Plan, freshness: FreshnessMode) -> Vec<(OsString, OsStri
             .iter()
             .map(|(k, v)| (OsString::from(k), OsString::from(v))),
     );
+    if let Some(wrapper) = &plan.remap_wrapper {
+        env.extend(crate::remap::cargo_env(wrapper));
+    }
     env
 }
 
@@ -610,7 +628,7 @@ pub fn env_report(ctx: &Context, meta: &AgentMeta) -> Result<EnvReport> {
         base: meta.base.clone(),
         backend: meta.backend,
         isolation: meta.isolation,
-        build_target_dir: plan.build_target().to_path_buf(),
+        build_target_dir: plan.build_target(),
         host_target_dir,
         shim_dir: shim::ensure(ctx)?,
         run_prefix: vec![

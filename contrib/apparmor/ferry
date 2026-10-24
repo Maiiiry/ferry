@@ -1,0 +1,43 @@
+# AppArmor profile: lets /usr/local/bin/ferry create unprivileged user namespaces.
+# The path must be root-owned and not writable by users.
+# Install: sudo cp this-file /etc/apparmor.d/ferry && sudo apparmor_parser -r /etc/apparmor.d/ferry
+abi <abi/4.0>,
+include <tunables/global>
+
+profile ferry /usr/local/bin/ferry flags=(attach_disconnected) {
+  allow capability,
+  allow file rwlkm /{**,},
+  allow network,
+  allow unix,
+  allow ptrace,
+  allow signal,
+  allow mqueue,
+  allow io_uring,
+  allow userns,
+  allow mount,
+  allow umount,
+  allow pivot_root,
+  allow dbus,
+  allow px /** -> ferry//&unpriv_ferry,
+
+  include if exists <local/ferry>
+}
+
+profile unpriv_ferry flags=(attach_disconnected) {
+  allow file rwlkm /{**,},
+  allow network,
+  allow unix,
+  allow ptrace,
+  allow signal,
+  allow mqueue,
+  allow io_uring,
+  allow userns,
+  allow mount,
+  allow umount,
+  allow pivot_root,
+  allow dbus,
+  allow pix /** -> &unpriv_ferry,
+  audit deny capability,
+
+  include if exists <local/unpriv_ferry>
+}

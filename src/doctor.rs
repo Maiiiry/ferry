@@ -5,7 +5,7 @@ use std::path::Path;
 
 use serde::Serialize;
 
-use crate::config::{BackendPref, SandboxMode, Settings};
+use crate::config::{SandboxMode, Settings};
 use crate::context::Context;
 use crate::fork;
 use crate::freshness::{self, FreshnessMode};
@@ -212,8 +212,9 @@ fn namespace_checks(caps: &Capabilities) -> Vec<Check> {
 
 fn userns_fix(caps: &Capabilities) -> String {
     if caps.sysctl("kernel.apparmor_restrict_unprivileged_userns") == Some("1") {
-        return "Ubuntu's AppArmor policy blocks unprivileged user namespaces. Install a profile for the \
-                ferry binary: `ferry doctor --apparmor-profile | sudo tee /etc/apparmor.d/ferry && \
+        return "Ubuntu's AppArmor policy denies capabilities in unprivileged user namespaces. Install \
+                ferry to a root-owned path (e.g. /usr/local/bin/ferry) and load the profile it prints: \
+                `/usr/local/bin/ferry doctor --apparmor-profile | sudo tee /etc/apparmor.d/ferry && \
                 sudo apparmor_parser -r /etc/apparmor.d/ferry` (see the troubleshooting guide)"
             .into();
     }
@@ -248,27 +249,79 @@ fn plan(settings: &Settings, caps: &Capabilities, freshness: Option<FreshnessMod
 }
 
 /// An AppArmor profile that lets `binary` create user namespaces on Ubuntu
-/// 23.10+ (`kernel.apparmor_restrict_unprivileged_userns=1`), in the same
-/// form Ubuntu ships for other sandboxing tools.
+/// 24.04+ (`kernel.apparmor_restrict_unprivileged_userns=1`).
+///
+/// It is the stacked form Ubuntu uses for `bwrap-userns-restrict`: ferry
+/// itself may create the namespace and mount, while everything it executes
+/// runs under `unpriv_ferry`, which denies capabilities. The simpler
+/// `flags=(unconfined)` profile would let every process an agent starts
+/// create privileged user namespaces, exempting the whole agent from the
+/// restriction.
 pub fn apparmor_profile(binary: &Path) -> String {
+    let path = binary.display();
     format!(
-        "# AppArmor profile allowing ferry to create unprivileged user namespaces.\n\
-         # Install: sudo tee /etc/apparmor.d/ferry < this-file && sudo apparmor_parser -r /etc/apparmor.d/ferry\n\
+        "# AppArmor profile: lets {path} create unprivileged user namespaces.\n\
+         # The path must be root-owned and not writable by users.\n\
+         # Install: sudo cp this-file /etc/apparmor.d/ferry && sudo apparmor_parser -r /etc/apparmor.d/ferry\n\
          abi <abi/4.0>,\n\
          include <tunables/global>\n\
          \n\
-         profile ferry {} flags=(unconfined) {{\n\
-         \x20 userns,\n\
+         profile ferry {path} flags=(attach_disconnected) {{\n\
+         \x20 allow capability,\n\
+         \x20 allow file rwlkm /{{**,}},\n\
+         \x20 allow network,\n\
+         \x20 allow unix,\n\
+         \x20 allow ptrace,\n\
+         \x20 allow signal,\n\
+         \x20 allow mqueue,\n\
+         \x20 allow io_uring,\n\
+         \x20 allow userns,\n\
+         \x20 allow mount,\n\
+         \x20 allow umount,\n\
+         \x20 allow pivot_root,\n\
+         \x20 allow dbus,\n\
+         \x20 allow px /** -> ferry//&unpriv_ferry,\n\
          \n\
          \x20 include if exists <local/ferry>\n\
-         }}\n",
-        binary.display()
+         }}\n\
+         \n\
+         profile unpriv_ferry flags=(attach_disconnected) {{\n\
+         \x20 allow file rwlkm /{{**,}},\n\
+         \x20 allow network,\n\
+         \x20 allow unix,\n\
+         \x20 allow ptrace,\n\
+         \x20 allow signal,\n\
+         \x20 allow mqueue,\n\
+         \x20 allow io_uring,\n\
+         \x20 allow userns,\n\
+         \x20 allow mount,\n\
+         \x20 allow umount,\n\
+         \x20 allow pivot_root,\n\
+         \x20 allow dbus,\n\
+         \x20 allow pix /** -> &unpriv_ferry,\n\
+         \x20 audit deny capability,\n\
+         \n\
+         \x20 include if exists <local/unpriv_ferry>\n\
+         }}\n"
     )
 }
 
-/// Default backend preference text for messages.
-pub fn backend_pref_name(pref: BackendPref) -> String {
-    pref.to_string()
+/// Why `binary` is unsuitable for an AppArmor profile, if it is: the
+/// profile attaches by path, so anyone who can replace the file inherits the
+/// exemption.
+pub fn apparmor_path_problem(binary: &Path) -> Option<String> {
+    use std::os::unix::fs::MetadataExt;
+    let meta = std::fs::metadata(binary).ok()?;
+    let dir_meta = binary.parent().and_then(|d| std::fs::metadata(d).ok())?;
+    let user_writable = |m: &std::fs::Metadata| m.uid() != 0 || m.mode() & 0o022 != 0;
+    (user_writable(&meta) || user_writable(&dir_meta)).then(|| {
+        format!(
+            "{} is writable by a non-root user; install ferry to a root-owned path first, e.g. \
+             `sudo install -m 755 {} /usr/local/bin/ferry`, then run `/usr/local/bin/ferry doctor --apparmor-profile`",
+            binary.display(),
+            binary.display()
+        )
+    })
 }
 
 fn probe_detail(probe: &Probe) -> String {
@@ -320,10 +373,29 @@ mod tests {
     use super::*;
 
     #[test]
-    fn apparmor_profile_names_the_binary() {
-        let p = apparmor_profile(Path::new("/home/u/.cargo/bin/ferry"));
-        assert!(p.contains("profile ferry /home/u/.cargo/bin/ferry flags=(unconfined) {"));
-        assert!(p.contains("  userns,"));
+    fn apparmor_profile_is_stacked_and_names_the_binary() {
+        let p = apparmor_profile(Path::new("/usr/local/bin/ferry"));
+        assert!(p.contains("profile ferry /usr/local/bin/ferry flags=(attach_disconnected) {"));
+        assert!(p.contains("  allow userns,"));
+        assert!(p.contains("  allow px /** -> ferry//&unpriv_ferry,"));
+        assert!(p.contains("profile unpriv_ferry flags=(attach_disconnected) {"));
+        assert!(p.contains("  audit deny capability,"));
+        assert!(p.contains("  allow file rwlkm /{**,},"));
         assert!(p.contains("abi <abi/4.0>,"));
+        assert_eq!(p.matches('{').count(), p.matches('}').count());
+    }
+
+    #[test]
+    fn user_writable_binary_is_rejected_for_profiles() {
+        let dir = tempfile::tempdir().unwrap();
+        let bin = dir.path().join("ferry");
+        std::fs::write(&bin, b"").unwrap();
+        assert!(apparmor_path_problem(&bin).is_some());
+    }
+
+    #[test]
+    fn shipped_profile_matches_generator() {
+        let shipped = include_str!("../contrib/apparmor/ferry");
+        assert_eq!(shipped, apparmor_profile(Path::new("/usr/local/bin/ferry")));
     }
 }

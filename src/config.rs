@@ -85,12 +85,15 @@ pub enum WarmTarget {
 #[serde(default, deny_unknown_fields, rename_all = "kebab-case")]
 pub struct AgentConfig {
     pub branch_prefix: String,
+    /// Parent directory for agent worktrees.
+    pub worktree_dir: Option<PathBuf>,
 }
 
 impl Default for AgentConfig {
     fn default() -> Self {
         Self {
             branch_prefix: "ferry/".into(),
+            worktree_dir: None,
         }
     }
 }
@@ -112,6 +115,9 @@ pub struct ForkConfig {
 #[serde(default, deny_unknown_fields, rename_all = "kebab-case")]
 pub struct SandboxConfig {
     pub mode: SandboxMode,
+    /// Experimental: path-independent incremental state for builds that run
+    /// without the namespace sandbox (see `remap`).
+    pub remap_paths: bool,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -166,6 +172,9 @@ pub struct Settings {
     pub freshness: FreshnessPref,
     pub warm_commands: Vec<String>,
     pub branch_prefix: String,
+    /// Parent directory of agent worktrees (one subdirectory per repository).
+    pub worktree_parent: Option<PathBuf>,
+    pub remap_paths: bool,
     /// The config file that was loaded, if any.
     pub config_path: Option<PathBuf>,
 }
@@ -253,21 +262,48 @@ impl Config {
             Some(cmd) if !cmd.trim().is_empty() => vec![cmd],
             _ => self.warm_commands(),
         };
-        let store_parent = match env("FERRY_HOME").filter(|v| !v.is_empty()) {
+        let explicit_store = match env("FERRY_HOME").filter(|v| !v.is_empty()) {
             Some(home) => Some(PathBuf::from(home)),
-            None => match &self.store.dir {
-                Some(dir) => Some(expand_dir(dir, repo_root)),
-                None => crate::store::default_store_parent(),
+            None => self
+                .store
+                .dir
+                .as_ref()
+                .map(|dir| expand_dir(dir, repo_root)),
+        };
+        // Worktrees hold agents' uncommitted work, so by default they live in
+        // the platform data dir rather than next to build state in the cache
+        // dir, which macOS may purge and users clear casually.
+        let worktree_parent = match env("FERRY_WORKTREES").filter(|v| !v.is_empty()) {
+            Some(dir) => Some(PathBuf::from(dir)),
+            None => match (&self.agent.worktree_dir, &explicit_store) {
+                (Some(dir), _) => Some(expand_dir(dir, repo_root)),
+                (None, Some(store)) => Some(store.join("worktrees")),
+                (None, None) => crate::store::default_worktree_parent(),
             },
         };
-        if let Some(p) = &store_parent
-            && !p.is_absolute()
-        {
-            return Err(ConfigError::Invalid(format!(
-                "store directory {} must be absolute",
-                p.display()
-            )));
+        let store_parent = explicit_store.or_else(crate::store::default_store_parent);
+        for (what, dir) in [("store", &store_parent), ("worktree", &worktree_parent)] {
+            if let Some(p) = dir
+                && !p.is_absolute()
+            {
+                return Err(ConfigError::Invalid(format!(
+                    "{what} directory {} must be absolute",
+                    p.display()
+                )));
+            }
         }
+        let remap_paths = match env("FERRY_REMAP_PATHS").as_deref().map(str::trim) {
+            None => self.sandbox.remap_paths,
+            Some("1" | "true") => true,
+            Some("0" | "false" | "") => false,
+            Some(other) => {
+                return Err(ConfigError::Env {
+                    var: "FERRY_REMAP_PATHS",
+                    value: other.to_owned(),
+                    expected: "1, 0, true, false",
+                });
+            }
+        };
         Ok(Settings {
             store_parent,
             backend,
@@ -275,6 +311,8 @@ impl Config {
             freshness,
             warm_commands,
             branch_prefix: self.agent.branch_prefix.clone(),
+            worktree_parent,
+            remap_paths,
             config_path,
         })
     }
@@ -391,9 +429,13 @@ cargo-args = ["--workspace", "--all-targets"]
 [agent]
 # Branch created for each agent: <prefix><name>.
 branch-prefix = "ferry/"
+# Where agent worktrees (and their uncommitted work) live, one subdirectory per repository.
+# Default: $XDG_DATA_HOME/ferry/worktrees or ~/.local/share/ferry/worktrees (Linux),
+# ~/Library/Application Support/ferry/worktrees (macOS).
+# worktree-dir = "~/agents"
 
 [store]
-# Parent directory for Ferry's per-repository storage.
+# Parent directory for Ferry's per-repository build state (bases, forks).
 # Default: $XDG_CACHE_HOME/ferry or ~/.cache/ferry (Linux), ~/Library/Caches/ferry (macOS).
 # dir = "/fast/disk/ferry"
 
@@ -404,6 +446,9 @@ backend = "auto"
 [sandbox]
 # "auto" uses a private mount namespace when available (Linux), "namespace" requires it, "off" never uses it.
 mode = "auto"
+# Experimental: keep rustc's incremental state reusable when building without the
+# namespace sandbox (macOS; Linux without user namespaces). Needs rustc 1.98+.
+remap-paths = false
 
 [freshness]
 # "auto" uses checksum freshness when the toolchain supports it, otherwise mtime stamping.
