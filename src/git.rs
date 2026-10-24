@@ -293,15 +293,34 @@ pub fn is_dirty(worktree: &Path) -> Result<bool> {
 
 /// Paths reported by `git status --porcelain` (changed, untracked).
 pub fn status_paths(worktree: &Path) -> Result<Vec<String>> {
+    Ok(status_entries(worktree)?
+        .into_iter()
+        .map(|(_, path)| path)
+        .collect())
+}
+
+/// `(XY status code, path)` for every entry of `git status --porcelain`;
+/// untracked files have the code `??`.
+pub fn status_entries(worktree: &Path) -> Result<Vec<(String, String)>> {
     let out = run(
         worktree,
         ["status", "--porcelain=v1", "-z", "--untracked-files=all"],
     )?;
-    Ok(out
-        .split(|b| *b == 0)
-        .filter(|r| r.len() > 3)
-        .map(|r| String::from_utf8_lossy(&r[3..]).into_owned())
-        .collect())
+    let mut entries = Vec::new();
+    let mut records = out.split(|b| *b == 0).filter(|r| !r.is_empty());
+    while let Some(record) = records.next() {
+        if record.len() <= 3 {
+            continue;
+        }
+        let code = String::from_utf8_lossy(&record[..2]).into_owned();
+        // Renames and copies are followed by a second record with the
+        // original path, which belongs to the same entry.
+        if code.starts_with(['R', 'C']) {
+            records.next();
+        }
+        entries.push((code, String::from_utf8_lossy(&record[3..]).into_owned()));
+    }
+    Ok(entries)
 }
 
 /// Number of commits reachable from `tip` but not from `base`.

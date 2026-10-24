@@ -61,6 +61,9 @@ pub struct AgentPaths {
     pub upper: PathBuf,
     pub work: PathBuf,
     pub ns_record: PathBuf,
+    /// Held (shared) through an inherited descriptor by every process that
+    /// runs as this agent, whatever the backend.
+    pub busy_lock: PathBuf,
 }
 
 impl Store {
@@ -146,6 +149,7 @@ impl Store {
             upper: dir.join("upper"),
             work: dir.join("work"),
             ns_record: dir.join("ns.json"),
+            busy_lock: dir.join("busy.lock"),
             dir,
         }
     }

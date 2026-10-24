@@ -101,7 +101,9 @@ pub struct AgentStatus {
     /// Bytes of build state private to this agent (see
     /// [`fork::Backend::private_bytes`]).
     pub private_bytes: Option<u64>,
-    /// PIDs currently running inside the agent's sandbox.
+    /// Whether any process started for the agent is still alive.
+    pub busy: bool,
+    /// The PIDs of those processes that could be attributed.
     pub running: Vec<u32>,
 }
 
@@ -422,11 +424,15 @@ pub fn list(ctx: &Context) -> Result<Vec<AgentStatus>> {
         let private_bytes = fork::backend(meta.backend)
             .ok()
             .and_then(|b| b.private_bytes(&fork_paths(&paths, &base_target)).ok());
+        let procs = processes(&paths);
         out.push(AgentStatus {
             base_is_current: current.as_ref() == Some(&meta.base),
             worktree_exists: meta.worktree.is_dir(),
             private_bytes,
-            running: sandbox::users(&paths.ns_record).unwrap_or_default(),
+            // An error (e.g. an overlay lock held by unattributable processes)
+            // still means something is using the agent.
+            busy: !matches!(procs, Ok(None)),
+            running: procs.ok().flatten().unwrap_or_default(),
             meta,
         });
     }
@@ -444,23 +450,33 @@ fn remove_locked(ctx: &Context, name: &AgentName, force: bool) -> Result<RemoveR
     let paths = ctx.store.agent(name);
     let _agent = FileLock::exclusive(&paths.lock, &format!("agent {name}"))?;
 
-    let running = sandbox::users(&paths.ns_record)?;
-    if !running.is_empty() && !force {
+    if let Some(pids) = processes(&paths)?
+        && !force
+    {
         return Err(Error::AgentBusy {
             name: name.to_string(),
-            pids: running
-                .iter()
-                .map(u32::to_string)
-                .collect::<Vec<_>>()
-                .join(", "),
+            pids: if pids.is_empty() {
+                "not attributable".into()
+            } else {
+                pids.iter()
+                    .map(u32::to_string)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            },
         });
     }
     if meta.worktree.is_dir() {
-        if !force && git::is_dirty(&meta.worktree)? {
+        let (changes, copied_lockfile) = user_changes(ctx, &meta)?;
+        if !force && !changes.is_empty() {
             return Err(Error::Refused(format!(
-                "{} has uncommitted changes; commit them or pass --force to discard them",
-                meta.worktree.display()
+                "{} has uncommitted changes (e.g. {}); commit them or pass --force to discard them",
+                meta.worktree.display(),
+                changes[0]
             )));
+        }
+        // `git worktree remove` refuses untracked files; this one is ours.
+        if let Some(lockfile) = copied_lockfile {
+            fs::remove_file(&lockfile).at("remove", &lockfile)?;
         }
         ctx.repo.remove_worktree(&meta.worktree, force)?;
     } else {
@@ -508,8 +524,8 @@ pub fn reap_abandoned(ctx: &Context, dry_run: bool) -> Result<Vec<AgentName>> {
         let Some(agent_lock) = FileLock::try_exclusive(&paths.lock)? else {
             continue;
         };
-        if !sandbox::users(&paths.ns_record)?.is_empty()
-            || (meta.worktree.is_dir() && git::is_dirty(&meta.worktree)?)
+        if processes(&paths)?.is_some()
+            || (meta.worktree.is_dir() && !user_changes(ctx, &meta)?.0.is_empty())
             || ctx
                 .repo
                 .branch_tip(&meta.branch)?
@@ -583,8 +599,9 @@ pub fn exec_session(
         .split_first()
         .ok_or_else(|| Error::Refused("no command given".into()))?;
     let plan = plan(ctx, meta)?;
-    let shim_dir = shim::ensure(ctx)?;
+    let shim_dir = shim::ensure(&ctx.settings)?;
     enter(ctx, meta, &plan)?;
+    hold_busy_lock(&ctx.store.agent(&meta.name))?;
     let cwd = if inside(host_cwd, &meta.worktree) {
         host_cwd.to_path_buf()
     } else {
@@ -613,6 +630,7 @@ pub fn exec_cargo(
 ) -> Result<Infallible> {
     let plan = plan(ctx, meta)?;
     enter(ctx, meta, &plan)?;
+    hold_busy_lock(&ctx.store.agent(&meta.name))?;
     let cwd = plan.map_cwd(host_cwd);
     let err = std::process::Command::new(cargo)
         .args(args)
@@ -660,7 +678,7 @@ pub fn env_report(ctx: &Context, meta: &AgentMeta) -> Result<EnvReport> {
         isolation: meta.isolation,
         build_target_dir: plan.build_target(),
         host_target_dir,
-        shim_dir: shim::ensure(ctx)?,
+        shim_dir: shim::ensure(&ctx.settings)?,
         run_prefix: vec![
             "ferry".into(),
             "run".into(),
@@ -690,4 +708,76 @@ fn same_file(a: &Path, b: &Path) -> bool {
         (Ok(a), Ok(b)) => a.dev() == b.dev() && a.ino() == b.ino(),
         _ => false,
     }
+}
+
+/// Holds a shared lock on the agent's `busy.lock` for the rest of this
+/// process and everything it execs.
+///
+/// The descriptor is deliberately leaked and made inheritable (std opens
+/// files close-on-exec), so the lock stays held exactly as long as any
+/// process started for the agent is alive. That lets `rm`, `list` and `gc`
+/// tell whether an agent is in use on every backend and platform.
+fn hold_busy_lock(paths: &AgentPaths) -> Result<()> {
+    use std::os::fd::IntoRawFd;
+    let file = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(&paths.busy_lock)
+        .at("open", &paths.busy_lock)?;
+    rustix::fs::flock(&file, rustix::fs::FlockOperation::LockShared)
+        .map_err(std::io::Error::from)
+        .at("lock", &paths.busy_lock)?;
+    rustix::io::fcntl_setfd(&file, rustix::io::FdFlags::empty())
+        .map_err(std::io::Error::from)
+        .at("make inheritable", &paths.busy_lock)?;
+    let _ = file.into_raw_fd();
+    Ok(())
+}
+
+/// `None` if nothing runs as the agent, else the pids that can be
+/// attributed (possibly none).
+pub fn processes(paths: &AgentPaths) -> Result<Option<Vec<u32>>> {
+    let mut pids = sandbox::users(&paths.ns_record)?;
+    let busy = paths.busy_lock.exists() && FileLock::try_exclusive(&paths.busy_lock)?.is_none();
+    if busy {
+        pids.extend(sandbox::lock_holders(&paths.busy_lock));
+    }
+    pids.sort_unstable();
+    pids.dedup();
+    Ok((busy || !pids.is_empty()).then_some(pids))
+}
+
+/// The worktree's `Cargo.lock` if it is the copy spawn made from the base
+/// (untracked and byte-identical to the base's), which is not the agent's
+/// work.
+fn copied_lockfile(ctx: &Context, meta: &AgentMeta, untracked: &[String]) -> Option<PathBuf> {
+    if !untracked.iter().any(|p| p == "Cargo.lock") {
+        return None;
+    }
+    let ours = meta.worktree.join("Cargo.lock");
+    let base = ctx.store.base(&meta.base).src.join("Cargo.lock");
+    match (fs::read(&ours), fs::read(&base)) {
+        (Ok(a), Ok(b)) if a == b => Some(ours),
+        _ => None,
+    }
+}
+
+/// Uncommitted changes in the agent's worktree, ignoring the lockfile copy
+/// spawn put there, and that copy's path if it is present.
+fn user_changes(ctx: &Context, meta: &AgentMeta) -> Result<(Vec<String>, Option<PathBuf>)> {
+    let entries = git::status_entries(&meta.worktree)?;
+    let untracked: Vec<String> = entries
+        .iter()
+        .filter(|(code, _)| code == "??")
+        .map(|(_, p)| p.clone())
+        .collect();
+    let copied = copied_lockfile(ctx, meta, &untracked);
+    let changes = entries
+        .into_iter()
+        .filter(|(code, p)| !(copied.is_some() && code == "??" && p == "Cargo.lock"))
+        .map(|(_, p)| p)
+        .collect();
+    Ok((changes, copied))
 }

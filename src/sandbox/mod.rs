@@ -39,7 +39,7 @@ impl std::fmt::Display for Isolation {
 
 #[derive(Debug, thiserror::Error)]
 pub enum SandboxError {
-    #[error("namespace sandboxes are not supported on this platform: {0}")]
+    #[error("the namespace sandbox is unavailable: {0}")]
     Unsupported(String),
 
     #[error("cannot enter a user namespace from a multi-threaded process")]
@@ -188,5 +188,19 @@ pub fn users(ns_record: &Path) -> Result<Vec<u32>, SandboxError> {
     {
         let _ = ns_record;
         Ok(Vec::new())
+    }
+}
+
+/// Live processes holding a `flock` on `path`, where the platform can tell
+/// (Linux `/proc/locks`); empty elsewhere.
+pub fn lock_holders(path: &Path) -> Vec<u32> {
+    #[cfg(target_os = "linux")]
+    {
+        linux::lock_holders(path)
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = path;
+        Vec::new()
     }
 }

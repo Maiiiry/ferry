@@ -562,7 +562,7 @@ fn in_use_by(record: Option<&NsRecord>, lock_path: &Path, held: bool) -> Vec<u32
 }
 
 /// Live processes that `/proc/locks` lists as holding a `flock` on `path`.
-fn lock_holders(path: &Path) -> Vec<u32> {
+pub(crate) fn lock_holders(path: &Path) -> Vec<u32> {
     let Some((dev, ino)) = lock_key(path) else {
         return Vec::new();
     };
