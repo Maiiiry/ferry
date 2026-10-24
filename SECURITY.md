@@ -45,8 +45,15 @@ otherwise.
   namespaces, makes mount propagation private, and creates bind mounts and
   overlayfs mounts inside them. These mounts exist only inside the namespace
   and disappear when its last process exits. Ferry never mounts anything in
-  the host's mount namespace and never runs anything as root; `ferry doctor`
-  only suggests `sudo` commands for you to review and run.
+  the host's mount namespace. `ferry doctor` only suggests `sudo` commands
+  for you to review and run. The only command that runs anything as root is
+  `ferry setup apparmor`, which you invoke on purpose: it prints the full
+  root script and the exact `sudo` command, asks for confirmation (or needs
+  `--yes`), and then makes one `sudo` call. The script is fixed text; paths
+  are passed as arguments, the profile on stdin, and the binary is copied
+  from `/proc/<pid>/exe`, so no file your user can write sits between your
+  confirmation and root acting on it. Nothing in a repository or its
+  `ferry.toml` influences it.
 - **Build commands.** `ferry base` runs the warm-up commands from the
   repository's `ferry.toml` (or `FERRY_BASE_COMMAND`) with `sh -c`. Like a
   `Makefile` or a `build.rs`, a `ferry.toml` in a repository you clone can run
@@ -74,9 +81,13 @@ otherwise.
 ### The optional AppArmor profile (Ubuntu)
 
 Ubuntu 23.10 and later block unprivileged user namespaces
-(`kernel.apparmor_restrict_unprivileged_userns=1`). `ferry doctor
---apparmor-profile` prints a profile that allows the `ferry` binary at its
-current path to create user namespaces; installing it requires `sudo`.
+(`kernel.apparmor_restrict_unprivileged_userns=1`). `ferry setup apparmor`
+installs ferry to `/usr/local/bin` and loads a profile,
+`/etc/apparmor.d/usr.local.bin.ferry`, that allows that binary to create user
+namespaces; `ferry doctor --apparmor-profile` prints the same profile for the
+binary's current path. Everything ferry runs is confined to a second profile,
+`unpriv_ferry`, with no capabilities, except ferry re-running its own binary,
+which stays `ferry` (an exact-path `ix` rule), so its namespace probe works.
 
 Installing it is a trade-off. Any local process that can execute that `ferry`
 binary can then create user namespaces through it, and `ferry run` runs
@@ -89,7 +100,14 @@ replace the binary and inherit the permission; `ferry doctor
 --apparmor-profile` warns when the binary or any directory above it is
 writable by a non-root user, and refuses paths with characters AppArmor would
 read as a pattern. Installing Ferry to a root-owned path such as
-`/usr/local/bin` limits the grant to the real binary.
+`/usr/local/bin`, which `ferry setup apparmor` does, limits the grant to the
+real binary.
+
+On Ubuntu 24.04 and 24.10, `kernel.apparmor_restrict_unprivileged_unconfined`
+is `0`, so any unconfined process can also run an arbitrary program under the
+`ferry` profile with `aa-exec -p ferry` and get capabilities in a user
+namespace. This applies equally to every user-namespace profile Ubuntu ships;
+Ubuntu 25.04 and later set that sysctl to `1`.
 
 If you do not want this trade-off, leave the restriction on and set
 `sandbox = "off"`: builds then run at host paths, dependencies are still

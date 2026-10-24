@@ -40,7 +40,8 @@ git clone https://github.com/patwrall/ferry
 cargo install --path ferry --locked
 ```
 
-On Ubuntu 24.04 and later, also read
+On Ubuntu 24.04 and later, also run `ferry setup apparmor` (it shows each step
+and asks before one `sudo` call), or read
 [AppArmor on Ubuntu](troubleshooting.md#apparmor-on-ubuntu-2404-and-later)
 before relying on the namespace sandbox.
 
