@@ -166,13 +166,27 @@ pub enum Entered {
 /// process stays in the sandbox for the rest of its life. The process must
 /// be single-threaded.
 pub fn enter(plan: &Plan) -> Result<Entered, SandboxError> {
-    let _ = plan;
-    todo!("sandbox::enter")
+    match plan.isolation {
+        Isolation::None => Ok(Entered::Host),
+        #[cfg(target_os = "linux")]
+        Isolation::Namespace => linux::enter(plan),
+        #[cfg(not(target_os = "linux"))]
+        Isolation::Namespace => Err(SandboxError::Unsupported(
+            "mount namespaces are Linux-only".into(),
+        )),
+    }
 }
 
 /// PIDs of processes still using the agent sandbox recorded at `ns_record`.
 /// Empty when nothing is running or the platform has no namespaces.
 pub fn users(ns_record: &Path) -> Result<Vec<u32>, SandboxError> {
-    let _ = ns_record;
-    todo!("sandbox::users")
+    #[cfg(target_os = "linux")]
+    {
+        linux::users(ns_record)
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = ns_record;
+        Ok(Vec::new())
+    }
 }
