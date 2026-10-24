@@ -1,0 +1,7 @@
+[workspace]
+members = ["leaf", "mid", "app", "side", "embed"]
+resolver = "2"
+
+# Small artifacts keep every test's base and forks cheap to build and copy.
+[profile.dev]
+debug = false
