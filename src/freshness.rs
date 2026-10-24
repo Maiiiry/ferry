@@ -408,27 +408,80 @@ pub fn invalidate_relocated_units(target: &Path, old_roots: &[PathBuf]) -> Resul
     if roots.is_empty() {
         return Ok(invalidated);
     }
-    // Profile dirs are <target>/<profile>, or <target>/<triple>/<profile>
-    // for `--target` builds.
-    let mut profiles = Vec::new();
-    for dir in subdirs(target)? {
-        profiles.extend(subdirs(&dir)?);
-        profiles.push(dir);
-    }
-    for profile in profiles {
+    for profile in profiles(target)? {
         for unit in units(&profile)? {
             if unit.is_relocated(&roots)? {
-                fs::remove_dir_all(&unit.fingerprint).at("remove", &unit.fingerprint)?;
-                let name = unit
-                    .fingerprint
-                    .strip_prefix(target)
-                    .unwrap_or(&unit.fingerprint);
-                invalidated.push(name.to_string_lossy().into_owned());
+                invalidated.push(remove_fingerprint(target, &unit.fingerprint)?);
             }
         }
     }
     invalidated.sort();
     Ok(invalidated)
+}
+
+/// Forces Cargo to rebuild every unit of `packages` in a forked target dir:
+/// libraries, binaries, tests, examples, benches, and build scripts'
+/// compiles and runs.
+///
+/// An agent building at other absolute paths than its base can be fooled by
+/// units [`invalidate_relocated_units`] cannot find: a build script that
+/// writes `CARGO_MANIFEST_DIR` into generated code, or a proc macro that
+/// reads it from the environment, captures the base's path without leaving
+/// it in any dep-info. `packages` are names as in `Cargo.toml`. Returns the
+/// deleted fingerprint directories relative to `target`, sorted.
+pub fn invalidate_packages(target: &Path, packages: &[String]) -> Result<Vec<String>> {
+    let wanted = |name: &str| packages.iter().any(|p| p == name);
+    let mut invalidated = Vec::new();
+    for profile in profiles(target)? {
+        // Up to Cargo 1.99: .fingerprint/<package>-<hash>/.
+        for fingerprint in subdirs(&profile.join(".fingerprint"))? {
+            let name = fingerprint
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy();
+            if name
+                .rsplit_once('-')
+                .is_some_and(|(package, _)| wanted(package))
+            {
+                invalidated.push(remove_fingerprint(target, &fingerprint)?);
+            }
+        }
+        // From Cargo 1.100: build/<package>/<hash>/fingerprint/.
+        for package in subdirs(&profile.join("build"))? {
+            if !package
+                .file_name()
+                .is_some_and(|n| wanted(&n.to_string_lossy()))
+            {
+                continue;
+            }
+            for unit in subdirs(&package)? {
+                let fingerprint = unit.join("fingerprint");
+                if is_real_dir(&fingerprint)? {
+                    invalidated.push(remove_fingerprint(target, &fingerprint)?);
+                }
+            }
+        }
+    }
+    invalidated.sort();
+    Ok(invalidated)
+}
+
+/// Profile dirs are <target>/<profile>, or <target>/<triple>/<profile>
+/// for `--target` builds; this is every directory at either depth.
+fn profiles(target: &Path) -> Result<Vec<PathBuf>> {
+    let mut profiles = Vec::new();
+    for dir in subdirs(target)? {
+        profiles.extend(subdirs(&dir)?);
+        profiles.push(dir);
+    }
+    Ok(profiles)
+}
+
+/// Deletes a unit's fingerprint directory; returns it relative to `target`.
+fn remove_fingerprint(target: &Path, fingerprint: &Path) -> Result<String> {
+    fs::remove_dir_all(fingerprint).at("remove", fingerprint)?;
+    let name = fingerprint.strip_prefix(target).unwrap_or(fingerprint);
+    Ok(name.to_string_lossy().into_owned())
 }
 
 /// Git never reports such paths; refusing them keeps every stamp inside the
@@ -2079,5 +2132,169 @@ mod tests {
         let invalidated = invalidate_relocated_units(&target, &[old_src]).unwrap();
         assert_eq!(invalidated, Vec::<String>::new());
         assert!(outside.join("dep-bin-app").exists());
+    }
+
+    #[test]
+    fn every_unit_of_the_given_packages_is_invalidated_in_both_layouts() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().canonicalize().unwrap();
+        let target = root.join("fork");
+        let outside = root.join("outside");
+        put(&outside.join("lib-x"), "x");
+        for file in [
+            "debug/.fingerprint/dep-pkg-1111/lib-dep_pkg",
+            "debug/.fingerprint/dep-pkg-2222/run-build-script-build-script-build.json",
+            "debug/.fingerprint/dep-pkg-tools-3333/lib-dep_pkg_tools",
+            "debug/.fingerprint/serde-4444/lib-serde",
+            "debug/build/dep-pkg-2222/out/gen.rs",
+            "debug/build/dep-pkg/aaaa/fingerprint/dep-lib-dep_pkg",
+            "debug/build/dep-pkg/aaaa/out/dep_pkg-aaaa.d",
+            "debug/build/dep-pkg/bbbb/fingerprint/run-build-script-build-script-build.json",
+            "debug/build/serde/cccc/fingerprint/dep-lib-serde",
+            "x86_64-unknown-linux-gnu/debug/.fingerprint/dep-pkg-5555/lib-dep_pkg",
+            "x86_64-unknown-linux-gnu/debug/build/dep-pkg/dddd/fingerprint/dep-lib-dep_pkg",
+        ] {
+            put(&target.join(file), "x");
+        }
+        symlink(&outside, target.join("debug/.fingerprint/dep-pkg-6666")).unwrap();
+        fs::create_dir_all(target.join("debug/build/dep-pkg/eeee")).unwrap();
+        symlink(
+            &outside,
+            target.join("debug/build/dep-pkg/eeee/fingerprint"),
+        )
+        .unwrap();
+
+        let packages = ["dep-pkg".to_owned()];
+        assert_eq!(
+            invalidate_packages(&target, &packages).unwrap(),
+            [
+                "debug/.fingerprint/dep-pkg-1111",
+                "debug/.fingerprint/dep-pkg-2222",
+                "debug/build/dep-pkg/aaaa/fingerprint",
+                "debug/build/dep-pkg/bbbb/fingerprint",
+                "x86_64-unknown-linux-gnu/debug/.fingerprint/dep-pkg-5555",
+                "x86_64-unknown-linux-gnu/debug/build/dep-pkg/dddd/fingerprint",
+            ]
+        );
+        for kept in [
+            "debug/.fingerprint/dep-pkg-tools-3333",
+            "debug/.fingerprint/serde-4444",
+            "debug/.fingerprint/dep-pkg-6666",
+            "debug/build/dep-pkg-2222/out/gen.rs",
+            "debug/build/dep-pkg/aaaa/out/dep_pkg-aaaa.d",
+            "debug/build/dep-pkg/eeee/fingerprint",
+            "debug/build/serde/cccc/fingerprint",
+        ] {
+            assert!(target.join(kept).symlink_metadata().is_ok(), "{kept}");
+        }
+        assert!(outside.join("lib-x").exists());
+        assert_eq!(
+            invalidate_packages(&target, &packages).unwrap(),
+            Vec::<String>::new()
+        );
+    }
+
+    /// Appends to `$OUT_DIR/runs` on every run.
+    const COUNTING_BUILD_SCRIPT: &str = r#"
+fn main() {
+    let runs = std::path::Path::new(&std::env::var("OUT_DIR").unwrap()).join("runs");
+    let mut count = std::fs::read(&runs).unwrap_or_default();
+    count.push(b'x');
+    std::fs::write(&runs, count).unwrap();
+    println!("cargo::rerun-if-changed=build.rs");
+}
+"#;
+
+    /// What one `cargo build` of `ws` into `target` did: each compiled unit
+    /// as (package directory, target kind, fresh), and the build scripts'
+    /// `OUT_DIR`s.
+    fn cargo_build(ws: &Path, target: &Path) -> (Vec<(String, String, bool)>, Vec<PathBuf>) {
+        let cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
+        let mut command = Command::new(cargo);
+        for var in [
+            "CARGO_BUILD_BUILD_DIR",
+            "CARGO_BUILD_RUSTC_WRAPPER",
+            "CARGO_INCREMENTAL",
+            "RUSTC_WORKSPACE_WRAPPER",
+            "RUSTC_WRAPPER",
+        ] {
+            command.env_remove(var);
+        }
+        let out = command
+            .args([
+                "build",
+                "--offline",
+                "--message-format=json",
+                "--target-dir",
+            ])
+            .arg(target)
+            .current_dir(ws)
+            .stdin(Stdio::null())
+            .output()
+            .unwrap();
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(out.status.success(), "cargo build failed: {stderr}");
+        let (mut units, mut out_dirs) = (Vec::new(), Vec::new());
+        for line in String::from_utf8(out.stdout).unwrap().lines() {
+            let message: serde_json::Value = serde_json::from_str(line).unwrap();
+            match message["reason"].as_str() {
+                Some("compiler-artifact") => {
+                    let manifest = Path::new(message["manifest_path"].as_str().unwrap());
+                    let package = manifest.parent().unwrap().file_name().unwrap();
+                    units.push((
+                        package.to_string_lossy().into_owned(),
+                        message["target"]["kind"][0].as_str().unwrap().to_owned(),
+                        message["fresh"].as_bool().unwrap(),
+                    ));
+                }
+                Some("build-script-executed") => {
+                    out_dirs.push(PathBuf::from(message["out_dir"].as_str().unwrap()));
+                }
+                _ => {}
+            }
+        }
+        units.sort();
+        (units, out_dirs)
+    }
+
+    #[test]
+    fn invalidated_packages_rebuild_while_others_stay_fresh() {
+        let tmp = tempfile::tempdir().unwrap();
+        let (ws, target) = (tmp.path().join("ws"), tmp.path().join("target"));
+        let manifest = |name: &str| {
+            format!("[package]\nname = \"{name}\"\nversion = \"0.1.0\"\nedition = \"2021\"\n")
+        };
+        write(
+            &ws.join("Cargo.toml"),
+            "[workspace]\nmembers = [\"dep-pkg\", \"other\"]\nresolver = \"2\"\n",
+        );
+        write(&ws.join("dep-pkg/Cargo.toml"), &manifest("dep-pkg"));
+        write(&ws.join("dep-pkg/build.rs"), COUNTING_BUILD_SCRIPT);
+        write(&ws.join("dep-pkg/src/lib.rs"), "pub fn f() {}\n");
+        write(
+            &ws.join("dep-pkg/src/main.rs"),
+            "fn main() {\n    dep_pkg::f();\n}\n",
+        );
+        write(&ws.join("other/Cargo.toml"), &manifest("other"));
+        write(&ws.join("other/src/lib.rs"), "pub fn g() {}\n");
+        let (built, _) = cargo_build(&ws, &target);
+        assert!(built.iter().all(|(_, _, fresh)| !fresh), "{built:?}");
+
+        let invalidated = invalidate_packages(&target, &["dep-pkg".to_owned()]).unwrap();
+        // The library, the binary, the build script's compile and its run.
+        assert_eq!(invalidated.len(), 4, "{invalidated:?}");
+        let (rebuilt, out_dirs) = cargo_build(&ws, &target);
+        let unit = |package: &str, kind: &str, fresh| (package.to_owned(), kind.to_owned(), fresh);
+        assert_eq!(
+            rebuilt,
+            [
+                unit("dep-pkg", "bin", false),
+                unit("dep-pkg", "custom-build", false),
+                unit("dep-pkg", "lib", false),
+                unit("other", "lib", true),
+            ]
+        );
+        assert_eq!(out_dirs.len(), 1);
+        assert_eq!(fs::read(out_dirs[0].join("runs")).unwrap(), b"xx");
     }
 }
