@@ -1,0 +1,349 @@
+# CLI reference
+
+```text
+Usage: ferry [OPTIONS] <COMMAND>
+```
+
+| Command | Summary |
+|---|---|
+| [`init`](#ferry-init) | Write ferry.toml and report what this machine supports |
+| [`base`](#ferry-base) | Build an immutable warm base that new agents fork from |
+| [`spawn`](#ferry-spawn) | Create an agent: a git worktree plus a forked warm target dir |
+| [`run`](#ferry-run) | Run a command in an agent's build context |
+| [`shell`](#ferry-shell) | Start an interactive shell in an agent's build context |
+| [`env`](#ferry-env) | Print an agent's paths and environment for wiring into agent tools |
+| [`list`](#ferry-list) | List bases and agents with their status and disk usage |
+| [`rm`](#ferry-rm) | Remove an agent's worktree and build state |
+| [`gc`](#ferry-gc) | Delete bases that no agent uses and that are not current |
+| [`doctor`](#ferry-doctor) | Check platform capabilities and print fixes for what is missing |
+| [`shim`](#ferry-shim) | Print the directory holding Ferry's cargo shim |
+| [`hook`](#ferry-hook) | Hook handlers for agent tools (reads the tool's JSON on stdin) |
+| `help` | Print this message or the help of the given subcommand(s) |
+
+## Global options
+
+These work with every command, before or after it.
+
+| Option | Meaning |
+|---|---|
+| `-C <DIR>` | Run as if ferry was started in DIR |
+| `--json` | Print machine-readable JSON on stdout |
+| `-h`, `--help` | Print help (`-h` prints a summary) |
+| `-V`, `--version` | Print version |
+
+Commands run against the git repository containing the current directory (or
+the `-C` directory). Outside one, `doctor` still reports the machine-level
+checks plus a failing `repository` check, and the `hook` handlers use the
+directory named in their JSON input; every other command fails.
+
+## Output, JSON and exit codes
+
+Data goes to stdout; progress, warnings and errors go to stderr. Colour is
+used only on a terminal. Errors look like this:
+
+```text
+error: no warm base exists for this repository
+  hint: run `ferry base` to build one
+```
+
+with `caused by:` lines in between when there is an underlying error.
+
+`--json` is accepted by every command. It switches `init`, `base`, `spawn`,
+`env`, `list`, `rm`, `gc`, `doctor` and `shim` to a single JSON document on
+stdout; the shapes are listed under each command. Ferry is pre-1.0, so fields
+may still change between releases. `--json` has no effect on `run` and
+`shell`, which replace themselves with your command, on the `hook` handlers,
+which speak the agent tool's protocol, or on `doctor --apparmor-profile`,
+which prints the profile.
+
+Exit status is 0 on success and 1 on error. `doctor` exits 1 when a check
+fails. `run` and `shell` exit with the status of the command they run.
+
+## `ferry init`
+
+```text
+Usage: ferry init [OPTIONS]
+```
+
+Write ferry.toml and report what this machine supports.
+
+| Option | Meaning |
+|---|---|
+| `--force` | Overwrite an existing ferry.toml |
+
+Writes the default [configuration](configuration.md#the-default-file) to
+`ferry.toml` in the root of the main checkout, then prints the same plan as
+`ferry doctor`. Without `--force`, an existing file is left alone with a
+warning.
+
+JSON: `{ "config": <path>, "written": <bool>, "doctor": <doctor report> }`.
+
+## `ferry base`
+
+```text
+Usage: ferry base [OPTIONS]
+```
+
+Build an immutable warm base that new agents fork from.
+
+| Option | Meaning |
+|---|---|
+| `--rev <REV>` | Commit to build (any git revision) [default: HEAD] |
+| `--cold` | Build from scratch instead of seeding from the newest compatible base |
+
+Checks out the commit into the store, runs the [warm commands](configuration.md#base-what-warms-a-base),
+and makes the base current, so new agents fork from it. If a base with the
+same commit and fingerprint already exists, it is made current without
+building. Otherwise, unless `--cold` is given, the new base is seeded from the
+newest ready base with the same fingerprint, so only what changed is
+rebuilt. Build output goes to stderr.
+
+Warnings are printed when the namespace sandbox is unavailable (builds then
+run without canonical paths) and when the warm commands wrote files into the
+source tree, which agents will not have (build scripts writing outside
+`OUT_DIR`).
+
+JSON: `{ "base": {...}, "reused": <bool>, "warnings": [...] }`, where `base`
+has `id`, `commit`, `created_unix`, `build_secs`, `freshness`, `isolation`,
+`toolchain`, `commands`, `ferry_version`, `dirtied`, `remap_paths` and
+`seeded_from`.
+
+## `ferry spawn`
+
+```text
+Usage: ferry spawn [OPTIONS] <NAME>
+```
+
+Create an agent: a git worktree plus a forked warm target dir.
+
+| Argument or option | Meaning |
+|---|---|
+| `<NAME>` | Agent name (letters, digits, '-', '_', '.') |
+| `--from <REF>` | Revision the agent's branch starts at [default: HEAD] |
+| `--path <DIR>` | Where to create the worktree (default: inside the store) |
+| `--branch <BRANCH>` | Branch name (default: the configured branch prefix plus NAME) |
+
+Creates the branch and worktree, stamps the files that are identical to the
+base, and forks the base's target dir. It never builds. The base is the
+current one if it is at `--from`, else any ready base at that commit, else the
+current base; files that differ from the chosen base are rebuilt on the first
+build. Fails if the agent, the branch or a non-empty worktree directory
+already exists, or if there is no base. Any failure rolls back the worktree,
+branch and fork.
+
+Without `--path`, the worktree goes in the worktree parent directory (see
+[Configuration](configuration.md#agent-worktrees-and-branches)), which is not
+inside the store unless you configured it that way; the `--help` text is out
+of date on this point. A relative `--path` is relative to the current
+directory. The directory must not exist or must be empty.
+
+JSON: `{ "agent": {...}, "backend_reason": <string>, "fork": { "files", "bytes", "elapsed" }, "elapsed_secs": <number>, "warnings": [...] }`,
+where `agent` has `name`, `state`, `base`, `from`, `branch`, `worktree`,
+`backend`, `isolation`, `freshness`, `created_unix`, `stamp` and `origin`.
+
+## `ferry run`
+
+```text
+Usage: ferry run [OPTIONS] [NAME] -- <COMMAND>...
+```
+
+Run a command in an agent's build context.
+
+Without NAME, uses the agent whose worktree contains the current directory.
+
+| Argument | Meaning |
+|---|---|
+| `[NAME]` | The agent |
+| `<COMMAND>...` | The command and its arguments, after `--` |
+
+Enters the agent's sandbox and replaces itself with the command. The working
+directory is the current directory if it is inside the agent's worktree, and
+the worktree root otherwise; either way it is a host path. `PATH` starts with
+the shim directory, and `FERRY_AGENT` and `FERRY_WORKTREE` are set. Every
+`cargo` the command runs, directly or from scripts, goes through the shim and
+builds in the agent's target dir.
+
+```sh
+ferry run a1 -- cargo test -p parser
+ferry run a1 -- claude
+ferry run -- cargo build      # inside a1's worktree: NAME comes from the directory
+```
+
+## `ferry shell`
+
+```text
+Usage: ferry shell [OPTIONS] [NAME]
+```
+
+Start an interactive shell in an agent's build context.
+
+Like `ferry run [NAME] -- $SHELL` (or `/bin/sh` when `SHELL` is unset).
+Without NAME, uses the agent whose worktree contains the current directory.
+
+## `ferry env`
+
+```text
+Usage: ferry env [OPTIONS] [NAME]
+```
+
+Print an agent's paths and environment for wiring into agent tools.
+
+Without NAME, uses the agent whose worktree contains the current directory.
+Prints shell lines you can `eval`:
+
+```sh
+export FERRY_WORKTREE=/home/you/.local/share/ferry/worktrees/myproject-d5c4fd3a48754db4/a1
+export PATH=/home/you/.cache/ferry/bin:"$PATH"
+# cargo in /home/you/.local/share/ferry/worktrees/myproject-d5c4fd3a48754db4/a1 now builds in agent a1's sandbox; other commands: ferry run a1 -- <command>
+```
+
+It never prints `CARGO_TARGET_DIR`: agent tools pass their environment to
+sub-agents working in other worktrees, and the shim picks the target dir per
+call instead.
+
+JSON: `{ "name", "worktree", "branch", "base", "backend", "isolation", "build_target_dir", "host_target_dir", "shim_dir", "run_prefix" }`.
+`build_target_dir` is the target dir as builds see it (the canonical path in
+the namespace sandbox). `host_target_dir` is the fork's host path for the
+reflink and copy backends and `null` for overlay, whose target exists only
+inside the sandbox. `run_prefix` is `["ferry", "run", <name>, "--"]`.
+
+## `ferry list`
+
+```text
+Usage: ferry list [OPTIONS]
+```
+
+List bases and agents with their status and disk usage.
+
+Bases: `*` marks the current base; `BUILT` is its age (or `incomplete`);
+`DISK` its size; `USED BY` the number of agents forked from it. Agents:
+`BASE` (with `(old)` when it is not the current base), `FORK` (backend),
+`SANDBOX` (`namespace` or `none`), `DISK`, `STATUS` and `WORKTREE`.
+
+`DISK` for an agent is the build state it holds beyond the base: the overlay
+upper layer, or for reflink clones the files rewritten since the fork (shared
+extents cannot be seen through `stat`), or the whole copy. `STATUS` is
+`running` when processes run in the agent's overlay sandbox, `incomplete`
+when spawning did not finish (remove it with `ferry rm`), `worktree missing`,
+or `idle`.
+
+JSON: `{ "bases": [...], "agents": [...] }`. A base has `id`, `ready`,
+`current`, `meta`, `agents` and `disk_bytes`; an agent has the `spawn` agent
+fields plus `base_is_current`, `worktree_exists`, `private_bytes` and
+`running` (PIDs).
+
+## `ferry rm`
+
+```text
+Usage: ferry rm [OPTIONS] <NAME>
+```
+
+Remove an agent's worktree and build state.
+
+Refuses if the worktree has uncommitted changes or processes are still running
+in the agent's sandbox. The branch is kept if it has new commits.
+
+| Option | Meaning |
+|---|---|
+| `--force` | Discard uncommitted changes and ignore running processes |
+
+Untracked files count as uncommitted changes. Running processes are detected
+for overlay agents. The branch is deleted only if it still points at the
+commit the agent started from; otherwise Ferry keeps it and says how many
+commits it carries.
+
+JSON: `{ "name", "worktree", "branch", "branch_deleted", "branch_commits" }`.
+
+## `ferry gc`
+
+```text
+Usage: ferry gc [OPTIONS]
+```
+
+Delete bases that no agent uses and that are not current.
+
+| Option | Meaning |
+|---|---|
+| `--dry-run` | Show what would be deleted |
+
+First removes abandoned agents created by the Claude Code hook: clean
+worktree, no new commits, nothing running, and not `git worktree lock`ed by
+Claude Code. Agents created with `ferry spawn` are never removed. Then deletes
+every base that is neither current nor used by an agent, including incomplete
+ones left by interrupted builds, and skips bases that are being built.
+
+The human-readable output lists the removed and skipped bases only; use
+`--json` to see reaped agents.
+
+JSON: `{ "removed": [...], "busy": [...], "kept": [...], "reaped_agents": [...], "freed_bytes": <number>, "dry_run": <bool> }`.
+
+## `ferry doctor`
+
+```text
+Usage: ferry doctor [OPTIONS]
+```
+
+Check platform capabilities and print fixes for what is missing.
+
+| Option | Meaning |
+|---|---|
+| `--apparmor-profile` | Print an `AppArmor` profile that allows this ferry binary to use user namespaces (Ubuntu 23.10+) |
+
+Prints one line per check (`✓` ok, `·` information, `!` warning with a `fix:`
+line, `✗` failure), then the plan: which fork backend agents will use and
+whether their first edit can reuse incremental state. See
+[Platform support](platforms.md#what-ferry-doctor-reports) for every check.
+
+`--apparmor-profile` prints the profile for the binary's resolved path, and
+warns on stderr if that path is writable by a non-root user. See
+[AppArmor on Ubuntu](troubleshooting.md#apparmor-on-ubuntu-2404-and-later).
+
+JSON: `{ "checks": [{ "name", "status", "detail", "fix" }], "capabilities": {...}, "plan": {...} }`.
+`capabilities` has `os`, `kernel`, `store_fs`, `reflink`, `userns`, `overlay`
+and `sysctls`; `plan` has `backend`, `backend_reason`, `isolation`,
+`freshness` and `incremental_reuse`.
+
+## `ferry shim`
+
+```text
+Usage: ferry shim [OPTIONS]
+```
+
+Print the directory holding Ferry's cargo shim.
+
+Put it first on PATH (`export PATH="$(ferry shim):$PATH"`): every cargo call
+made inside an agent worktree then runs in that agent's sandbox with its own
+target dir, and cargo elsewhere runs unchanged.
+
+The directory is `<store parent>/bin`; `ferry shim` creates it and points its
+`cargo` link at the running ferry binary. Run it inside a repository.
+
+JSON: `{ "shim_dir": <path> }`.
+
+## `ferry hook`
+
+```text
+Usage: ferry hook [OPTIONS] <COMMAND>
+```
+
+Hook handlers for agent tools (reads the tool's JSON on stdin).
+
+| Command | Meaning |
+|---|---|
+| `claude-worktree-create` | Claude Code `WorktreeCreate`: spawn an agent, print its worktree path |
+| `claude-worktree-remove` | Claude Code `WorktreeRemove`: remove the agent unless it has uncommitted work |
+| `claude-session-start` | Claude Code `SessionStart`: put the cargo shim on PATH via `$CLAUDE_ENV_FILE` |
+
+See [Claude Code](agents/claude-code.md#what-each-hook-does) for what each
+handler reads and does.
+
+## Ferry under other names
+
+The ferry binary also runs as:
+
+- **`cargo`**, through the shim link in `<store parent>/bin`. It resolves the
+  agent from the working directory and runs the real cargo (the next `cargo`
+  on `PATH` that is not Ferry) in that agent's sandbox, or unchanged outside
+  agent worktrees. It exits with status 127 if no real cargo is found.
+- **`ferry-rustc`**, a `RUSTC_WORKSPACE_WRAPPER` used only by the
+  experimental [remap-paths mode](remap-paths.md).

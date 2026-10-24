@@ -1,0 +1,15 @@
+[book]
+title = "Ferry"
+authors = ["Patrick Rall"]
+description = "Parallel AI agents, one warm build: forked, isolated Cargo builds per git worktree."
+language = "en"
+src = "src"
+
+[build]
+# Fail on a SUMMARY.md entry whose file does not exist instead of creating it.
+create-missing = false
+
+[output.html]
+site-url = "/ferry/"
+git-repository-url = "https://github.com/patwrall/ferry"
+edit-url-template = "https://github.com/patwrall/ferry/edit/main/docs/{path}"
