@@ -3,7 +3,7 @@
 
 mod common;
 
-use common::{ALL_PACKAGES, App, Snapshot, TestRepo, path_of};
+use common::{App, Snapshot, TestRepo, path_of};
 
 fn scenario(backend: &str, sandbox: &str) {
     let repo = TestRepo::with_env(&[("FERRY_BACKEND", backend), ("FERRY_SANDBOX", sandbox)]);
@@ -27,14 +27,9 @@ fn scenario(backend: &str, sandbox: &str) {
     assert_eq!(report["agent"]["backend"], backend, "{report}");
     assert_eq!(report["agent"]["isolation"], isolation, "{report}");
     let worktree = path_of(&report["agent"]["worktree"]);
-    // At its own paths the agent cannot trust local units, which may have
-    // captured the base's; dependencies would still be reused.
-    let relocated: &[&str] = if isolation == "none" {
-        ALL_PACKAGES
-    } else {
-        &[]
-    };
-    repo.build("a").assert_rebuilt(relocated);
+    // Even at its own paths the agent reuses every unit: none of the
+    // fixture's captured the base's paths.
+    repo.build("a").assert_rebuilt(&[]);
     assert_eq!(repo.app("a"), App::base());
 
     repo.set_marker(&worktree, "EDITED");

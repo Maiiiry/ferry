@@ -590,7 +590,8 @@ fn print_plan(report: &doctor::Report) {
         if plan.incremental_reuse {
             "in a namespace sandbox at canonical paths (incremental reuse on the first edit)"
         } else {
-            "at their own paths (dependencies reused; workspace crates rebuild once)"
+            "at their own paths (only crates that captured the base's paths rebuild; no \
+             incremental reuse on the first edit)"
         }
     );
 }

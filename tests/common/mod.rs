@@ -273,6 +273,11 @@ impl TestRepo {
         self.store().join("bases").join(id)
     }
 
+    /// The target dir of an agent forked by the reflink or copy backend.
+    pub fn agent_target(&self, name: &str) -> PathBuf {
+        self.store().join("agents").join(name).join("target")
+    }
+
     /// What `ferry doctor` detected on this machine for this store.
     #[track_caller]
     pub fn capabilities(&self) -> Capabilities {
@@ -454,6 +459,8 @@ pub struct Build {
     pub fresh: usize,
     /// Cargo's `-v` output, which names the reason for every dirty unit.
     pub log: String,
+    /// Target name and path of every executable Cargo reported, fresh or not.
+    pub executables: Vec<(String, PathBuf)>,
 }
 
 impl Build {
@@ -464,10 +471,17 @@ impl Build {
         let output = run(cargo.args(["--message-format=json", "-v"])).ok();
         let mut rebuilt = Vec::new();
         let mut fresh = 0;
+        let mut executables = Vec::new();
         for line in output.stdout.lines().filter(|l| l.starts_with('{')) {
             let message: Value = serde_json::from_str(line).unwrap();
             if message["reason"] != "compiler-artifact" {
                 continue;
+            }
+            if let Some(exe) = message["executable"].as_str() {
+                executables.push((
+                    str_of(&message["target"]["name"]).to_owned(),
+                    PathBuf::from(exe),
+                ));
             }
             if message["fresh"].as_bool() == Some(true) {
                 fresh += 1;
@@ -482,6 +496,16 @@ impl Build {
             rebuilt,
             fresh,
             log: output.stderr,
+            executables,
+        }
+    }
+
+    /// The executable Cargo reported for target `name`.
+    #[track_caller]
+    pub fn executable(&self, name: &str) -> &Path {
+        match self.executables.iter().find(|(target, _)| target == name) {
+            Some((_, path)) => path,
+            None => panic!("no executable for `{name}`: {:?}", self.executables),
         }
     }
 

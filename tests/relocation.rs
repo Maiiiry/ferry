@@ -13,7 +13,7 @@ use std::fs;
 use std::path::Path;
 use std::process::Command;
 
-use ferry::freshness::invalidate_relocated_units;
+use ferry::freshness::{Origin, apply_relocation, plan_relocation};
 
 fn cargo() -> OsString {
     std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into())
@@ -83,8 +83,10 @@ fn relocated_units_rebuild_and_see_the_new_paths() {
     }
     let tmp = tempfile::tempdir().unwrap();
     let root = tmp.path().canonicalize().unwrap();
-    let (old, new) = (root.join("old"), root.join("new"));
-    let old_ws = old.join("ws");
+    // Laid out as Ferry lays out a base and an agent.
+    let store = root.join("store/repo-0123456789abcdef");
+    let base = store.join("bases/a");
+    let old_ws = base.join("src");
     write(
         &old_ws.join("Cargo.toml"),
         "[workspace]\nmembers = [\"app\", \"shared\", \"plain\"]\nresolver = \"2\"\n",
@@ -114,26 +116,33 @@ fn relocated_units_rebuild_and_see_the_new_paths() {
         &old_ws.join("plain/src/lib.rs"),
         "pub const NAME: &str = \"plain\";\n",
     );
-    build(&old_ws, &old.join("target"));
+    let old_target = base.join("target");
+    build(&old_ws, &old_target);
 
-    let copied = Command::new("cp")
-        .arg("-a")
-        .arg(&old)
-        .arg(&new)
-        .status()
-        .unwrap();
-    assert!(copied.success());
-    let (new_ws, new_target) = (new.join("ws"), new.join("target"));
-    let invalidated =
-        invalidate_relocated_units(&new_target, &[old_ws.clone(), old.join("target")]).unwrap();
-    assert!(
-        invalidated.iter().any(|unit| unit.contains("app")),
-        "{invalidated:?}"
-    );
-    assert!(
-        !invalidated.iter().any(|unit| unit.contains("plain")),
-        "{invalidated:?}"
-    );
+    let agent = root.join("agent");
+    let (new_ws, new_target) = (agent.join("ws"), agent.join("target"));
+    fs::create_dir_all(&agent).unwrap();
+    for (from, to) in [(&old_ws, &new_ws), (&old_target, &new_target)] {
+        let copied = Command::new("cp")
+            .arg("-a")
+            .arg(from)
+            .arg(to)
+            .status()
+            .unwrap();
+        assert!(copied.success());
+    }
+    let origin = Origin {
+        store: store.clone(),
+        checkout: old_ws.clone(),
+        host_checkout: old_ws.clone(),
+        git_dir: root.join("repo/.git/worktrees/src"),
+        live: Some("a".into()),
+    };
+    let plan = plan_relocation(&old_target, &origin).unwrap();
+    let units: Vec<&str> = plan.remove.iter().map(|r| r.unit.as_str()).collect();
+    assert!(units.iter().any(|u| u.starts_with("app ")), "{units:?}");
+    assert!(!units.iter().any(|u| u.starts_with("plain ")), "{units:?}");
+    apply_relocation(&new_target, &plan).unwrap();
 
     let rebuilt = build(&new_ws, &new_target);
     assert_eq!(rebuilt.get("app"), Some(&false), "{rebuilt:?}");

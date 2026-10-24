@@ -85,8 +85,9 @@ fn configured_target_and_build_dirs_cannot_redirect_builds() {
 
 /// Without the namespace sandbox an agent builds at other paths than its
 /// base. A build script that writes its `CARGO_MANIFEST_DIR` into generated
-/// code leaves that path in no dep-info, so only rebuilding the agent's
-/// local units keeps it from reading the base's checkout.
+/// code leaves that path in no dep-info; spawn finds it in the script's
+/// `OUT_DIR` and makes the script rerun, so `embed` and its dependents (and
+/// nothing else) rebuild in the agent's first build.
 #[test]
 fn without_a_sandbox_generated_code_sees_the_agents_paths() {
     let repo = TestRepo::with_env(&[("FERRY_SANDBOX", "off")]);
@@ -115,13 +116,16 @@ fn without_a_sandbox_generated_code_sees_the_agents_paths() {
     repo.base();
 
     let worktree = repo.spawn("a");
-    let out = common::run(repo.agent_cargo("a").args(["run", "-q", "-p", "app"])).ok();
+    repo.build("a").assert_rebuilt(&["embed", "app"]);
+    // Run directly: another cargo call could hide a unit that lags a build.
+    let out = common::run(&mut repo.command(repo.agent_target("a").join("debug/app"))).ok();
     let dir = out
         .stdout
         .lines()
         .find_map(|l| l.strip_prefix("dir="))
         .unwrap();
     assert_eq!(Path::new(dir), worktree.join("embed"), "{out}");
+    repo.build("a").assert_rebuilt(&[]);
 }
 
 /// Cargo reads `.cargo/config.toml` from every directory above the one it

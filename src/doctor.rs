@@ -191,8 +191,8 @@ fn namespace_checks(caps: &Capabilities) -> Vec<Check> {
     if caps.os == Os::Macos {
         return vec![info(
             "sandbox",
-            "macOS has no mount namespaces: agents build at their own paths (dependencies reused, \
-             workspace crates rebuild once, no incremental reuse on the first edit)"
+            "macOS has no mount namespaces: agents build at their own paths (only crates that \
+             captured the base's paths rebuild; no incremental reuse on the first edit)"
                 .into(),
         )];
     }

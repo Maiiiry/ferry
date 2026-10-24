@@ -9,9 +9,9 @@
 //! host paths of the store and worktree stay reachable inside.
 //!
 //! With [`Isolation::None`], builds run at their host paths with
-//! `CARGO_TARGET_DIR` pointing at the agent's own target dir. Dependencies are
-//! reused; the workspace's own crates rebuild once, and incremental reuse on
-//! the first edit is lost.
+//! `CARGO_TARGET_DIR` pointing at the agent's own target dir. Only crates
+//! that captured the base's paths rebuild (see `freshness::plan_relocation`);
+//! no incremental reuse on the first edit.
 
 use std::path::{Path, PathBuf};
 

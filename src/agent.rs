@@ -355,21 +355,11 @@ fn populate(
     let stats = fork::backend(choice.kind)?.fork(&fork_paths(paths, &base_paths.target))?;
     let _ = crate::platform::exclude_from_backups(&paths.dir);
     if meta.isolation == Isolation::None {
-        // The agent builds at a different absolute source path than the
-        // base did. Only the source root matters: the base's target dir is
-        // immutable and outlives the agent, so a captured OUT_DIR still reads
-        // what this agent's own build script would produce, and Cargo
-        // re-runs dependents whenever that output changes.
-        let old_src = match base.isolation {
-            Isolation::Namespace => ctx.store.canonical_src(),
-            Isolation::None => base_paths.src.clone(),
-        };
-        if freshness::relocate(&paths.target, &base_paths.src, &old_src)?.is_none() {
-            warnings.push(
-                "the base has no readable Cargo.lock, so this agent's first build is a full build"
-                    .into(),
-            );
-        }
+        // The agent builds at other absolute paths than the base did; units
+        // that captured the base's must rebuild.
+        let plan = base::relocation_plan(ctx, base)?;
+        let report = freshness::apply_relocation(&paths.target, &plan)?;
+        warnings.extend(report.warning());
     }
 
     meta.state = AgentState::Ready;

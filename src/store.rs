@@ -8,6 +8,8 @@
 //!   mnt/src, mnt/target         canonical mountpoints (Linux namespace mode)
 //!   bases/<id>/                 immutable once base.json exists
 //!     base.json  src/  target/
+//!     relocation.json           what a fork without the sandbox removes
+//!                               from target/ (written before base.json)
 //!   bases/<id>.lock             held while the base is being built
 //!   agents/<name>/
 //!     agent.json  lock  target/ | upper/ work/ mount.lock ns.json
@@ -44,6 +46,9 @@ pub struct BasePaths {
     pub meta: PathBuf,
     pub src: PathBuf,
     pub target: PathBuf,
+    /// The relocation plan for forks of `target` that build without the
+    /// namespace sandbox; only bases built without it have one.
+    pub relocation: PathBuf,
     pub lock: PathBuf,
 }
 
@@ -132,6 +137,7 @@ impl Store {
             meta: dir.join("base.json"),
             src: dir.join("src"),
             target: dir.join("target"),
+            relocation: dir.join("relocation.json"),
             lock: self.root.join("bases").join(format!("{id}.lock")),
             dir,
         }

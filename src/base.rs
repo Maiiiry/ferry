@@ -4,7 +4,8 @@
 //! Agents fork from it read-only, overlay agents use its target dir as their
 //! lower layer, and a refresh builds a new base next to it instead of
 //! updating it. `gc` deletes a base only when no agent references it and it
-//! is not current.
+//! is not current. A base built without the namespace sandbox also has its
+//! relocation plan, `relocation.json`, written before `base.json`.
 
 use std::collections::BTreeSet;
 use std::fs;
@@ -192,6 +193,7 @@ pub fn build(ctx: &Context, rev: &str, cold: bool) -> Result<BuildReport> {
         unit_inputs: inputs,
         seeded_from: seed.map(|s| s.id),
     };
+    write_relocation_plan(ctx, &id, isolation, &paths)?;
     // Writing base.json is what makes the base ready (and immutable).
     fsutil::write_json_atomic(&paths.meta, &base)?;
     // Made current before the base lock is released, so gc (which skips
@@ -387,12 +389,92 @@ fn clone_seed_target(
         upper: paths.dir.join("unused-upper"),
         work: paths.dir.join("unused-work"),
     })?;
-    // Without the canonical mount the seed was built at its own checkout
-    // path, which the new base's units must not keep pointing at.
+    // The seed's units may have captured the seed's paths, and the seed may
+    // be collected.
     if isolation == Isolation::None {
-        freshness::relocate(&paths.target, &seed_paths.src, &seed_paths.src)?;
+        let origin = relocation_origin(ctx, &seed.id, isolation, false);
+        let plan = freshness::plan_relocation(&paths.target, &origin)?;
+        let report = freshness::apply_relocation(&paths.target, &plan)?;
+        if report.units + report.reruns > 0 {
+            fsutil::note(&format!(
+                "{} build units of seed {} captured its paths and rebuild (e.g. {})",
+                report.units + report.reruns,
+                seed.id.short(),
+                report.examples.join(", ")
+            ));
+        }
     }
     Ok(())
+}
+
+/// Where base `id`'s target was built. `live` if forks are planned for while
+/// the base is kept, as gc keeps every base an agent forked.
+pub(crate) fn relocation_origin(
+    ctx: &Context,
+    id: &BaseId,
+    isolation: Isolation,
+    live: bool,
+) -> freshness::Origin {
+    let paths = ctx.store.base(id);
+    let checkout = match isolation {
+        Isolation::Namespace => ctx.store.canonical_src(),
+        Isolation::None => paths.src.clone(),
+    };
+    // A worktree's `.git` file names its own git dir; without it, every
+    // worktree's counts.
+    let dot_git = paths.src.join(".git");
+    let git_dir = fs::read_to_string(&dot_git)
+        .ok()
+        .and_then(|s| {
+            s.lines()
+                .next()?
+                .strip_prefix("gitdir:")
+                .map(|d| paths.src.join(d.trim()))
+        })
+        .unwrap_or_else(|| ctx.repo.common_dir.join("worktrees"));
+    freshness::Origin {
+        store: ctx.store.root().to_path_buf(),
+        checkout,
+        host_checkout: paths.src,
+        git_dir,
+        live: live.then(|| id.to_string()),
+    }
+}
+
+/// Stores the plan for forks of a base built without the namespace
+/// sandbox, so that spawning only applies it.
+fn write_relocation_plan(
+    ctx: &Context,
+    id: &BaseId,
+    isolation: Isolation,
+    paths: &BasePaths,
+) -> Result<()> {
+    if isolation != Isolation::None {
+        return Ok(());
+    }
+    let origin = relocation_origin(ctx, id, isolation, true);
+    let plan = freshness::plan_relocation(&paths.target, &origin)?;
+    if plan.cacheable() {
+        fsutil::write_json_atomic(&paths.relocation, &plan)?;
+    }
+    Ok(())
+}
+
+/// The relocation plan for a fork of `base` that builds without the
+/// namespace sandbox: the one stored with the base if it fits these rules,
+/// else computed on the base's target, which holds the fork's bytes.
+pub(crate) fn relocation_plan(ctx: &Context, base: &BaseMeta) -> Result<freshness::RelocationPlan> {
+    let paths = ctx.store.base(&base.id);
+    let live = base.isolation == Isolation::None;
+    if live
+        && let Ok(bytes) = fs::read(&paths.relocation)
+        && let Ok(plan) = serde_json::from_slice::<freshness::RelocationPlan>(&bytes)
+        && plan.fits(base.id.as_str())
+    {
+        return Ok(plan);
+    }
+    let origin = relocation_origin(ctx, &base.id, base.isolation, live);
+    freshness::plan_relocation(&paths.target, &origin)
 }
 
 fn set_current(ctx: &Context, id: &BaseId) -> Result<()> {
