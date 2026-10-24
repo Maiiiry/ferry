@@ -2,7 +2,7 @@
 //! incremental state for workspace libraries when builds go through
 //! `ferry-rustc`.
 //!
-//! Reuse is counted the way the research brief did: rustc hard-links
+//! Reuse is counted by inode: rustc hard-links
 //! unchanged work products into its new session directory, so a reused
 //! codegen unit's object file keeps the inode it had in the copied target.
 

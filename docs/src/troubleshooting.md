@@ -110,7 +110,7 @@ seccomp should be the only layer there. On SELinux hosts, nested container
 tooling commonly needs `--security-opt label=disable`.
 
 These container facts come from the profiles' and the kernel's sources and
-from Ferry's research probes; Ferry itself has not been tested in containers.
+from standalone probes; Ferry itself has not been tested in containers.
 
 ### Agent sandboxes
 

@@ -19,20 +19,15 @@ Linux (btrfs), with paths shortened.
 
 ## Install
 
-The packaged installers become available with Ferry's first release:
-
 ```sh
 # From crates.io (the crate is ferry-rs; the binary is ferry)
 cargo install ferry-rs --locked
 
 # Prebuilt binary, Linux and macOS
 curl --proto '=https' --tlsv1.2 -LsSf https://github.com/patwrall/ferry/releases/latest/download/ferry-rs-installer.sh | sh
-
-# Homebrew
-brew install patwrall/tap/ferry
 ```
 
-Until then, build from a clone of the repository:
+Or build from a clone of the repository:
 
 ```sh
 git clone https://github.com/patwrall/ferry

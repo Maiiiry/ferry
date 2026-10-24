@@ -81,8 +81,8 @@ Binaries with debug info get nothing on Linux because every codegen unit of a
 binary embeds a gdb scripts section, and computing it reads the absolute
 paths of all its dependencies. Apple targets do not emit that section, so on
 macOS binaries are predicted to be reused like libraries. That prediction
-comes from rustc's source and an experiment with custom Linux target specs
-during Ferry's research; **it has not been verified on a real Mac.**
+comes from rustc's source and an experiment with custom Linux target specs;
+**it has not been verified on a real Mac.**
 
 A second test runs the same edit through Ferry itself: `ferry base` and
 `ferry spawn` with the sandbox off, the edit, then the agent's first build.
