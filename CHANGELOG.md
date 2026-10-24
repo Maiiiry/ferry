@@ -16,3 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   published; when Ferry cannot see every call, the refresh is rebuilt from
   scratch. `[base] prune = false` (or `FERRY_BASE_PRUNE=0`) restores cold
   refreshes. `base.json` and `ferry --json base` gain `observed` and `pruned`.
+- `ferry base --watch [--rev REF] [--interval SECS] [--gc]` keeps running and
+  builds a base each time the revision settles on a new commit, skipping
+  rebases, merges and bisects; `--json` prints one event per line. Spawning an
+  agent at another commit than its base now says how to catch up.

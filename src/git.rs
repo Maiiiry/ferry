@@ -148,6 +148,13 @@ impl Repo {
         Ok(CommitId(id))
     }
 
+    /// The git dir of the worktree at `toplevel`, where a rebase, merge or
+    /// bisect in progress keeps its state.
+    pub fn git_dir(&self) -> Result<PathBuf> {
+        let out = run(&self.toplevel, ["rev-parse", "--absolute-git-dir"])?;
+        Ok(path_from_bytes(out.trim_ascii_end()))
+    }
+
     /// Detached worktree at `commit` (used for bases).
     pub fn add_detached_worktree(&self, path: &Path, commit: &CommitId) -> Result<()> {
         run(

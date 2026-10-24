@@ -211,7 +211,9 @@ base keep that base alive.
 - **`warning: N of M tracked files differ from base ...`** at spawn: the agent
   starts from a different commit than its base (`--from`), so crates using the
   changed files rebuild on the first build. Run `ferry base --rev <commit>` to
-  have a base at that commit.
+  have a base at that commit, or keep `ferry base --watch` running so the base
+  follows `HEAD`. The warning says when a base for the agent's commit is
+  already being built.
 - **The workspace's own crates rebuild after a spawn without the namespace
   sandbox.** The agent builds at other absolute paths than its base, and any
   local crate may have captured the base's (a build script writing

@@ -119,6 +119,7 @@ relative to what the base was built from.
   bin/ferry-rustc -> ...           experimental remap wrapper
   <repo-name>-<hash>/              one store per repository (hash of git common dir)
     store.json  lock  current
+    watch.lock                     held by `ferry base --watch`
     mnt/src  mnt/target            canonical mountpoints (empty on the host)
     bases/<commit>-<fp>/           immutable once base.json exists
       base.json  src/  target/
@@ -194,6 +195,20 @@ needs one writable-root entry for it plus the worktree (its working directory).
 8. Record files the build wrote into the source tree (build scripts writing
    outside `OUT_DIR`) as warnings; write `base.json`; set `current` before
    releasing the base lock.
+
+### `ferry base --watch [--rev R] [--interval S] [--gc]`
+
+A foreground poller. It takes `<store>/watch.lock` (a second watcher is
+refused, naming the holder), then every `S` seconds (default 2) resolves `R`
+with one `git rev-parse`, skipping polls while the watcher's worktree is in
+a rebase, merge, cherry-pick, revert or bisect. A commit seen on two polls
+in a row that is neither the current base's commit at startup nor the last
+one built or failed is built by a child `ferry --json base --rev <commit>`
+(building enters the sandbox for the rest of the process, and the child
+re-reads `ferry.toml`); its stderr is the watcher's. A refresh is never
+interrupted when `R` moves: the newest commit is built after it. A failed
+build leaves the current base alone and is not retried until `R` moves.
+`--gc` runs gc in the watcher after each new base.
 
 ### `ferry spawn NAME [--from REF] [--path DIR] [--branch B]`
 
@@ -361,7 +376,8 @@ while an agent's build runs; the base lock is held for its own warm build:
 | Lock | Held by | Duration |
 |---|---|---|
 | `<store>/lock` | spawn (registry step), rm, gc, setting `current` | milliseconds to seconds |
-| `bases/<id>.lock` | `ferry base` for that id (exclusive), a refresh seeded from it (shared); gc only try-locks | the base build |
+| `bases/<id>.lock` | `ferry base` for that id (exclusive), a refresh seeded from it (shared); gc and spawn only try-lock | the base build |
+| `<store>/watch.lock` | `ferry base --watch` (try-locked) | the life of the watcher |
 | `agents/<name>/lock` | spawn (whole), rm, sandbox entry for runs | spawn; ~1 ms per run |
 | `agents/<name>/busy.lock` | shared by every `ferry run`, `shell` and shim call through an inherited fd; rm, list and gc try it exclusively | the life of the process and its children |
 | `agents/<name>/mount.lock` | shared by every process using an overlay mount, as above | the life of the mount's users |

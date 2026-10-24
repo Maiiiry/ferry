@@ -66,7 +66,7 @@ pub struct BaseMeta {
     pub pruned: Option<Pruned>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct BuildReport {
     pub base: BaseMeta,
     /// True if an identical base already existed and was reused.

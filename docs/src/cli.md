@@ -90,6 +90,9 @@ Build an immutable warm base that new agents fork from.
 |---|---|
 | `--rev <REV>` | Commit to build (any git revision) [default: HEAD] |
 | `--cold` | Build from scratch instead of seeding from the newest compatible base |
+| `--watch` | Keep running and build a base each time `--rev` moves to a new commit (not with `--cold`) |
+| `--interval <SECS>` | With `--watch`: seconds between polls of `--rev` [default: 2] |
+| `--gc` | With `--watch`: run `ferry gc` after each new base |
 
 Checks out the commit into the store, runs the [warm commands](configuration.md#base-what-warms-a-base),
 and makes the base current, so new agents fork from it. If a base with the
@@ -116,6 +119,26 @@ has `id`, `commit`, `created_unix`, `build_secs`, `freshness`, `isolation`,
 `unit_inputs` (the hash seeding compares), `seeded_from`, `observed` (Ferry
 saw every cargo call of the warm build) and `pruned` (`{ "units", "bytes" }`
 deleted from the seed's units, or `null`).
+
+### `ferry base --watch`
+
+Runs in the foreground until interrupted (run it in a terminal tab, a
+systemd or launchd user service, or a devcontainer's `postStartCommand`), so
+the current base follows `--rev` (default `HEAD`; `--rev origin/main` follows
+fetches). It polls the revision, and once a new commit has been seen on two
+polls in a row it runs `ferry base --rev <commit>` in a child process. Polls
+are skipped while a rebase, merge, cherry-pick, revert or bisect is in
+progress. A build for a commit that fails keeps the previous base current and
+is not retried until the revision moves again; a build is never cut short
+when the revision moves, the newest commit is built next. Only one watcher
+runs per repository; a second one is refused. With `--gc`, unused bases are
+deleted after each new base, which matters on filesystems without reflinks,
+where every base holds a full copy of the target dir.
+
+JSON: one object per line, with `event` set to `building` (`commit`),
+`built` (`commit`, `report`: what `ferry --json base` prints), `failed`
+(`commit`, `error`), `collected` (`report`: what `ferry --json gc` prints)
+or `gc-failed` (`error`).
 
 ## `ferry spawn`
 

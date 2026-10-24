@@ -694,8 +694,13 @@ pub fn skip(reason: &str) {
 }
 
 /// Retries `check` for up to five seconds.
-pub fn eventually(mut check: impl FnMut() -> bool) -> bool {
-    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+pub fn eventually(check: impl FnMut() -> bool) -> bool {
+    eventually_for(Duration::from_secs(5), check)
+}
+
+/// Retries `check` for up to `limit`.
+pub fn eventually_for(limit: Duration, mut check: impl FnMut() -> bool) -> bool {
+    let deadline = std::time::Instant::now() + limit;
     while !check() {
         if std::time::Instant::now() > deadline {
             return false;

@@ -51,6 +51,8 @@ pub mod shim;
 pub mod store;
 #[cfg(unix)]
 pub mod toolchain;
+#[cfg(unix)]
+pub mod watch;
 
 #[cfg(unix)]
 pub use error::{Error, Result};

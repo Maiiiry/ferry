@@ -15,6 +15,18 @@ fn spawn_without_edits_rebuilds_nothing() {
 }
 
 #[test]
+fn an_agent_ahead_of_the_base_is_told_how_to_catch_up() {
+    let repo = TestRepo::new();
+    repo.base();
+    repo.set_marker(repo.root(), "LEAF_V2");
+    repo.commit_all("v2");
+    let spawn = repo.ferry_json(["spawn", "a"]);
+    let warnings = spawn["warnings"].to_string();
+    assert!(warnings.contains("ferry base --watch"), "{spawn}");
+    assert_eq!(repo.app("a").marker, "LEAF_V2");
+}
+
+#[test]
 fn an_edit_rebuilds_only_the_edited_crate_and_its_dependents() {
     let repo = TestRepo::new();
     repo.base();

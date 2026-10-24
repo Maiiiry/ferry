@@ -254,9 +254,10 @@ or loading the AppArmor profile on Ubuntu) for you to review and run.
 **Do I have to commit `ferry.toml`?** No. Ferry reads it from your main
 checkout's working tree.
 
-**What happens when main moves on?** Run `ferry base` again. The new base is
-seeded from the old one, new agents fork from it, and existing agents keep
-theirs.
+**What happens when main moves on?** Run `ferry base` again, or keep
+`ferry base --watch` running to have it done whenever `HEAD` moves. The new
+base is seeded from the old one (even across `Cargo.toml` and `Cargo.lock`
+changes), new agents fork from it, and existing agents keep theirs.
 
 **Which cargo commands go through Ferry?** Every `cargo` that resolves to the
 shim, including `cargo clippy` and `cargo nextest`. Warm what your agents run:
