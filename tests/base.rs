@@ -107,12 +107,20 @@ fn a_new_base_leaves_live_agents_on_the_old_one_until_they_are_removed() {
     repo.build("new").assert_rebuilt(&[]);
 }
 
-/// Package names cargo compiled (not fresh) according to the JSON messages
-/// a warm command printed; `ferry base` sends build output to stderr.
-fn compiled_in_base_build(stderr: &str) -> Vec<String> {
-    let mut names: Vec<String> = stderr
+/// The JSON messages a warm command printed; `ferry base` sends build output
+/// to stderr. Cargo writes a status line (`    Finished` and the rest) to
+/// stderr in two writes while the shim forwards the messages from cargo's
+/// stdout, so a message can start in the middle of a line.
+fn messages(stderr: &str) -> impl Iterator<Item = &str> {
+    stderr
         .lines()
-        .filter_map(|l| serde_json::from_str::<Value>(l).ok())
+        .filter_map(|l| l.find(r#"{"reason":""#).map(|at| &l[at..]))
+}
+
+/// Package names cargo compiled (not fresh) according to [`messages`].
+fn compiled_in_base_build(stderr: &str) -> Vec<String> {
+    let mut names: Vec<String> = messages(stderr)
+        .filter_map(|m| serde_json::from_str::<Value>(m).ok())
         .filter(|m| m["reason"] == "compiler-artifact" && m["fresh"] == false)
         .map(|m| common::package_name(str_of(&m["package_id"])).to_owned())
         .collect();
@@ -155,10 +163,8 @@ fn a_refreshed_base_is_seeded_from_the_previous_one_and_rebuilds_only_changes() 
     // The shim forwards the JSON messages the command asked for (which
     // `compiled_in_base_build` reads above) while recording them, and
     // without printing them a second time.
-    let artifacts: Vec<&str> = refresh
-        .stderr
-        .lines()
-        .filter(|l| l.starts_with(r#"{"reason":"compiler-artifact""#))
+    let artifacts: Vec<&str> = messages(&refresh.stderr)
+        .filter(|m| m.starts_with(r#"{"reason":"compiler-artifact""#))
         .collect();
     let unique: std::collections::BTreeSet<&str> = artifacts.iter().copied().collect();
     assert!(!artifacts.is_empty(), "{}", refresh.stderr);
@@ -527,10 +533,7 @@ fn program_output_of_warm_commands_is_forwarded() {
         run.stderr.contains(&format!("marker={BASE_MARKER}")),
         "{run}"
     );
-    assert!(
-        !run.stderr.lines().any(|l| l.starts_with(r#"{"reason""#)),
-        "{run}"
-    );
+    assert_eq!(messages(&run.stderr).count(), 0, "{run}");
 }
 
 #[test]
