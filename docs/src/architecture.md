@@ -59,7 +59,7 @@ Each one is enforced in code (module named) and covered by tests.
 
 ```text
 src/
-  main.rs        multicall: `cargo` (shim) or `ferry` (cli)
+  main.rs        multicall: `cargo` (shim), `ferry-rustc` (remap), or `ferry` (cli)
   lib.rs         module list; compile_error! on non-unix
   cli/           clap definitions, command handlers, human/JSON output (anyhow)
   config.rs      ferry.toml schema, platform overrides, FERRY_* env, Settings
@@ -74,6 +74,7 @@ src/
   agent.rs       spawn / rm / list / env, session and cargo exec, reaping
   shim.rs        the cargo shim (PATH entry → per-call agent resolution)
   hook.rs        agent-tool hooks (Claude Code WorktreeCreate/Remove, SessionStart)
+  remap.rs       experimental path-independent incremental builds without namespaces
   fork/          Backend trait + selection; reflink (Linux FICLONE), clonefile
                  (macOS), overlay (Linux), copy; shared tree walker
   sandbox/       Plan, enter(), users(); linux.rs: user+mount namespaces,
@@ -92,6 +93,7 @@ relative to what the base was built from.
 ```text
 <store parent>/                    $FERRY_HOME, [store] dir, or the platform cache dir
   bin/cargo -> /path/to/ferry      the shim
+  bin/ferry-rustc -> ...           experimental remap wrapper
   <repo-name>-<hash>/              one store per repository (hash of git common dir)
     store.json  lock  current
     mnt/src  mnt/target            canonical mountpoints (empty on the host)
@@ -100,13 +102,19 @@ relative to what the base was built from.
     bases/<commit>-<fp>.lock
     agents/<name>/
       agent.json  lock
-      src/                         default worktree location (--path overrides)
       target/                      reflink / copy backends
-      upper/  work/  ns.json       overlay backend
+      upper/  work/                overlay backend
+      mount.lock  ns.json          overlay: in-use lock and live namespace identity
+
+<worktree parent>/                 FERRY_WORKTREES, [agent] worktree-dir, $FERRY_HOME/worktrees,
+  <repo-name>-<hash>/<name>/       or the platform data dir; --path overrides per agent
 ```
 
-Everything writable lives under one directory, so an agent tool's sandbox
-needs a single writable-root entry for Ferry.
+Build state lives in the cache dir; agent worktrees, which hold uncommitted
+work, live in the data dir (`~/.local/share/ferry`, `~/Library/Application
+Support/ferry`) because macOS may purge caches and users clear them casually.
+All build state Ferry writes is under one directory, so an agent tool's sandbox
+needs one writable-root entry for it plus the worktree (its working directory).
 
 ## Lifecycle
 
@@ -130,7 +138,8 @@ needs a single writable-root entry for Ferry.
    (current if it is at `REF`, else any ready base at `REF`, else current);
    decide isolation; write `agent.json` with `state: creating`; take the agent
    lock.
-2. `git worktree add -b <prefix><name>`, plan stamping against the base
+2. `git worktree add -b <prefix><name>`, copy the base's `Cargo.lock` if the
+   repository does not track one, plan stamping against the base
    (invariant 1), stamp, `git update-index --refresh`.
 3. Select the backend, fork the base target, and when the agent runs without
    the namespace sandbox, invalidate units whose dep-info embeds base paths
@@ -180,12 +189,12 @@ pub trait Backend {
 
 | Backend | Platforms | Fork cost | Notes |
 |---|---|---|---|
-| `reflink` | Linux (btrfs, XFS, bcachefs, OpenZFS 2.2+), macOS (APFS) | per-file clone (Linux), one `clonefile(2)` (macOS) | target is a real dir; hard links inside the tree preserved; mtimes preserved |
-| `overlay` | Linux 5.11+, namespace sandbox required | O(1) | copy-up copies whole files on first write; mount lives only inside the sandbox |
+| `overlay` | Linux 5.11+, namespace sandbox required | O(1) | copy-up copies a file on its first write; on btrfs/XFS the copy-up is itself a reflink. The mount exists only inside the sandbox |
+| `reflink` | Linux (btrfs, XFS, OpenZFS 2.2+), macOS (APFS) | per-file `FICLONE` (Linux), one `clonefile(2)` of the tree (macOS) | target is a real dir; mtimes preserved |
 | `copy` | everywhere | full copy | fallback |
 
-`auto` picks reflink when the store filesystem supports it, else overlay when
-the agent runs in a namespace sandbox and overlayfs works there, else copy. An
+`auto` picks overlay when the agent runs in a namespace sandbox and overlayfs
+works there, else reflink when the store filesystem supports it, else copy. An
 explicit backend that is unavailable is an error, never a silent fallback.
 
 ## Sandbox (Linux)
@@ -199,23 +208,34 @@ single-threaded (`unshare(CLONE_NEWUSER)` fails with `EINVAL` otherwise):
    Ferry calls `mount(2)` directly).
 2. Make `/` recursively private.
 3. Bind-mount the worktree onto `mnt/src`; bind-mount the target dir, or mount
-   overlayfs (`lowerdir=base target, upperdir, workdir, userxattr`), onto
-   `mnt/target`.
+   overlayfs (`lowerdir` = base target, `upperdir`, `workdir`, always
+   `userxattr`), onto `mnt/target`.
 
-Two overlay mounts must never use the same upper dir at once. For overlay
-agents, `enter` therefore runs under the agent lock and either *joins* a live
-member of the agent's recorded mount namespace (`setns` into its user and mount
-namespaces) or creates a new one and records its identity in `ns.json`. If the
-only remaining users are in nested namespaces that cannot be joined, it
-refuses. Bind-mount-only sandboxes (reflink, copy) are safe to create per call.
+Two overlay mounts must never use the same upper dir at once: the kernel only
+warns, and the two views then diverge. Every process using an agent's overlay
+therefore holds a shared `flock` on `agents/<name>/mount.lock` through an
+inherited file descriptor. Under the agent lock, `enter` tries an exclusive
+lock on it: if that succeeds nothing uses the overlay, so it mounts a new one
+and records the namespace identity in `ns.json`; otherwise it `setns`es into a
+live process of the recorded namespace, and refuses if none can be joined.
+Bind-mount-only sandboxes (reflink, copy) are safe to create per call.
 
 Without namespaces (macOS; Linux with `sandbox = off` or where user
 namespaces are blocked) builds run at host paths. Crate-level reuse still
 works; the first edit pays for rustc's incremental state being keyed on
-absolute paths. Because units that captured absolute paths of the base
-(`env!("CARGO_MANIFEST_DIR")`, `OUT_DIR`, workspace-relative `include_str!` on
-Cargo <= 1.100) would otherwise stay "fresh" while pointing at the base, spawn
-deletes the fork's fingerprints for exactly those units, so Cargo rebuilds them.
+absolute paths. Units that captured the base's absolute *source* paths
+(`env!("CARGO_MANIFEST_DIR")`, workspace-relative `include_str!` on Cargo <=
+1.100, absolute `rerun-if-changed` paths) would otherwise stay "fresh" while
+pointing at the base, so spawn deletes the fork's fingerprints for exactly
+those units and Cargo rebuilds them. Captured `OUT_DIR` paths are left alone:
+they point into the base's immutable target dir, which outlives the agent.
+
+The experimental remap mode (`[sandbox] remap-paths`, rustc 1.98+) recovers
+incremental reuse without namespaces: builds reach the target dir through a
+`.ferry-target` link inside the source root, and the `ferry-rustc`
+`RUSTC_WORKSPACE_WRAPPER` adds `-Zremap-cwd-prefix=.` (with `RUSTC_BOOTSTRAP=1`
+for workspace-member compiles only) and rewrites absolute worktree and target
+paths in rustc's arguments to relative ones.
 
 ## Freshness modes
 
