@@ -42,20 +42,15 @@ state.
 
 ## Install
 
-These install methods become available with Ferry's first release:
-
 ```sh
 # crates.io (the crate is ferry-rs; it installs the `ferry` binary)
 cargo install ferry-rs --locked
 
 # Prebuilt binary for Linux or macOS
 curl --proto '=https' --tlsv1.2 -LsSf https://github.com/patwrall/ferry/releases/latest/download/ferry-rs-installer.sh | sh
-
-# Homebrew
-brew install patwrall/tap/ferry
 ```
 
-Until then, build from source: `git clone https://github.com/patwrall/ferry && cargo install --path ferry --locked`.
+Or build from source: `git clone https://github.com/patwrall/ferry && cargo install --path ferry --locked`.
 
 On Ubuntu 24.04 or later, run `ferry setup apparmor` once (it shows each step
 and asks before one `sudo` call); see
