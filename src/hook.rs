@@ -15,6 +15,7 @@ use serde::Deserialize;
 use crate::agent::{self, Origin, SpawnOptions};
 use crate::context::Context;
 use crate::error::{Error, IoContext, Result};
+use crate::fsutil;
 use crate::store::AgentName;
 
 #[derive(Debug, Deserialize)]
@@ -36,8 +37,14 @@ pub fn claude_worktree_create(stdin: &mut dyn Read, stdout: &mut dyn Write) -> R
     let ctx = Context::discover(&input.cwd)?;
     let name = agent_name(&input.name)?;
     let worktree = match agent::load(&ctx, &name) {
+        Ok(meta) if meta.origin != Origin::ClaudeHook => {
+            return Err(Error::Refused(format!(
+                "an agent named `{name}` already exists and was not created by Claude Code; \
+                 pick another worktree name"
+            )));
+        }
         Ok(meta) if meta.state == agent::AgentState::Ready => {
-            eprintln!("ferry: reusing agent {name}");
+            fsutil::note(&format!("reusing agent {name}"));
             meta.worktree
         }
         Ok(_) => {
@@ -55,12 +62,12 @@ pub fn claude_worktree_create(stdin: &mut dyn Read, stdout: &mut dyn Write) -> R
                 },
             )?;
             for w in &report.warnings {
-                eprintln!("ferry: warning: {w}");
+                fsutil::note(&format!("warning: {w}"));
             }
-            eprintln!(
-                "ferry: spawned {name} ({} fork, {:.2}s)",
+            fsutil::note(&format!(
+                "spawned {name} ({} fork, {:.2}s)",
                 report.agent.backend, report.elapsed_secs
-            );
+            ));
             report.agent.worktree
         }
         Err(e) => return Err(e),
@@ -83,10 +90,10 @@ pub fn claude_worktree_remove(stdin: &mut dyn Read) -> Result<()> {
         .ok_or_else(|| Error::NotInAgent(input.worktree_path.clone()))?;
     let report = agent::remove(&ctx, &meta.name, false)?;
     if !report.branch_deleted && report.branch_commits > 0 {
-        eprintln!(
-            "ferry: kept branch {} ({} new commit(s))",
+        fsutil::note(&format!(
+            "kept branch {} ({} new commit(s))",
             report.branch, report.branch_commits
-        );
+        ));
     }
     Ok(())
 }
@@ -105,12 +112,10 @@ pub fn claude_session_start(stdin: &mut dyn Read) -> Result<()> {
     let Some(env_file) = std::env::var_os("CLAUDE_ENV_FILE") else {
         return Ok(());
     };
-    let settings = match crate::context::settings(&input.cwd) {
-        Ok(settings) => settings,
-        Err(Error::Git(_)) => return Ok(()),
-        Err(e) => return Err(e),
-    };
-    let shim_dir = crate::shim::ensure(&settings)?;
+    if crate::git::toplevel(&input.cwd)?.is_none() {
+        return Ok(());
+    }
+    let shim_dir = crate::shim::ensure()?;
     let line = format!(
         "export PATH={}:\"$PATH\"\n",
         crate::config::shell_quote(&shim_dir.to_string_lossy())
@@ -124,8 +129,13 @@ pub fn claude_session_start(stdin: &mut dyn Read) -> Result<()> {
 }
 
 /// Claude names worktrees like `bright-running-fox` or, for sub-agents,
-/// `agent-<hex>`; anything outside Ferry's name alphabet becomes `-`.
+/// `agent-<hex>`. Names Ferry cannot use as-is are mapped to its alphabet
+/// plus a hash of the original, so two different Claude names never share
+/// one agent (`feat/login` and `feat-login` must not get the same worktree).
 fn agent_name(raw: &str) -> Result<AgentName> {
+    if let Ok(name) = raw.parse::<AgentName>() {
+        return Ok(name);
+    }
     let cleaned: String = raw
         .chars()
         .map(|c| {
@@ -136,8 +146,18 @@ fn agent_name(raw: &str) -> Result<AgentName> {
             }
         })
         .collect();
-    let trimmed = cleaned.trim_matches(|c: char| !c.is_ascii_alphanumeric());
-    trimmed.parse()
+    let stem: String = cleaned
+        .trim_matches(|c: char| !c.is_ascii_alphanumeric())
+        .chars()
+        .take(48)
+        .collect();
+    let hash = crate::store::fnv1a64(raw.as_bytes()) & 0xff_ffff;
+    let name = if stem.is_empty() {
+        format!("claude-{hash:06x}")
+    } else {
+        format!("{stem}-{hash:06x}")
+    };
+    name.parse()
 }
 
 fn read_input<T: for<'de> Deserialize<'de>>(stdin: &mut dyn Read) -> Result<T> {
@@ -154,17 +174,27 @@ mod tests {
     use super::*;
 
     #[test]
-    fn claude_names_map_to_agent_names() {
+    fn claude_names_map_to_distinct_agent_names() {
         assert_eq!(agent_name("t1").unwrap().as_str(), "t1");
         assert_eq!(
             agent_name("agent-abd7add2abe2a458a").unwrap().as_str(),
             "agent-abd7add2abe2a458a"
         );
-        assert_eq!(
-            agent_name("feat/login page").unwrap().as_str(),
-            "feat-login-page"
-        );
-        assert!(agent_name("///").is_err());
+        let mapped = agent_name("feat/login page").unwrap();
+        assert!(mapped.as_str().starts_with("feat-login-page-"), "{mapped}");
+        let names = [
+            "feat/login",
+            "feat-login",
+            "feat login",
+            "日本-login",
+            "ü-login",
+            "///",
+        ];
+        let mapped: std::collections::BTreeSet<String> = names
+            .iter()
+            .map(|n| agent_name(n).unwrap().to_string())
+            .collect();
+        assert_eq!(mapped.len(), names.len(), "{mapped:?}");
     }
 
     #[test]

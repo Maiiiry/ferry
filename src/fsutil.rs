@@ -4,7 +4,7 @@ use std::collections::HashSet;
 use std::fs;
 use std::io::Write;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::Serialize;
@@ -115,6 +115,45 @@ fn make_dirs_writable(path: &Path) -> Result<()> {
         }
     }
     Ok(())
+}
+
+/// Creates `dir` (and missing parents) readable only by the current user, or
+/// checks that an existing one is owned by them and not writable by others.
+/// Store and worktree directories hold copies of the source and build
+/// output; another user who could write there could also swap what a build
+/// or agent runs.
+pub fn private_dir(dir: &Path) -> Result<PathBuf> {
+    use std::os::unix::fs::DirBuilderExt;
+    match fs::symlink_metadata(dir) {
+        Ok(meta) => {
+            let me = rustix::process::getuid().as_raw();
+            if !meta.is_dir() || meta.uid() != me || meta.mode() & 0o022 != 0 {
+                return Err(Error::Refused(format!(
+                    "{} must be a directory owned by you and not writable by others",
+                    dir.display()
+                )));
+            }
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            if let Some(parent) = dir.parent() {
+                fs::create_dir_all(parent).at("create directory", parent)?;
+            }
+            match fs::DirBuilder::new().mode(0o700).create(dir) {
+                Err(e) if e.kind() != std::io::ErrorKind::AlreadyExists => {
+                    return Err(e).at("create directory", dir);
+                }
+                _ => {}
+            }
+        }
+        Err(e) => return Err(e).at("stat", dir),
+    }
+    Ok(dir.to_path_buf())
+}
+
+/// Prints `ferry: <message>` to stderr. Unlike `eprintln!`, it does not
+/// panic when stderr is closed (`ferry base 2>&1 | head -1`).
+pub fn note(message: &str) {
+    let _ = writeln!(std::io::stderr(), "ferry: {message}");
 }
 
 pub fn human_bytes(bytes: u64) -> String {

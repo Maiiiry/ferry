@@ -213,8 +213,42 @@ impl Repo {
         run(&self.toplevel, args).map(drop)
     }
 
-    pub fn prune_worktrees(&self) -> Result<()> {
-        run(&self.toplevel, ["worktree", "prune"]).map(drop)
+    /// Drops git's registration of the worktree at `path`, whether or not the
+    /// directory still exists (a deleted cache dir leaves a "missing but
+    /// locked" entry behind). Unlike `git worktree prune`, this never touches
+    /// other worktrees, such as ones on a drive that is not mounted right now.
+    pub fn forget_worktree(&self, path: &Path) -> Result<()> {
+        if !self.worktrees()?.iter().any(|w| same_path(&w.path, path)) {
+            return Ok(());
+        }
+        self.remove_worktree(path, true)
+    }
+
+    /// Every worktree git knows about (`git worktree list --porcelain`).
+    pub fn worktrees(&self) -> Result<Vec<Worktree>> {
+        let out = run(&self.toplevel, ["worktree", "list", "--porcelain", "-z"])?;
+        let mut all = Vec::new();
+        let mut current: Option<Worktree> = None;
+        for field in out.split(|b| *b == 0) {
+            if field.is_empty() {
+                all.extend(current.take());
+            } else if let Some(path) = field.strip_prefix(b"worktree ") {
+                all.extend(current.take());
+                current = Some(Worktree {
+                    path: path_from_bytes(path),
+                    branch: None,
+                    locked: false,
+                });
+            } else if let Some(w) = current.as_mut() {
+                if let Some(branch) = field.strip_prefix(b"branch refs/heads/") {
+                    w.branch = Some(String::from_utf8_lossy(branch).into_owned());
+                } else if field == b"locked" || field.starts_with(b"locked ") {
+                    w.locked = true;
+                }
+            }
+        }
+        all.extend(current);
+        Ok(all)
     }
 
     /// Tip of `refs/heads/<branch>`, or `None` if the branch does not exist.
@@ -336,26 +370,97 @@ pub fn commits_ahead(repo: &Repo, base: &CommitId, tip: &CommitId) -> Result<u64
         })
 }
 
-/// Paths of worktrees that are locked (`git worktree lock`), canonicalized.
-/// Agent tools lock a worktree while an agent is using it.
-pub fn locked_worktrees(repo: &Repo) -> Result<Vec<PathBuf>> {
-    let out = run(&repo.toplevel, ["worktree", "list", "--porcelain", "-z"])?;
-    let mut locked = Vec::new();
-    let mut current: Option<PathBuf> = None;
-    for field in out.split(|b| *b == 0) {
-        if field.is_empty() {
-            current = None;
-        } else if let Some(path) = field.strip_prefix(b"worktree ") {
-            current = Some(path_from_bytes(path));
-        } else if (field == b"locked" || field.starts_with(b"locked "))
-            && let Some(path) = current.take()
-        {
-            locked.push(std::fs::canonicalize(&path).unwrap_or(path));
-        }
-    }
-    Ok(locked)
+/// One entry of `git worktree list`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Worktree {
+    pub path: PathBuf,
+    /// The checked-out branch (without `refs/heads/`); `None` when detached.
+    pub branch: Option<String>,
+    /// `git worktree lock`ed; agent tools lock a worktree while they use it.
+    pub locked: bool,
 }
 
+/// Root of the worktree containing `dir` (physical path), or `None` outside
+/// any repository.
+pub fn toplevel(dir: &Path) -> Result<Option<PathBuf>> {
+    match run(
+        dir,
+        ["rev-parse", "--path-format=absolute", "--show-toplevel"],
+    ) {
+        Ok(out) => Ok(Some(path_from_bytes(out.trim_ascii_end()))),
+        Err(GitError::Command { .. }) => Ok(None),
+        Err(e) => Err(e),
+    }
+}
+
+/// The commit checked out in `worktree`.
+pub fn head(worktree: &Path) -> Result<CommitId> {
+    let out = run(worktree, ["rev-parse", "--verify", "HEAD"])?;
+    Ok(CommitId(String::from_utf8_lossy(&out).trim().to_owned()))
+}
+
+/// Number of commits reachable from `worktree`'s HEAD but from no branch, tag
+/// or remote-tracking ref: work that removing the worktree (and with it its
+/// HEAD and reflog) would orphan, e.g. commits made on a detached HEAD.
+pub fn unreferenced_commits(worktree: &Path) -> Result<u64> {
+    let out = run(
+        worktree,
+        [
+            "rev-list",
+            "--count",
+            "HEAD",
+            "--not",
+            "--branches",
+            "--tags",
+            "--remotes",
+        ],
+    )?;
+    String::from_utf8_lossy(&out)
+        .trim()
+        .parse()
+        .map_err(|_| GitError::Parse {
+            args: "rev-list --count HEAD --not --branches --tags --remotes".into(),
+            detail: "expected a number".into(),
+        })
+}
+
+/// Points `refname` at `commit`, creating it if needed.
+pub fn update_ref(repo: &Repo, refname: &str, commit: &CommitId) -> Result<()> {
+    run(&repo.toplevel, ["update-ref", refname, commit.as_str()]).map(drop)
+}
+
+/// Whether `name` is a valid branch name (`git check-ref-format --branch`).
+pub fn is_valid_branch_name(name: &str) -> Result<bool> {
+    match run(Path::new("."), ["check-ref-format", "--branch", name]) {
+        Ok(_) => Ok(true),
+        Err(GitError::Command { .. }) => Ok(false),
+        Err(e) => Err(e),
+    }
+}
+
+/// Paths git ignores in `worktree` (`git status --ignored`).
+pub fn ignored_paths(worktree: &Path) -> Result<Vec<String>> {
+    let out = run(
+        worktree,
+        [
+            "status",
+            "--porcelain=v1",
+            "-z",
+            "--ignored=matching",
+            "--untracked-files=normal",
+        ],
+    )?;
+    Ok(out
+        .split(|b| *b == 0)
+        .filter_map(|r| r.strip_prefix(b"!! "))
+        .map(|p| String::from_utf8_lossy(p).into_owned())
+        .collect())
+}
+
+fn same_path(a: &Path, b: &Path) -> bool {
+    let resolve = |p: &Path| std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
+    a == b || resolve(a) == resolve(b)
+}
 pub fn version() -> Result<String> {
     let out = run(Path::new("."), ["--version"])?;
     Ok(String::from_utf8_lossy(&out).trim().to_owned())

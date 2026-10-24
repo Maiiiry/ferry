@@ -204,6 +204,7 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
                 path,
                 branch,
                 origin: agent::Origin::Cli,
+                cwd: Some(cwd.clone()),
             },
             json,
         ),
@@ -228,7 +229,7 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
         Command::Gc { dry_run } => gc(&discover()?, dry_run, json),
         Command::Doctor { apparmor_profile } => doctor_cmd(&cwd, apparmor_profile, json),
         Command::Shim => {
-            let dir = crate::shim::ensure(&crate::context::settings(&cwd)?)?;
+            let dir = crate::shim::ensure()?;
             if json {
                 output::json(&serde_json::json!({ "shim_dir": dir }))?;
             } else {
@@ -473,6 +474,9 @@ fn rm(ctx: &Context, name: &str, force: bool, json: bool) -> anyhow::Result<Exit
             if report.branch_commits == 1 { "" } else { "s" }
         );
     }
+    if let Some(rescued) = &report.rescued_ref {
+        println!("  kept commits that were on no branch as {rescued}");
+    }
     Ok(ExitCode::SUCCESS)
 }
 
@@ -491,6 +495,9 @@ fn gc(ctx: &Context, dry_run: bool, json: bool) -> anyhow::Result<ExitCode> {
     }
     for id in &report.busy {
         println!("  skipped base {} (being built)", id.short());
+    }
+    for warning in &report.warnings {
+        output::warning(warning);
     }
     output::success(&format!(
         "{verb} {} agent{} and {} base{}, {} freed",

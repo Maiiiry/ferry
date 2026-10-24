@@ -53,13 +53,6 @@ impl Context {
     }
 }
 
-/// Settings for `dir`'s repository without touching the store, e.g. to find
-/// the shim directory.
-pub fn settings(dir: &Path) -> Result<Settings> {
-    let env = |k: &str| std::env::var(k).ok();
-    Ok(resolve(dir, &env)?.2)
-}
-
 fn resolve(
     dir: &Path,
     env: &dyn Fn(&str) -> Option<String>,
@@ -71,10 +64,35 @@ fn resolve(
     // Canonical so that reaching the repository through a symlink still
     // finds the same store.
     let common_dir = std::fs::canonicalize(&repo.common_dir).at("resolve", &repo.common_dir)?;
-    let name = repo
-        .main_worktree
-        .file_name()
-        .map_or_else(|| "repo".into(), |n| n.to_string_lossy().into_owned());
-    let root = parent.join(store::repo_key(&common_dir, &name));
+    let root = parent.join(store::repo_key(&common_dir, &display_name(&common_dir)));
     Ok((repo, config, settings, root))
+}
+
+/// `proj` for `proj/.git` and for a bare `proj.git`. Taken from the common
+/// dir rather than a worktree, so that every worktree of a bare repository
+/// (which has no main one) opens the same store.
+fn display_name(common_dir: &Path) -> String {
+    let dir = if common_dir.file_name().is_some_and(|n| n == ".git") {
+        common_dir.parent().unwrap_or(common_dir)
+    } else {
+        common_dir
+    };
+    let name = dir.file_name().map(|n| n.to_string_lossy().into_owned());
+    match name {
+        Some(name) => name.strip_suffix(".git").unwrap_or(&name).to_owned(),
+        None => "repo".to_owned(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn display_name_ignores_the_git_dir() {
+        assert_eq!(display_name(Path::new("/src/proj/.git")), "proj");
+        assert_eq!(display_name(Path::new("/src/proj.git")), "proj");
+        assert_eq!(display_name(Path::new("/src/proj")), "proj");
+        assert_eq!(display_name(Path::new("/")), "repo");
+    }
 }

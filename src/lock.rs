@@ -65,7 +65,9 @@ impl FileLock {
         match flock(&file, try_op) {
             Ok(()) => {}
             Err(Errno::WOULDBLOCK) => {
-                eprintln!("ferry: waiting for another ferry process to release {what}");
+                crate::fsutil::note(&format!(
+                    "waiting for another ferry process to release {what}"
+                ));
                 flock(&file, op)
                     .map_err(std::io::Error::from)
                     .at("lock", path)?;

@@ -81,6 +81,9 @@ pub struct SpawnOptions {
     pub path: Option<PathBuf>,
     pub branch: Option<String>,
     pub origin: Origin,
+    /// Directory a relative `path` is resolved against (the `-C` dir);
+    /// defaults to the process's working directory.
+    pub cwd: Option<PathBuf>,
 }
 
 #[derive(Debug, Serialize)]
@@ -115,6 +118,9 @@ pub struct RemoveReport {
     pub branch_deleted: bool,
     /// Commits on the branch beyond where the agent started, if it was kept.
     pub branch_commits: u64,
+    /// A ref Ferry created to keep commits that were on no branch (made on
+    /// a detached HEAD) when `--force` removed the worktree.
+    pub rescued_ref: Option<String>,
 }
 
 /// What an agent tool needs to know to use an agent.
@@ -145,22 +151,16 @@ pub fn spawn(ctx: &Context, name: &AgentName, opts: SpawnOptions) -> Result<Spaw
         .resolve_commit(opts.from.as_deref().unwrap_or("HEAD"))?;
     let paths = ctx.store.agent(name);
     let caps = Capabilities::detect(ctx.store.root());
+    let branch_given = opts.branch.is_some();
     let branch = opts
         .branch
         .unwrap_or_else(|| format!("{}{name}", ctx.settings.branch_prefix));
-    let worktree = match opts.path {
-        Some(p) if p.is_absolute() => p,
-        Some(p) => std::env::current_dir()
-            .at("read", "current directory")?
-            .join(p),
-        None => ctx
-            .settings
-            .worktree_parent
-            .as_ref()
-            .ok_or(Error::NoStoreDir)?
-            .join(ctx.store.key())
-            .join(name.as_str()),
-    };
+    if !git::is_valid_branch_name(&branch)? {
+        return Err(Error::Refused(format!(
+            "`{branch}` is not a valid branch name"
+        )));
+    }
+    let worktree = worktree_path(ctx, name, opts.path, opts.cwd)?;
 
     let (base, mut meta, _agent_lock) = {
         let _store = ctx.store.lock()?;
@@ -168,10 +168,16 @@ pub fn spawn(ctx: &Context, name: &AgentName, opts: SpawnOptions) -> Result<Spaw
             return Err(Error::AgentExists(name.to_string()));
         }
         if ctx.repo.branch_tip(&branch)?.is_some() {
+            let hint = if branch_given {
+                ""
+            } else {
+                "; pass --branch to use another name"
+            };
             return Err(Error::Refused(format!(
-                "branch `{branch}` already exists; pass --branch to use another name"
+                "branch `{branch}` already exists{hint}"
             )));
         }
+        check_worktree_location(ctx, &worktree)?;
         if worktree.exists()
             && fs::read_dir(&worktree)
                 .at("read directory", &worktree)?
@@ -206,7 +212,16 @@ pub fn spawn(ctx: &Context, name: &AgentName, opts: SpawnOptions) -> Result<Spaw
         (base, meta, lock)
     };
 
-    match populate(ctx, &caps, &paths, &base, &mut meta, &mut warnings) {
+    let mut created_worktree = false;
+    match populate(
+        ctx,
+        &caps,
+        &paths,
+        &base,
+        &mut meta,
+        &mut warnings,
+        &mut created_worktree,
+    ) {
         Ok((backend_reason, fork_stats)) => Ok(SpawnReport {
             agent: meta,
             backend_reason,
@@ -215,9 +230,74 @@ pub fn spawn(ctx: &Context, name: &AgentName, opts: SpawnOptions) -> Result<Spaw
             warnings,
         }),
         Err(e) => {
-            let _ = rollback(ctx, &paths, &meta);
+            if let Err(cleanup) = rollback(ctx, &paths, &meta, created_worktree) {
+                fsutil::note(&format!(
+                    "cleanup after the failed spawn was incomplete: {cleanup}"
+                ));
+            }
             Err(e)
         }
+    }
+}
+
+/// `--path` resolved against the caller's directory, or the default
+/// location.
+fn worktree_path(
+    ctx: &Context,
+    name: &AgentName,
+    path: Option<PathBuf>,
+    cwd: Option<PathBuf>,
+) -> Result<PathBuf> {
+    if let Some(path) = path {
+        let cwd = match cwd {
+            Some(cwd) => cwd,
+            None => std::env::current_dir().at("read", "current directory")?,
+        };
+        return Ok(resolve_lexically(&cwd.join(path)));
+    }
+    let parent = ctx
+        .settings
+        .worktree_parent
+        .as_ref()
+        .ok_or(Error::NoStoreDir)?;
+    Ok(fsutil::private_dir(&parent.join(ctx.store.key()))?.join(name.as_str()))
+}
+
+/// Refuses worktree locations that would nest one agent inside another (the
+/// outer agent's cargo, `git status` and `rm` would then cover the inner one)
+/// or put user work inside Ferry's store.
+fn check_worktree_location(ctx: &Context, worktree: &Path) -> Result<()> {
+    let store = resolve_lexically(ctx.store.root());
+    if worktree.starts_with(&store) {
+        return Err(Error::Refused(format!(
+            "{} is inside Ferry's store; agent worktrees hold your work and must live elsewhere",
+            worktree.display()
+        )));
+    }
+    for other in all_meta(ctx)? {
+        let theirs = resolve_lexically(&other.worktree);
+        if worktree.starts_with(&theirs) || theirs.starts_with(worktree) {
+            return Err(Error::Refused(format!(
+                "{} overlaps agent `{}`'s worktree {}",
+                worktree.display(),
+                other.name,
+                theirs.display()
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// `path` with symlinks resolved as far as it exists, so locations compare
+/// equal however they are spelled.
+fn resolve_lexically(path: &Path) -> PathBuf {
+    let path = std::path::absolute(path).unwrap_or_else(|_| path.to_path_buf());
+    if let Ok(real) = fs::canonicalize(&path) {
+        return real;
+    }
+    match (path.parent(), path.file_name()) {
+        (Some(parent), Some(name)) => resolve_lexically(parent).join(name),
+        _ => path,
     }
 }
 
@@ -228,6 +308,7 @@ fn populate(
     base: &BaseMeta,
     meta: &mut AgentMeta,
     warnings: &mut Vec<String>,
+    created_worktree: &mut bool,
 ) -> Result<(String, ForkStats)> {
     let base_paths = ctx.store.base(&base.id);
     if !base_paths.src.is_dir() || !base_paths.target.is_dir() {
@@ -238,6 +319,7 @@ fn populate(
     }
     ctx.repo
         .add_branch_worktree(&meta.worktree, &meta.branch, &meta.from)?;
+    *created_worktree = true;
     copy_untracked_lockfile(&base_paths.src, &meta.worktree)?;
     if base.remap_paths && meta.isolation == Isolation::None {
         // Before stamping, so the root directory's entries match the base's.
@@ -310,14 +392,45 @@ pub(crate) fn copy_untracked_lockfile(base_src: &Path, worktree: &Path) -> Resul
         .at("set times on", &to)
 }
 
-fn rollback(ctx: &Context, paths: &AgentPaths, meta: &AgentMeta) -> Result<()> {
-    if meta.worktree.exists() {
-        ctx.repo.remove_worktree(&meta.worktree, true)?;
+/// Undoes a failed spawn, but only what it created: the worktree only if
+/// `git worktree add` succeeded (the path may belong to someone else), the
+/// branch only if it still points at the start commit and is checked out
+/// nowhere. Every step is attempted; the first error is returned.
+fn rollback(
+    ctx: &Context,
+    paths: &AgentPaths,
+    meta: &AgentMeta,
+    created_worktree: bool,
+) -> Result<()> {
+    let mut first: Option<Error> = None;
+    let mut note = |r: Result<()>| {
+        if let Err(e) = r
+            && first.is_none()
+        {
+            first = Some(e);
+        }
+    };
+    if created_worktree {
+        note(
+            ctx.repo
+                .remove_worktree(&meta.worktree, true)
+                .map_err(Error::from),
+        );
     }
-    if ctx.repo.branch_tip(&meta.branch)?.as_ref() == Some(&meta.from) {
-        ctx.repo.delete_branch(&meta.branch)?;
-    }
-    fsutil::remove_dir_all_force(&paths.dir)
+    note((|| {
+        let tip = ctx.repo.branch_tip(&meta.branch)?;
+        let checked_out = ctx
+            .repo
+            .worktrees()?
+            .iter()
+            .any(|w| w.branch.as_deref() == Some(&meta.branch));
+        if tip.as_ref() == Some(&meta.from) && !checked_out {
+            ctx.repo.delete_branch(&meta.branch)?;
+        }
+        Ok(())
+    })());
+    note(fsutil::remove_dir_all_force(&paths.dir));
+    first.map_or(Ok(()), Err)
 }
 
 /// The base an agent starting at `from` should fork: a ready base built
@@ -399,23 +512,35 @@ pub fn all_meta(ctx: &Context) -> Result<Vec<AgentMeta>> {
     Ok(out)
 }
 
-/// The agent whose worktree contains `dir`, or `None`.
+/// The agent whose worktree is the git worktree containing `dir`, or `None`.
 ///
-/// Inside a namespace sandbox `dir` may be under the canonical source path;
-/// it then belongs to whichever agent's worktree is mounted there, which is
-/// checked by inode rather than trusted from the environment.
+/// Matching is on the exact worktree root, never on a path prefix: a git
+/// worktree nested inside an agent's checkout (an agent tool's sub-agent
+/// worktree, say) is a different checkout, and building it into the outer
+/// agent's target would hand that agent foreign artifacts. Inside a namespace
+/// sandbox the root may be the canonical source path; it then belongs to the
+/// agent whose worktree is mounted there, checked by inode rather than
+/// trusted from the environment.
 pub fn find_by_dir(ctx: &Context, dir: &Path) -> Result<Option<AgentMeta>> {
-    let dir = fs::canonicalize(dir).at("resolve", dir)?;
+    match git::toplevel(dir)? {
+        Some(root) => find_by_root(ctx, &root),
+        None => Ok(None),
+    }
+}
+
+/// The agent whose worktree is exactly `root` (a worktree's top level).
+pub fn find_by_root(ctx: &Context, root: &Path) -> Result<Option<AgentMeta>> {
+    let root = fs::canonicalize(root).at("resolve", root)?;
     let canonical = ctx.store.canonical_src();
     let agents = all_meta(ctx)?;
-    if dir.starts_with(&canonical) {
+    if fs::canonicalize(&canonical).is_ok_and(|c| c == root) {
         return Ok(agents
             .into_iter()
             .find(|a| same_file(&canonical, &a.worktree)));
     }
     Ok(agents
         .into_iter()
-        .find(|a| fs::canonicalize(&a.worktree).is_ok_and(|root| dir.starts_with(root))))
+        .find(|a| fs::canonicalize(&a.worktree).is_ok_and(|w| w == root)))
 }
 
 pub fn find_by_cwd(ctx: &Context, cwd: &Path) -> Result<AgentMeta> {
@@ -472,7 +597,26 @@ fn remove_locked(ctx: &Context, name: &AgentName, force: bool) -> Result<RemoveR
             },
         });
     }
-    if meta.worktree.is_dir() {
+    // Even --force must not delete another agent's checkout along with this one.
+    let ours = resolve_lexically(&meta.worktree);
+    if let Some(inner) = all_meta(ctx)?
+        .into_iter()
+        .find(|a| a.name != meta.name && resolve_lexically(&a.worktree).starts_with(&ours))
+    {
+        return Err(Error::Refused(format!(
+            "agent `{}`'s worktree is inside {}; remove that agent first",
+            inner.name,
+            meta.worktree.display()
+        )));
+    }
+
+    let registered = ctx
+        .repo
+        .worktrees()?
+        .iter()
+        .any(|w| resolve_lexically(&w.path) == ours);
+    let mut rescued_ref = None;
+    if registered && meta.worktree.is_dir() {
         let (changes, copied_lockfile) = user_changes(ctx, &meta)?;
         if !force && !changes.is_empty() {
             return Err(Error::Refused(format!(
@@ -481,19 +625,42 @@ fn remove_locked(ctx: &Context, name: &AgentName, force: bool) -> Result<RemoveR
                 changes[0]
             )));
         }
+        // Removing the worktree deletes its HEAD and reflog, which are the
+        // only refs to commits made on a detached HEAD.
+        let orphans = git::unreferenced_commits(&meta.worktree)?;
+        if orphans > 0 {
+            if !force {
+                return Err(Error::Refused(format!(
+                    "{} has {orphans} commit(s) on no branch (a detached HEAD); keep them with \
+                     `git -C {} branch <name>` or pass --force, which saves them under refs/ferry/",
+                    meta.worktree.display(),
+                    meta.worktree.display()
+                )));
+            }
+            let refname = format!("refs/ferry/orphaned/{name}-{}", fsutil::now_unix());
+            git::update_ref(&ctx.repo, &refname, &git::head(&meta.worktree)?)?;
+            rescued_ref = Some(refname);
+        }
         // `git worktree remove` refuses untracked files; this one is ours.
         if let Some(lockfile) = copied_lockfile {
             fs::remove_file(&lockfile).at("remove", &lockfile)?;
         }
         ctx.repo.remove_worktree(&meta.worktree, force)?;
     } else {
-        ctx.repo.prune_worktrees()?;
+        // Never created (a failed spawn), or deleted or moved by hand: drop
+        // git's record of this one path and leave the directory alone.
+        ctx.repo.forget_worktree(&meta.worktree)?;
     }
 
     let tip = ctx.repo.branch_tip(&meta.branch)?;
+    let checked_out = ctx
+        .repo
+        .worktrees()?
+        .iter()
+        .any(|w| w.branch.as_deref() == Some(&meta.branch));
     let (branch_deleted, branch_commits) = match &tip {
         None => (false, 0),
-        Some(tip) if tip == &meta.from => {
+        Some(tip) if tip == &meta.from && !checked_out => {
             ctx.repo.delete_branch(&meta.branch)?;
             (true, 0)
         }
@@ -509,44 +676,76 @@ fn remove_locked(ctx: &Context, name: &AgentName, force: bool) -> Result<RemoveR
         branch: meta.branch,
         branch_deleted,
         branch_commits,
+        rescued_ref,
     })
 }
 
-/// Removes hook-created agents that their tool abandoned: clean worktree, no
-/// commits beyond the starting point, nothing running, and not locked by
-/// the tool (`git worktree lock`). Never touches agents created with
-/// `ferry spawn`. Caller must hold the store lock.
-pub fn reap_abandoned(ctx: &Context, dry_run: bool) -> Result<Vec<AgentName>> {
-    let locked = git::locked_worktrees(&ctx.repo)?;
+/// Removes hook-created agents that their tool abandoned: clean worktree with
+/// no ignored files beyond build output, no commits beyond the starting point
+/// or on a detached HEAD, nothing running, its branch checked out nowhere
+/// else, and not locked by the tool (`git worktree lock`). Never touches
+/// agents created with `ferry spawn`. An agent that cannot be checked or
+/// removed is skipped with a warning. Caller must hold the store lock.
+pub fn reap_abandoned(ctx: &Context, dry_run: bool) -> Result<(Vec<AgentName>, Vec<String>)> {
+    let worktrees = ctx.repo.worktrees()?;
     let mut reaped = Vec::new();
+    let mut warnings = Vec::new();
     for meta in all_meta(ctx)? {
         if meta.origin != Origin::ClaudeHook || meta.state != AgentState::Ready {
             continue;
         }
-        let worktree = fs::canonicalize(&meta.worktree).unwrap_or_else(|_| meta.worktree.clone());
-        if locked.iter().any(|l| l == &worktree) {
-            continue;
+        match abandoned(ctx, &meta, &worktrees) {
+            Ok(false) => continue,
+            Ok(true) => {}
+            Err(e) => {
+                warnings.push(format!("kept agent {}: {e}", meta.name));
+                continue;
+            }
         }
-        let paths = ctx.store.agent(&meta.name);
-        let Some(agent_lock) = FileLock::try_exclusive(&paths.lock)? else {
+        if !dry_run && let Err(e) = remove_locked(ctx, &meta.name, false) {
+            warnings.push(format!(
+                "could not remove abandoned agent {}: {e}",
+                meta.name
+            ));
             continue;
-        };
-        if processes(&paths)?.is_some()
-            || (meta.worktree.is_dir() && !user_changes(ctx, &meta)?.0.is_empty())
-            || ctx
-                .repo
-                .branch_tip(&meta.branch)?
-                .is_some_and(|tip| tip != meta.from)
-        {
-            continue;
-        }
-        drop(agent_lock);
-        if !dry_run {
-            remove_locked(ctx, &meta.name, false)?;
         }
         reaped.push(meta.name);
     }
-    Ok(reaped)
+    Ok((reaped, warnings))
+}
+
+fn abandoned(ctx: &Context, meta: &AgentMeta, worktrees: &[git::Worktree]) -> Result<bool> {
+    let ours = resolve_lexically(&meta.worktree);
+    if worktrees.iter().any(|w| {
+        (w.locked && resolve_lexically(&w.path) == ours)
+            || w.branch.as_deref() == Some(&meta.branch) && resolve_lexically(&w.path) != ours
+    }) {
+        return Ok(false);
+    }
+    let paths = ctx.store.agent(&meta.name);
+    let Some(_agent_lock) = FileLock::try_exclusive(&paths.lock)? else {
+        return Ok(false);
+    };
+    if processes(&paths)?.is_some()
+        || ctx
+            .repo
+            .branch_tip(&meta.branch)?
+            .is_some_and(|tip| tip != meta.from)
+    {
+        return Ok(false);
+    }
+    if !meta.worktree.is_dir() {
+        return Ok(true);
+    }
+    let (changes, copied_lockfile) = user_changes(ctx, meta)?;
+    let build_output = |p: &str| {
+        matches!(p, "target/" | ".ferry-target") || (p == "Cargo.lock" && copied_lockfile.is_some())
+    };
+    Ok(changes.is_empty()
+        && git::unreferenced_commits(&meta.worktree)? == 0
+        && git::ignored_paths(&meta.worktree)?
+            .iter()
+            .all(|p| build_output(p)))
 }
 
 /// The build context for `meta`.
@@ -564,7 +763,7 @@ pub fn plan(ctx: &Context, meta: &AgentMeta) -> Result<Plan> {
         canonical_target: ctx.store.canonical_target(),
         ns_record: (meta.backend == BackendKind::Overlay).then(|| paths.ns_record.clone()),
         remap_wrapper: if remap {
-            Some(crate::remap::ensure_wrapper(ctx)?)
+            Some(crate::remap::ensure_wrapper()?)
         } else {
             None
         },
@@ -606,7 +805,7 @@ pub fn exec_session(
         .split_first()
         .ok_or_else(|| Error::Refused("no command given".into()))?;
     let plan = plan(ctx, meta)?;
-    let shim_dir = shim::ensure(&ctx.settings)?;
+    let shim_dir = shim::ensure()?;
     enter(ctx, meta, &plan)?;
     hold_busy_lock(&ctx.store.agent(&meta.name))?;
     let cwd = if inside(host_cwd, &meta.worktree) {
@@ -644,6 +843,7 @@ pub fn exec_cargo(
         .current_dir(&cwd)
         .env("PWD", &cwd)
         .envs(cargo_env(&plan, meta.freshness))
+        .env(shim::DEPTH_ENV, shim::next_depth())
         .exec();
     Err(exec_error(cargo.as_os_str(), err))
 }
@@ -685,7 +885,7 @@ pub fn env_report(ctx: &Context, meta: &AgentMeta) -> Result<EnvReport> {
         isolation: meta.isolation,
         build_target_dir: plan.build_target(),
         host_target_dir,
-        shim_dir: shim::ensure(&ctx.settings)?,
+        shim_dir: shim::ensure()?,
         run_prefix: vec![
             "ferry".into(),
             "run".into(),

@@ -78,6 +78,9 @@ pub struct GcReport {
     pub kept: Vec<BaseId>,
     /// Abandoned hook-created agents that were removed first.
     pub reaped_agents: Vec<String>,
+    /// Hook-created agents gc could not check or remove; the rest of gc
+    /// still ran.
+    pub warnings: Vec<String>,
     pub freed_bytes: u64,
     pub dry_run: bool,
 }
@@ -133,7 +136,7 @@ pub fn build(ctx: &Context, rev: &str, cold: bool) -> Result<BuildReport> {
     let toolchain = prepare(ctx, &paths, &commit, seed.as_ref(), isolation, remap)?;
 
     let remap_wrapper = if remap {
-        Some(crate::remap::ensure_wrapper(ctx)?)
+        Some(crate::remap::ensure_wrapper()?)
     } else {
         None
     };
@@ -175,8 +178,11 @@ pub fn build(ctx: &Context, rev: &str, cold: bool) -> Result<BuildReport> {
     };
     // Writing base.json is what makes the base ready (and immutable).
     fsutil::write_json_atomic(&paths.meta, &base)?;
-    drop(lock);
+    // Made current before the base lock is released, so gc (which skips
+    // locked bases) cannot collect it in between. Lock order base -> store
+    // is safe because gc only ever try-locks bases.
     set_current(ctx, &id)?;
+    drop(lock);
     Ok(BuildReport {
         base,
         reused: false,
@@ -249,7 +255,7 @@ pub fn list(ctx: &Context) -> Result<Vec<BaseStatus>> {
 /// interrupted builds.
 pub fn gc(ctx: &Context, dry_run: bool) -> Result<GcReport> {
     let _store = ctx.store.lock()?;
-    let reaped = crate::agent::reap_abandoned(ctx, dry_run)?;
+    let (reaped, warnings) = crate::agent::reap_abandoned(ctx, dry_run)?;
     let current = ctx.store.current_base()?;
     let referenced: BTreeSet<BaseId> = crate::agent::all_meta(ctx)?
         .into_iter()
@@ -259,6 +265,7 @@ pub fn gc(ctx: &Context, dry_run: bool) -> Result<GcReport> {
     let mut report = GcReport {
         dry_run,
         reaped_agents: reaped.iter().map(ToString::to_string).collect(),
+        warnings,
         ..GcReport::default()
     };
     for id in ctx.store.base_ids()? {
@@ -276,9 +283,6 @@ pub fn gc(ctx: &Context, dry_run: bool) -> Result<GcReport> {
             discard(ctx, &paths)?;
         }
         report.removed.push(id);
-    }
-    if !dry_run {
-        ctx.repo.prune_worktrees()?;
     }
     Ok(report)
 }
@@ -381,13 +385,16 @@ fn set_current(ctx: &Context, id: &BaseId) -> Result<()> {
 /// Removes a base's worktree registration and files. Callers must hold the
 /// base's lock and know that nothing references it.
 fn discard(ctx: &Context, paths: &BasePaths) -> Result<()> {
-    if paths.src.exists() && ctx.repo.remove_worktree(&paths.src, true).is_err() {
-        // A half-created worktree may not be registered; deleting the files
-        // and pruning below covers it.
+    // Un-ready it first: an interrupted delete must never leave a base that
+    // looks complete over a half-deleted checkout or target.
+    match fs::remove_file(&paths.meta) {
+        Err(e) if e.kind() != std::io::ErrorKind::NotFound => {
+            return Err(e).at("remove", &paths.meta);
+        }
+        _ => {}
     }
-    fsutil::remove_dir_all_force(&paths.dir)?;
-    ctx.repo.prune_worktrees()?;
-    Ok(())
+    ctx.repo.forget_worktree(&paths.src)?;
+    fsutil::remove_dir_all_force(&paths.dir)
 }
 
 fn resolve_isolation(ctx: &Context, warnings: &mut Vec<String>) -> Result<Isolation> {
@@ -473,7 +480,7 @@ fn run_warm_commands(plan: &Plan, freshness: FreshnessMode, commands: &[String])
     sandbox::enter(plan)?;
     let env = crate::agent::cargo_env(plan, freshness);
     for cmd in commands {
-        eprintln!("ferry: running `{cmd}`");
+        fsutil::note(&format!("running `{cmd}`"));
         // Build output goes to stderr so `--json` output on stdout stays
         // parseable.
         let stderr = std::io::stderr()

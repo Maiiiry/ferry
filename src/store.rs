@@ -71,6 +71,7 @@ impl Store {
     /// repository whose main worktree is `repository`.
     pub fn open(root: PathBuf, repository: &Path) -> Result<Self> {
         let store = Self { root };
+        fsutil::private_dir(&store.root)?;
         for dir in [
             store.root.join("bases"),
             store.root.join("agents"),
