@@ -133,7 +133,7 @@ fn materialize(job: &Job, op: FileOp) -> Result<(), ForkError> {
 
 /// Cargo's freshness check compares mtimes, so a fork that does not preserve
 /// them is a fork that rebuilds everything.
-fn set_times(path: &Path, meta: &fs::Metadata, symlink: bool) -> io::Result<()> {
+pub(super) fn set_times(path: &Path, meta: &fs::Metadata, symlink: bool) -> io::Result<()> {
     use rustix::fs::{AtFlags, CWD, Timespec, Timestamps, utimensat};
     let ts = |secs: i64, nsec: i64| Timespec {
         tv_sec: secs,
