@@ -142,6 +142,7 @@ pub fn spawn(ctx: &Context, name: &AgentName, opts: SpawnOptions) -> Result<Spaw
         .repo
         .resolve_commit(opts.from.as_deref().unwrap_or("HEAD"))?;
     let paths = ctx.store.agent(name);
+    let caps = Capabilities::detect(ctx.store.root());
     let branch = opts
         .branch
         .unwrap_or_else(|| format!("{}{name}", ctx.settings.branch_prefix));
@@ -175,7 +176,7 @@ pub fn spawn(ctx: &Context, name: &AgentName, opts: SpawnOptions) -> Result<Spaw
             )));
         }
         let base = choose_base(ctx, &from)?;
-        let isolation = agent_isolation(ctx, &base, &mut warnings)?;
+        let isolation = agent_isolation(ctx, &caps, &base, &mut warnings)?;
         fs::create_dir_all(&paths.dir).at("create directory", &paths.dir)?;
         let lock = FileLock::exclusive(&paths.lock, &format!("agent {name}"))?;
         let meta = AgentMeta {
@@ -197,7 +198,7 @@ pub fn spawn(ctx: &Context, name: &AgentName, opts: SpawnOptions) -> Result<Spaw
         (base, meta, lock)
     };
 
-    match populate(ctx, &paths, &base, &mut meta, &mut warnings) {
+    match populate(ctx, &caps, &paths, &base, &mut meta, &mut warnings) {
         Ok((backend_reason, fork_stats)) => Ok(SpawnReport {
             agent: meta,
             backend_reason,
@@ -214,6 +215,7 @@ pub fn spawn(ctx: &Context, name: &AgentName, opts: SpawnOptions) -> Result<Spaw
 
 fn populate(
     ctx: &Context,
+    caps: &Capabilities,
     paths: &AgentPaths,
     base: &BaseMeta,
     meta: &mut AgentMeta,
@@ -243,8 +245,7 @@ fn populate(
         ));
     }
 
-    let caps = Capabilities::detect(ctx.store.root());
-    let choice = fork::select(ctx.settings.backend, &caps, meta.isolation)?;
+    let choice = fork::select(ctx.settings.backend, caps, meta.isolation)?;
     meta.backend = choice.kind;
     fsutil::write_json_atomic(&paths.meta, &*meta)?;
     let stats = fork::backend(choice.kind)?.fork(&fork_paths(paths, &base_paths.target))?;
@@ -299,13 +300,13 @@ fn choose_base(ctx: &Context, from: &CommitId) -> Result<BaseMeta> {
 
 fn agent_isolation(
     ctx: &Context,
+    caps: &Capabilities,
     base: &BaseMeta,
     warnings: &mut Vec<String>,
 ) -> Result<Isolation> {
     if base.isolation == Isolation::None || ctx.settings.sandbox == SandboxMode::Off {
         return Ok(Isolation::None);
     }
-    let caps = Capabilities::detect(ctx.store.root());
     if caps.userns.is_ok() {
         return Ok(Isolation::Namespace);
     }
