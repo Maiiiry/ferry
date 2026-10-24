@@ -18,7 +18,8 @@ Usage: bench/run.sh --workspace <git url or path> --edit <relative file> [option
   --out DIR        results directory (default bench/results/<name>)
   --name NAME      name for the work dir and results (default: workspace basename)
   --scenarios L    comma-separated subset of: cold naive shared kache ferry-off
-                   ferry-overlay ferry-reflink ferry-copy refresh (default: all)
+                   ferry-remap ferry-overlay ferry-reflink ferry-copy refresh
+                   refresh-off refresh-remap (default: all)
   --build-args A   extra arguments for every `cargo build` (default: none)
   --ferry PATH     ferry binary (default: build this checkout with --release)
 EOF
@@ -29,7 +30,7 @@ B_LIB=$B_ROOT/bench/lib.sh
 # shellcheck source=lib.sh
 source "$B_LIB"
 
-ALL_SCENARIOS="cold naive shared kache ferry-off ferry-overlay ferry-reflink ferry-copy refresh"
+ALL_SCENARIOS="cold naive shared kache ferry-off ferry-remap ferry-overlay ferry-reflink ferry-copy refresh refresh-off refresh-remap"
 WORKSPACE='' REV='' B_EDIT='' RUNS=5 COLD_RUNS='' B_AGENTS=3 B_OUT='' NAME='' SCENARIOS=all
 B_BUILD_ARGS='' B_FERRY=''
 KACHE_VERSION=1.2.2
@@ -66,8 +67,9 @@ done
 COLD_RUNS=${COLD_RUNS:-$RUNS}
 [[ $COLD_RUNS =~ ^[1-9][0-9]*$ ]] || die "--cold-runs must be a positive integer"
 
-# Canonical order: ferry-off runs before the namespace backends because it
-# builds its own base, and refresh needs the namespace base and moves HEAD.
+# Canonical order: ferry-off and ferry-remap run before the namespace backends
+# because each builds (and drops) its own base, and the refresh scenarios run
+# last because they move HEAD.
 if [[ $SCENARIOS == all ]]; then
   SELECTED=$ALL_SCENARIOS
 else
@@ -80,9 +82,21 @@ else
   done
 fi
 
-for tool in git cargo rustc hyperfine jq du findmnt; do
+if [[ $OSTYPE == darwin* ]]; then
+  PLATFORM_TOOLS="sysctl sw_vers mount"
+else
+  PLATFORM_TOOLS=findmnt
+fi
+for tool in git cargo rustc hyperfine jq du $PLATFORM_TOOLS; do
   command -v "$tool" >/dev/null || die "$tool not found on PATH"
 done
+if [[ $OSTYPE == darwin* ]]; then
+  # Timestamps need nanoseconds, and `naive` needs a cp that clones on APFS
+  # as GNU cp reflinks on Linux.
+  [[ $(date +%N) =~ ^[0-9]+$ ]] || die "date is not GNU date (brew install coreutils; put its gnubin first on PATH)"
+  { cp --version 2>/dev/null || true; } | grep -q 'GNU coreutils' ||
+    die "cp is not GNU cp (brew install coreutils; put its gnubin first on PATH)"
+fi
 
 NAME=${NAME:-$(basename "${WORKSPACE%/}" .git)}
 B_WORK=$B_ROOT/bench/work/$NAME
@@ -175,25 +189,84 @@ EDIT_PACKAGE=$(cd "$B_REPO" && cargo metadata --no-deps --format-version 1 |
 
 # --- environment -------------------------------------------------------------------
 
+# Machine facts that differ per OS, as one JSON object.
+platform_env() {
+  if [[ $OSTYPE == darwin* ]]; then
+    local dev mount
+    dev=$(df -P "$B_WORK" | awk 'NR == 2 {print $1}')
+    # `/dev/disk3s5 on /System/Volumes/Data (apfs, local, journaled, nobrowse)`
+    mount=$(mount | awk -v d="$dev on " 'index($0, d) == 1' | head -n 1)
+    jq -n \
+      --arg cpu "$(sysctl -n machdep.cpu.brand_string)" \
+      --argjson cpus "$(sysctl -n hw.logicalcpu)" \
+      --argjson cores "$(sysctl -n hw.physicalcpu)" \
+      --argjson mem "$(sysctl -n hw.memsize)" \
+      --argjson mem_avail "$(vm_stat | awk -v ps="$(sysctl -n hw.pagesize)" \
+        '/^Pages (free|inactive|speculative):/ {gsub(/\./, "", $NF); n += $NF} END {printf "%.0f\n", n * ps}')" \
+      --argjson swap_used "$(sysctl -n vm.swapusage | awk '{for (i = 1; i < NF; i++) if ($i == "used") {
+        v = $(i + 2); u = substr(v, length(v)); m = u == "G" ? 1073741824 : u == "K" ? 1024 : 1048576
+        printf "%.0f\n", v * m}}')" \
+      --arg os "$(sw_vers -productName) $(sw_vers -productVersion) ($(sw_vers -buildVersion))" \
+      --arg mount "$mount" \
+      --arg xcode "$(xcodebuild -version 2>/dev/null | head -n 1 || true)" \
+      --arg ld "$(ld -v 2>&1 | head -n 1 || true)" '
+      (first($mount | capture("^(?<source>.+) on (?<target>.+) \\((?<opts>[^)]*)\\)$")) // null) as $m
+      | {cpu_model: $cpu, logical_cpus: $cpus, physical_cores: $cores, cpu_governor: null,
+         ram_bytes: $mem, mem_available_bytes: $mem_avail,
+         mem_available_note: "approximate: vm_stat free + inactive + speculative pages",
+         swap_used_bytes: $swap_used, os: $os,
+         bench_fs: (if $m then $m.opts | split(", ")[0] else null end),
+         bench_mount: (if $m then {target: $m.target, source: $m.source, fstype: ($m.opts | split(", ")[0]),
+                                   options: ($m.opts | split(", ")[1:] | join(","))} else null end),
+         xcode: $xcode, ld: $ld}'
+  else
+    jq -n \
+      --arg cpu "$(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2- | sed 's/^ *//')" \
+      --argjson cpus "$(nproc)" \
+      --argjson cores "$(lscpu -p=core,socket 2>/dev/null | grep -v '^#' | sort -u | wc -l)" \
+      --arg governor "$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null || true)" \
+      --argjson mem "$(awk '/^MemTotal/ {print $2 * 1024}' /proc/meminfo)" \
+      --argjson mem_avail "$(awk '/^MemAvailable/ {print $2 * 1024}' /proc/meminfo)" \
+      --argjson swap_used "$(awk '/^SwapTotal/ {t=$2} /^SwapFree/ {f=$2} END {print (t - f) * 1024}' /proc/meminfo)" \
+      --arg os "$(. /etc/os-release && echo "$PRETTY_NAME")" \
+      --arg fstype "$(stat -f -c %T "$B_WORK")" \
+      --argjson mount "$(findmnt -J -T "$B_WORK" -o TARGET,SOURCE,FSTYPE,OPTIONS | jq -c '.filesystems[0]')" \
+      '{cpu_model: $cpu, logical_cpus: $cpus, physical_cores: $cores,
+        cpu_governor: (if $governor == "" then null else $governor end),
+        ram_bytes: $mem, mem_available_bytes: $mem_avail, swap_used_bytes: $swap_used,
+        os: $os, bench_fs: $fstype, bench_mount: $mount}'
+  fi
+}
+
+# Set on shared CI runners, whose times must never be compared with a
+# dedicated machine's (results-md.jq and chart.py check this record).
+ci_env() {
+  if [[ -z ${CI:-} && ${GITHUB_ACTIONS:-} != true ]]; then
+    echo null
+    return
+  fi
+  jq -n -c \
+    --arg provider "$([[ ${GITHUB_ACTIONS:-} == true ]] && echo github-actions || echo unknown)" \
+    --arg runner_environment "${RUNNER_ENVIRONMENT:-}" --arg runner_os "${RUNNER_OS:-}" \
+    --arg runner_arch "${RUNNER_ARCH:-}" --arg runner_name "${RUNNER_NAME:-}" \
+    --arg image_os "${ImageOS:-}" --arg image_version "${ImageVersion:-}" \
+    --arg run_url "${GITHUB_RUN_ID:+${GITHUB_SERVER_URL:-}/${GITHUB_REPOSITORY:-}/actions/runs/$GITHUB_RUN_ID}" \
+    --arg sha "${GITHUB_SHA:-}" '
+    def nn: if . == "" then null else . end;
+    {provider: $provider, runner_environment: ($runner_environment | nn), runner_os: ($runner_os | nn),
+     runner_arch: ($runner_arch | nn), runner_name: ($runner_name | nn), image_os: ($image_os | nn),
+     image_version: ($image_version | nn), run_url: ($run_url | nn), sha: ($sha | nn)}'
+}
+
 capture_env() {
-  local ferry_commit ferry_dirty=false mount
+  local ferry_commit ferry_dirty=false
   ferry_commit=$(git -C "$B_ROOT" rev-parse HEAD)
   [[ -n $(git -C "$B_ROOT" status --porcelain -- src Cargo.toml Cargo.lock) ]] && ferry_dirty=true
-  mount=$(findmnt -J -T "$B_WORK" -o TARGET,SOURCE,FSTYPE,OPTIONS | jq -c '.filesystems[0]')
   jq -n \
     --arg date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-    --arg cpu "$(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2- | sed 's/^ *//')" \
-    --argjson cpus "$(nproc)" \
-    --argjson cores "$(lscpu -p=core,socket 2>/dev/null | grep -v '^#' | sort -u | wc -l)" \
-    --arg governor "$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null || true)" \
-    --argjson mem "$(awk '/^MemTotal/ {print $2 * 1024}' /proc/meminfo)" \
-    --argjson mem_avail "$(awk '/^MemAvailable/ {print $2 * 1024}' /proc/meminfo)" \
-    --argjson swap_used "$(awk '/^SwapTotal/ {t=$2} /^SwapFree/ {f=$2} END {print (t - f) * 1024}' /proc/meminfo)" \
+    --argjson platform "$(platform_env)" \
     --arg kernel "$(uname -r)" \
-    --arg os "$(. /etc/os-release && echo "$PRETTY_NAME")" \
-    --arg fstype "$(stat -f -c %T "$B_WORK")" \
-    --argjson mount "$mount" \
-    --argjson free "$(df --output=avail -B1 "$B_WORK" | tail -n 1)" \
+    --argjson free "$(free_bytes_of "$B_WORK")" \
     --arg rustc "$(cd "$B_REPO" && rustc -vV)" \
     --arg cargo "$(cd "$B_REPO" && cargo -V)" \
     --arg ferry "$("$B_FERRY" --version)" --arg ferry_path "$B_FERRY" \
@@ -201,15 +274,17 @@ capture_env() {
     --arg kache "$([[ -x $B_KACHE ]] && "$B_KACHE" --version 2>/dev/null || echo 'not installed')" \
     --arg hyperfine "$(hyperfine --version)" \
     --arg git "$(git --version)" \
-    --arg cp "$(cp --version | head -n 1)" \
+    --arg cp "$(cp --version 2>/dev/null | head -n 1 || echo 'BSD cp')" \
     --arg btrfs "$(btrfs --version 2>/dev/null | head -n 1 || true)" \
+    --arg bash "$BASH_VERSION" \
+    --arg jq "$(jq --version)" \
+    --argjson ci "$(ci_env)" \
     --arg load "$(loadavg)" \
-    '{date: $date, cpu_model: $cpu, logical_cpus: $cpus, physical_cores: $cores, cpu_governor: $governor,
-      ram_bytes: $mem, mem_available_bytes: $mem_avail, swap_used_bytes: $swap_used,
-      kernel: $kernel, os: $os, bench_fs: $fstype, bench_mount: $mount, bench_free_bytes: $free,
-      rustc: $rustc, cargo: $cargo, ferry: $ferry, ferry_path: $ferry_path, ferry_commit: $ferry_commit,
-      ferry_source_dirty: $ferry_dirty, kache: $kache, hyperfine: $hyperfine, git: $git, cp: $cp,
-      btrfs_progs: $btrfs, loadavg: $load}'
+    '{date: $date} + $platform
+     + {kernel: $kernel, bench_free_bytes: $free,
+        rustc: $rustc, cargo: $cargo, ferry: $ferry, ferry_path: $ferry_path, ferry_commit: $ferry_commit,
+        ferry_source_dirty: $ferry_dirty, kache: $kache, hyperfine: $hyperfine, git: $git, cp: $cp,
+        btrfs_progs: $btrfs, bash: $bash, jq: $jq, ci: $ci, loadavg: $load}'
 }
 
 capture_env >"$B_STATE/env-before.json"
@@ -217,7 +292,8 @@ note "load average before: $(loadavg)"
 
 # --- scenario helpers ------------------------------------------------------------------
 
-lib() { echo "bash $(printf %q "$B_LIB") $*"; }
+# "$BASH", not `bash` from PATH: on macOS that can be the system's bash 3.2.
+lib() { echo "$(printf %q "$BASH") $(printf %q "$B_LIB") $*"; }
 
 # One hyperfine invocation; per-run logs are collected into a step record.
 hf() { # <scenario> <step> <runs> <prepare> <command> [conclude]
@@ -225,7 +301,7 @@ hf() { # <scenario> <step> <runs> <prepare> <command> [conclude]
   # hyperfine discards the output of --prepare and --conclude; keep it. The
   # sync keeps writeback from a prepare (deleted or cloned targets) out of
   # the timed command.
-  local args=(--runs "$3" --shell=bash --style basic --export-json "$B_OUT/hyperfine/$1-$2.json"
+  local args=(--runs "$3" --shell="$BASH" --style basic --export-json "$B_OUT/hyperfine/$1-$2.json"
     --command-name "$1/$2" --prepare "$4 >>$(printf %q "$aux") 2>&1 && sync")
   [[ -n ${6:-} ]] && args+=(--conclude "$6 >>$(printf %q "$aux") 2>&1")
   before=$(loadavg)
@@ -286,7 +362,7 @@ build_steps() { # <scenario> <step>...
   done
 }
 
-free_bytes() { df --output=avail -B1 "$B_WORK" | tail -n 1; }
+free_bytes() { free_bytes_of "$B_WORK"; }
 
 # Records a skipped step instead of silently leaving it out.
 skip() { # <scenario> <step> <reason>
@@ -349,15 +425,29 @@ sc_kache() {
   rm -rf "$k"
 }
 
-ferry_env() { # <variant>: overlay, reflink, copy or off
+ferry_env() { # <variant>: overlay, reflink, copy, off or remap
   export FERRY_HOME=$B_WORK/ferry/home FERRY_WORKTREES=$B_WORK/ferry/wt
   # The base warms exactly what every scenario builds; JSON so its crates can be counted.
   export FERRY_BASE_COMMAND="cargo build $B_BUILD_ARGS --message-format=json"
-  if [[ $1 == off ]]; then
-    export FERRY_SANDBOX=off FERRY_BACKEND=auto
-  else
-    export FERRY_SANDBOX=namespace FERRY_BACKEND=$1
-  fi
+  case $1 in
+    # Explicit, so that a later change of the default cannot change ferry-off.
+    off) export FERRY_SANDBOX=off FERRY_BACKEND=auto FERRY_REMAP_PATHS=0 ;;
+    remap) export FERRY_SANDBOX=off FERRY_BACKEND=auto FERRY_REMAP_PATHS=1 ;;
+    *) export FERRY_SANDBOX=namespace FERRY_BACKEND=$1 ;;
+  esac
+}
+
+# False, after recording the scenario as skipped, without user namespaces
+# (macOS, or Linux where they are blocked).
+has_namespaces() { # <scenario>
+  { fq --json doctor 2>/dev/null || true; } | jq -e '.capabilities.userns.status == "ok"' >/dev/null && return
+  skip "$1" all "needs the namespace sandbox (ferry doctor: user namespaces unavailable)"
+  return 1
+}
+
+# The base `ferry base` last built or reused.
+current_base_dir() {
+  echo "$(ferry_store)/bases/$(fq list --json | jq -r '.bases[] | select(.current) | .id')"
 }
 
 ferry_base_cmd() { # <scenario> <step> [extra base args]
@@ -368,15 +458,17 @@ ferry_base_cmd() { # <scenario> <step> [extra base args]
 sc_ferry() { # <variant>
   local v=$1 sc=ferry-$1 base_dir need state
   ferry_env "$v"
-  if [[ $v == overlay || $v == off ]]; then
+  if [[ $v != off && $v != remap ]]; then has_namespaces "$sc" || return 0; fi
+  # remap is part of the base fingerprint, so ferry-remap times its own base.
+  if [[ $v == overlay || $v == off || $v == remap ]]; then
     hf "$sc" base "$COLD_RUNS" "$(lib ferry_drop_bases)" "$(ferry_base_cmd "$sc" base)"
   else
     fq base --json >"$B_LOGS/$sc-ensure-base.json" 2>"$B_LOGS/$sc-ensure-base.err"
   fi
-  base_dir=$(ls -d "$(ferry_store)/bases/$B_REV"-*/ | head -n 1)
-  put "$sc" base_disk "$(disk_json "${base_dir%/}/target")"
+  base_dir=$(current_base_dir)
+  put "$sc" base_disk "$(disk_json "$base_dir/target")"
   if [[ $v == copy ]]; then
-    need=$(du -s -B1 "${base_dir%/}/target" | cut -f1)
+    need=$(du_bytes "$base_dir/target")
     if (($(free_bytes) < need + (2 << 30))); then
       skip "$sc" all "free space $(free_bytes) B < one copied target ($need B) + 2 GiB"
       return
@@ -404,22 +496,26 @@ sc_ferry() { # <variant>
     hf "$sc" concurrent "$RUNS" "$(lib ferry_conc_prep "$sc")" "$(lib ferry_conc_run "$sc")" "$(lib ferry_conc_conclude "$sc")"
   fi
   ferry_rm bench $(seq -f 'c%g' 1 "$B_AGENTS")
-  if [[ $v == off ]]; then ferry_drop_bases; fi
+  if [[ $v == off || $v == remap ]]; then ferry_drop_bases; fi
 }
 
-sc_refresh() {
-  local c0=$B_REV c1 l
-  ferry_env overlay
-  fq base --json >"$B_LOGS/refresh-ensure-base.json" 2>"$B_LOGS/refresh-ensure-base.err"
-  l=$(label refresh commit 0)
+sc_refresh() { # <variant>: overlay (scenario `refresh`), off or remap
+  local c0=$B_REV c1 l sc=refresh
+  [[ $1 == overlay ]] || sc=refresh-$1
+  ferry_env "$1"
+  if [[ $1 == overlay ]]; then has_namespaces "$sc" || return 0; fi
+  # An earlier refresh scenario that failed may have left its commit checked out.
+  git -C "$B_REPO" reset --quiet --hard "$c0"
+  fq base --json >"$B_LOGS/$sc-ensure-base.json" 2>"$B_LOGS/$sc-ensure-base.err"
+  l=$(label "$sc" commit 0)
   edit "$B_REPO" "$l"
   git -C "$B_REPO" commit --quiet -am "bench: refresh edit"
   c1=$(git -C "$B_REPO" rev-parse HEAD)
-  put refresh commits "$(jq -n -c --arg a "$c0" --arg b "$c1" '{previous: $a, refreshed: $b}')"
-  hf refresh seeded_base "$RUNS" "$(lib ferry_drop_bases "$c1")" "$(ferry_base_cmd refresh seeded_base)" \
-    "$(lib refresh_conclude seeded_base "$c1" "$l")"
-  hf refresh cold_base "$COLD_RUNS" "$(lib ferry_drop_bases "$c1")" "$(ferry_base_cmd refresh cold_base --cold)" \
-    "$(lib refresh_conclude cold_base "$c1" "$l")"
+  put "$sc" commits "$(jq -n -c --arg a "$c0" --arg b "$c1" '{previous: $a, refreshed: $b}')"
+  hf "$sc" seeded_base "$RUNS" "$(lib ferry_drop_bases "$c1")" "$(ferry_base_cmd "$sc" seeded_base)" \
+    "$(lib refresh_conclude "$sc" seeded_base "$c1" "$l")"
+  hf "$sc" cold_base "$COLD_RUNS" "$(lib ferry_drop_bases "$c1")" "$(ferry_base_cmd "$sc" cold_base --cold)" \
+    "$(lib refresh_conclude "$sc" cold_base "$c1" "$l")"
   ferry_drop_bases
   git -C "$B_REPO" reset --quiet --hard "$c0"
 }
@@ -435,6 +531,8 @@ run_scenario() { # <scenario>
     set -e
     case $1 in
       ferry-*) sc_ferry "${1#ferry-}" ;;
+      refresh) sc_refresh overlay ;;
+      refresh-*) sc_refresh "${1#refresh-}" ;;
       *) "sc_$1" ;;
     esac
   )

@@ -16,10 +16,13 @@ def sc_label: {
   "shared": "Shared `CARGO_TARGET_DIR`",
   "kache": "kache, warm local store",
   "ferry-off": "Ferry, sandbox off (crate-level reuse only)",
+  "ferry-remap": "Ferry, remap-paths (sandbox off)",
   "ferry-overlay": "Ferry, overlay backend",
   "ferry-reflink": "Ferry, reflink backend",
   "ferry-copy": "Ferry, copy backend",
-  "refresh": "Ferry base refresh"
+  "refresh": "Ferry base refresh",
+  "refresh-off": "Ferry base refresh, sandbox off",
+  "refresh-remap": "Ferry base refresh, remap-paths (sandbox off)"
 }[.] // .;
 
 def step_label: {
@@ -34,7 +37,8 @@ def step_label: {
   "cold_base": "`ferry base --cold` after the same commit"
 }[.] // .;
 
-def order: ["cold", "naive", "shared", "kache", "ferry-off", "ferry-overlay", "ferry-reflink", "ferry-copy", "refresh"];
+def order: ["cold", "naive", "shared", "kache", "ferry-off", "ferry-remap", "ferry-overlay", "ferry-reflink", "ferry-copy",
+  "refresh", "refresh-off", "refresh-remap"];
 def step_order: ["base", "spawn", "spawn_build", "edit_on_spawn", "first_edit", "second_edit", "concurrent", "seeded_base", "cold_base"];
 
 . as $r
@@ -44,6 +48,10 @@ def step_order: ["base", "spawn", "spawn_build", "edit_on_spawn", "first_edit", 
 | [
   "# Ferry benchmark: \($r.name)",
   "",
+  (if $e.ci then
+    "> **Shared CI runner** (\($e.ci.provider) `\($e.ci.image_os // "?") \($e.ci.image_version // "?")`, run \($e.ci.run_url // "unknown")). Times are noisy and **not comparable** with any other machine or any other run, including Ferry's published results. Compare scenarios only within this file. Crate counts, artifact checks and codegen-unit reuse do not depend on noise; read those first.",
+    ""
+  else empty end),
   "- Workspace: \($r.workspace.source) at `\($r.workspace.commit)`",
   "- Edit: append a documented `pub fn` to `\($r.workspace.edit_file)` (package `\($r.workspace.edit_package)`); every run uses a new, unique function",
   "- Build command: `\($r.workspace.build_command)` (debug), JSON messages; crates = `compiler-artifact` messages with `\"fresh\": false`",
@@ -53,10 +61,11 @@ def step_order: ["base", "spawn", "spawn_build", "edit_on_spawn", "first_edit", 
   "",
   "| | |",
   "|---|---|",
-  "| CPU | \($e.cpu_model) (\($e.physical_cores) cores, \($e.logical_cpus) logical CPUs, governor \($e.cpu_governor)) |",
-  "| RAM | \($e.ram_bytes / 1073741824 | round) GiB; available at start \($e.mem_available_bytes | mib), swap in use at start \($e.swap_used_bytes | mib) |",
+  "| CPU | \($e.cpu_model) (\($e.physical_cores) cores, \($e.logical_cpus) logical CPUs, governor \($e.cpu_governor // "n/a")) |",
+  "| RAM | \($e.ram_bytes / 1073741824 | round) GiB; available at start \($e.mem_available_bytes | mib)\(if $e.mem_available_note then " (" + $e.mem_available_note + ")" else "" end), swap in use at start \($e.swap_used_bytes | mib) |",
   "| OS / kernel | \($e.os) / \($e.kernel) |",
-  "| Bench filesystem | \($e.bench_fs) (`\($e.bench_mount.options)`) |",
+  "| Bench filesystem | \($e.bench_fs // "unknown") (`\($e.bench_mount.options // "n/a")`) |",
+  (if $e.xcode then "| Xcode / linker | \($e.xcode) / `\($e.ld)` |" else empty end),
   "| rustc | `\($e.rustc | split("\n")[0])` |",
   "| cargo | `\($e.cargo)` |",
   "| ferry | `\($e.ferry)` at `\($e.ferry_commit)`\(if $e.ferry_source_dirty then " (uncommitted source changes)" else "" end) |",
@@ -93,6 +102,7 @@ def step_order: ["base", "spawn", "spawn_build", "edit_on_spawn", "first_edit", 
   "## Disk",
   "",
   "`du` counts every allocated block, including extents shared with the base; btrfs exclusive counts only blocks no other file shares.",
+  (if $e.bench_fs == "apfs" then "On APFS, `du` counts cloned blocks in full; Ferry's private bytes are the better estimate of what an agent adds." else empty end),
   "",
   "| Scenario | What | du | btrfs exclusive | Ferry private bytes |",
   "|---|---|---:|---:|---:|",
