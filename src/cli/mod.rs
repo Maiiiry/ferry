@@ -70,7 +70,8 @@ pub enum Command {
         /// Revision the agent's branch starts at.
         #[arg(long, value_name = "REF", default_value = "HEAD")]
         from: String,
-        /// Where to create the worktree (default: inside the store).
+        /// Where to create the worktree (default: the worktree directory, see
+        /// `[agent] worktree-dir`).
         #[arg(long, value_name = "DIR")]
         path: Option<PathBuf>,
         /// Branch name (default: the configured branch prefix plus NAME).
@@ -83,6 +84,8 @@ pub enum Command {
     /// Without NAME, uses the agent whose worktree contains the current
     /// directory.
     Run {
+        /// Agent name (default: the agent whose worktree contains the current
+        /// directory).
         name: Option<String>,
         /// The command and its arguments, after `--`.
         #[arg(last = true, required = true, value_name = "COMMAND")]
@@ -90,20 +93,29 @@ pub enum Command {
     },
 
     /// Start an interactive shell in an agent's build context.
-    Shell { name: Option<String> },
+    Shell {
+        /// Agent name (default: the agent whose worktree contains the current
+        /// directory).
+        name: Option<String>,
+    },
 
     /// Print an agent's paths and environment for wiring into agent tools.
-    Env { name: Option<String> },
+    Env {
+        /// Agent name (default: the agent whose worktree contains the current
+        /// directory).
+        name: Option<String>,
+    },
 
     /// List bases and agents with their status and disk usage.
     List,
 
     /// Remove an agent's worktree and build state.
     ///
-    /// Refuses if the worktree has uncommitted changes or processes are still
-    /// running in the agent's sandbox. The branch is kept if it has new
+    /// Refuses if the worktree has uncommitted changes or processes started
+    /// for the agent are still running. The branch is kept if it has new
     /// commits.
     Rm {
+        /// Agent to remove.
         name: String,
         /// Discard uncommitted changes and ignore running processes.
         #[arg(long)]
@@ -120,7 +132,7 @@ pub enum Command {
     /// Check platform capabilities and print fixes for what is missing.
     Doctor {
         /// Print an `AppArmor` profile that allows this ferry binary to use
-        /// user namespaces (Ubuntu 23.10+).
+        /// user namespaces (Ubuntu 24.04+).
         #[arg(long)]
         apparmor_profile: bool,
     },
@@ -216,7 +228,7 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
         Command::Gc { dry_run } => gc(&discover()?, dry_run, json),
         Command::Doctor { apparmor_profile } => doctor_cmd(&cwd, apparmor_profile, json),
         Command::Shim => {
-            let dir = crate::shim::ensure(&discover()?)?;
+            let dir = crate::shim::ensure(&crate::context::settings(&cwd)?)?;
             if json {
                 output::json(&serde_json::json!({ "shim_dir": dir }))?;
             } else {
@@ -293,10 +305,13 @@ fn base_cmd(ctx: &Context, rev: &str, cold: bool, json: bool) -> anyhow::Result<
             .map(|s| format!(", seeded from {}", s.short()))
             .unwrap_or_default();
         output::success(&format!(
-            "base {} ready in {:.1}s ({} sandbox, {} freshness{seeded})",
+            "base {} ready in {:.1}s ({}, {} freshness{seeded})",
             b.id.short(),
             b.build_secs,
-            b.isolation,
+            match b.isolation {
+                crate::sandbox::Isolation::Namespace => "namespace sandbox",
+                crate::sandbox::Isolation::None => "no sandbox",
+            },
             serde_json::to_value(b.freshness)?
                 .as_str()
                 .unwrap_or_default()
@@ -411,7 +426,7 @@ fn list(ctx: &Context, json: bool) -> anyhow::Result<ExitCode> {
         .map(|a| {
             let status = if a.meta.state == agent::AgentState::Creating {
                 format!("{YELLOW}incomplete{YELLOW:#}")
-            } else if !a.running.is_empty() {
+            } else if a.busy {
                 format!("{GREEN}running{GREEN:#}")
             } else if !a.worktree_exists {
                 format!("{YELLOW}worktree missing{YELLOW:#}")
@@ -468,6 +483,9 @@ fn gc(ctx: &Context, dry_run: bool, json: bool) -> anyhow::Result<ExitCode> {
         return Ok(ExitCode::SUCCESS);
     }
     let verb = if dry_run { "would remove" } else { "removed" };
+    for name in &report.reaped_agents {
+        println!("  {verb} abandoned agent {name} (created by an agent tool, clean and idle)");
+    }
     for id in &report.removed {
         println!("  {verb} base {}", id.short());
     }
@@ -475,7 +493,13 @@ fn gc(ctx: &Context, dry_run: bool, json: bool) -> anyhow::Result<ExitCode> {
         println!("  skipped base {} (being built)", id.short());
     }
     output::success(&format!(
-        "{verb} {} base{}, {} freed",
+        "{verb} {} agent{} and {} base{}, {} freed",
+        report.reaped_agents.len(),
+        if report.reaped_agents.len() == 1 {
+            ""
+        } else {
+            "s"
+        },
         report.removed.len(),
         if report.removed.len() == 1 { "" } else { "s" },
         human_bytes(report.freed_bytes)
