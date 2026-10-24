@@ -129,6 +129,14 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
+      # The runner image lets the runner user write to /usr/local/bin, so
+      # `ferry setup apparmor` refuses it: the profiled binary could be
+      # replaced. Restore a stock Ubuntu install's owner and mode.
+      - name: Make /usr/local/bin root-owned, as on a stock Ubuntu install
+        run: |
+          stat -c '%U:%G %a %n' /usr/local /usr/local/bin
+          sudo chown root:root /usr/local /usr/local/bin
+          sudo chmod 755 /usr/local /usr/local/bin
       - name: Install ferry with `ferry setup apparmor`
         run: |
           test "$(cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns)" = 1
