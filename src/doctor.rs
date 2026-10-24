@@ -115,6 +115,7 @@ pub fn run(ctx: Result<&Context, String>) -> Report {
             None
         }
     };
+    checks.extend(clippy_checks(ctx));
     if let Some(mode) = freshness {
         checks.push(match mode {
             FreshnessMode::Checksum => {
@@ -161,6 +162,32 @@ pub fn run(ctx: Result<&Context, String>) -> Report {
         capabilities: Some(caps),
         plan: Some(plan),
     }
+}
+
+fn clippy_checks(ctx: &Context) -> Vec<Check> {
+    let mut out = Vec::new();
+    if ctx.settings.warm_commands.iter().any(|c| c.clippy) {
+        out.push(if Toolchain::clippy_available(&ctx.repo.main_worktree) {
+            ok("clippy", "installed; bases warm `cargo clippy`".into())
+        } else {
+            Check {
+                fix: Some("rustup component add clippy".into()),
+                ..info(
+                    "clippy",
+                    "not installed for this toolchain; bases skip warming it".into(),
+                )
+            }
+        });
+    }
+    if ctx.settings.remap_paths {
+        out.push(info(
+            "remap-paths",
+            "`cargo clippy` runs are not remapped: clippy replaces the wrapper, so workspace \
+             crates re-lint without incremental reuse"
+                .into(),
+        ));
+    }
+    out
 }
 
 fn store_check(root: &Path, caps: &Capabilities) -> Check {

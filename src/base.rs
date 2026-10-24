@@ -14,7 +14,7 @@ use std::time::Instant;
 
 use serde::{Deserialize, Serialize};
 
-use crate::config::SandboxMode;
+use crate::config::{SandboxMode, WarmCommand};
 use crate::context::Context;
 use crate::error::{Error, IoContext, Result};
 use crate::fork::{BackendKind, ForkPaths, TargetSpec};
@@ -53,6 +53,13 @@ pub struct BaseMeta {
     /// The earlier base whose target this one was seeded from.
     #[serde(default)]
     pub seeded_from: Option<BaseId>,
+    /// Wall time of each entry of `commands`.
+    #[serde(default)]
+    pub command_secs: Vec<f64>,
+    /// Optional (clippy) commands that failed, so whatever they could not
+    /// check is not warm.
+    #[serde(default)]
+    pub incomplete: Vec<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -105,19 +112,22 @@ pub fn build(ctx: &Context, rev: &str, cold: bool) -> Result<BuildReport> {
             unapplied_message(ctx, &config)
         ));
     }
-    let remap = isolation == Isolation::None && ctx.settings.remap_paths && {
-        match crate::remap::supported(&host_toolchain) {
-            Ok(()) => true,
-            Err(why) => {
-                warnings.push(format!("remap-paths disabled: {why}"));
-                false
-            }
-        }
-    };
-    let id = BaseId::new(
-        commit.as_str(),
-        fingerprint(ctx, &commit, &host_toolchain, freshness, isolation, remap)?,
-    );
+    let remap = resolve_remap(ctx, isolation, &host_toolchain, &mut warnings);
+    // What actually runs is part of the fingerprint, so installing clippy
+    // later builds a new base instead of reusing one that never ran it.
+    let commands = runnable(&ctx.settings.warm_commands, &mut warnings, || {
+        Toolchain::clippy_available(&ctx.repo.main_worktree)
+    });
+    let hash = fingerprint(
+        ctx,
+        &commit,
+        &host_toolchain,
+        &commands,
+        freshness,
+        isolation,
+        remap,
+    )?;
+    let id = BaseId::new(commit.as_str(), hash);
     let paths = ctx.store.base(&id);
 
     let lock = FileLock::exclusive(&paths.lock, &format!("base {}", id.short()))?;
@@ -156,13 +166,12 @@ pub fn build(ctx: &Context, rev: &str, cold: bool) -> Result<BuildReport> {
         None
     };
     let plan = build_plan(ctx, &paths, isolation, remap_wrapper);
-    let commands = ctx.settings.warm_commands.clone();
-    if let Err(e) = run_warm_commands(&plan, freshness, &commands) {
+    let outcome = run_warm_commands(&plan, freshness, &commands).inspect_err(|_| {
         // The process may now be inside the sandbox, but host paths are
         // still reachable, so cleanup works the same way.
         let _ = discard(ctx, &paths);
-        return Err(e);
-    }
+    })?;
+    warnings.extend(outcome.warnings);
 
     // Cargo writing (or updating) the lockfile is expected; agents get the
     // base's copy when the repository does not track one.
@@ -185,12 +194,14 @@ pub fn build(ctx: &Context, rev: &str, cold: bool) -> Result<BuildReport> {
         freshness,
         isolation,
         toolchain,
-        commands,
+        commands: commands.into_iter().map(|c| c.line).collect(),
         ferry_version: env!("CARGO_PKG_VERSION").to_owned(),
         dirtied,
         remap_paths: remap,
         unit_inputs: inputs,
         seeded_from: seed.map(|s| s.id),
+        command_secs: outcome.secs,
+        incomplete: outcome.incomplete,
     };
     // Writing base.json is what makes the base ready (and immutable).
     fsutil::write_json_atomic(&paths.meta, &base)?;
@@ -447,11 +458,29 @@ fn resolve_isolation(ctx: &Context, warnings: &mut Vec<String>) -> Result<Isolat
     Ok(Isolation::None)
 }
 
+fn resolve_remap(
+    ctx: &Context,
+    isolation: Isolation,
+    toolchain: &Toolchain,
+    warnings: &mut Vec<String>,
+) -> bool {
+    isolation == Isolation::None && ctx.settings.remap_paths && {
+        match crate::remap::supported(toolchain) {
+            Ok(()) => true,
+            Err(why) => {
+                warnings.push(format!("remap-paths disabled: {why}"));
+                false
+            }
+        }
+    }
+}
+
 /// Hash of everything besides the commit that determines a base's artifacts.
 fn fingerprint(
     ctx: &Context,
     commit: &CommitId,
     toolchain: &Toolchain,
+    commands: &[WarmCommand],
     freshness: FreshnessMode,
     isolation: Isolation,
     remap: bool,
@@ -469,8 +498,8 @@ fn fingerprint(
         }
         input.push(0);
     }
-    for cmd in &ctx.settings.warm_commands {
-        input.extend_from_slice(cmd.as_bytes());
+    for cmd in commands {
+        input.extend_from_slice(cmd.line.as_bytes());
         input.push(0);
     }
     input.extend_from_slice(format!("{freshness:?}/{isolation:?}/remap={remap}").as_bytes());
@@ -593,7 +622,8 @@ pub fn unapplied_message(ctx: &Context, config: &std::path::Path) -> String {
 }
 
 /// Environment variables that change unit hashes or compiler flags, minus
-/// the target and build dir, which Ferry sets itself.
+/// the target and build dir, which Ferry sets itself, and `build.warnings`,
+/// which Cargo applies after a unit is built and fingerprints nowhere.
 fn selects_units(name: &str) -> bool {
     let cargo_config = [
         "CARGO_BUILD_",
@@ -609,8 +639,29 @@ fn selects_units(name: &str) -> bool {
     ) || (cargo_config
         && !matches!(
             name,
-            "CARGO_TARGET_DIR" | "CARGO_BUILD_TARGET_DIR" | "CARGO_BUILD_BUILD_DIR"
+            "CARGO_TARGET_DIR"
+                | "CARGO_BUILD_TARGET_DIR"
+                | "CARGO_BUILD_BUILD_DIR"
+                | "CARGO_BUILD_WARNINGS"
         ))
+}
+
+/// The warm commands that can run: clippy commands are dropped, with a
+/// warning, when `clippy_installed` (asked only if there is one) is false.
+fn runnable(
+    commands: &[WarmCommand],
+    warnings: &mut Vec<String>,
+    clippy_installed: impl FnOnce() -> bool,
+) -> Vec<WarmCommand> {
+    if !commands.iter().any(|c| c.clippy) || clippy_installed() {
+        return commands.to_vec();
+    }
+    warnings.push(
+        "clippy is not installed for this toolchain; the base does not warm `cargo clippy` \
+         (rustup component add clippy)"
+            .into(),
+    );
+    commands.iter().filter(|c| !c.clippy).cloned().collect()
 }
 
 fn build_plan(
@@ -630,13 +681,26 @@ fn build_plan(
     }
 }
 
-fn run_warm_commands(plan: &Plan, freshness: FreshnessMode, commands: &[String]) -> Result<()> {
+struct WarmOutcome {
+    secs: Vec<f64>,
+    incomplete: Vec<String>,
+    warnings: Vec<String>,
+}
+
+fn run_warm_commands(
+    plan: &Plan,
+    freshness: FreshnessMode,
+    commands: &[WarmCommand],
+) -> Result<WarmOutcome> {
     let shim_dir = crate::shim::ensure()?;
     sandbox::enter(plan)?;
     // The target dir variables stay set for cargo calls that bypass the shim;
     // through it, each workspace gets the target dir it gets in an agent.
     let mut env = crate::agent::cargo_env(plan, freshness);
     env.extend([
+        // A user's `build.warnings = "deny"` must not fail the base; it is
+        // in no fingerprint, so the units still match the agents' builds.
+        ("CARGO_BUILD_WARNINGS".into(), "warn".into()),
         ("PATH".into(), crate::shim::path_with(&shim_dir)),
         (
             crate::shim::WARM_SRC_ENV.into(),
@@ -647,17 +711,23 @@ fn run_warm_commands(plan: &Plan, freshness: FreshnessMode, commands: &[String])
             plan.build_target().into_os_string(),
         ),
     ]);
-    for cmd in commands {
-        fsutil::note(&format!("running `{cmd}`"));
+    let mut outcome = WarmOutcome {
+        secs: Vec::new(),
+        incomplete: Vec::new(),
+        warnings: Vec::new(),
+    };
+    for WarmCommand { line, clippy } in commands {
+        fsutil::note(&format!("running `{line}`"));
         // Build output goes to stderr so `--json` output on stdout stays
         // parseable.
         let stderr = std::io::stderr()
             .as_fd()
             .try_clone_to_owned()
             .at("duplicate", "stderr")?;
+        let started = Instant::now();
         let status = Command::new("sh")
             .arg("-c")
-            .arg(cmd)
+            .arg(line)
             .current_dir(plan.build_src())
             .env("PWD", plan.build_src())
             .envs(env.iter().map(|(k, v)| (k, v)))
@@ -668,14 +738,23 @@ fn run_warm_commands(plan: &Plan, freshness: FreshnessMode, commands: &[String])
                 program: "sh".into(),
                 source,
             })?;
-        if !status.success() {
+        outcome.secs.push(started.elapsed().as_secs_f64());
+        if status.success() {
+            continue;
+        }
+        if !clippy {
             return Err(Error::BaseBuildFailed {
-                command: cmd.clone(),
+                command: line.clone(),
                 status: status.to_string(),
             });
         }
+        outcome.warnings.push(format!(
+            "`{line}` failed ({status}); the base is kept, but crates clippy could not check \
+             are not warm for `cargo clippy`"
+        ));
+        outcome.incomplete.push(line.clone());
     }
-    Ok(())
+    Ok(outcome)
 }
 
 #[cfg(test)]
@@ -697,11 +776,35 @@ mod tests {
         for name in [
             "CARGO_TARGET_DIR",
             "CARGO_BUILD_BUILD_DIR",
+            "CARGO_BUILD_WARNINGS",
             "CARGO_HOME",
             "CARGO_TERM_COLOR",
             "RUSTUP_HOME",
         ] {
             assert!(!selects_units(name), "{name}");
         }
+    }
+
+    #[test]
+    fn runnable_drops_clippy_only_when_missing() {
+        let cmd = |line: &str, clippy| WarmCommand {
+            line: line.into(),
+            clippy,
+        };
+        let generated = [cmd("cargo build", false), cmd("cargo clippy", true)];
+
+        let mut warnings = Vec::new();
+        assert_eq!(runnable(&generated, &mut warnings, || true), generated);
+        assert_eq!(warnings, Vec::<String>::new());
+
+        let kept = runnable(&generated, &mut warnings, || false);
+        assert_eq!(kept, [cmd("cargo build", false)]);
+        assert_eq!(warnings.len(), 1);
+        assert!(warnings[0].contains("rustup component add clippy"));
+
+        let explicit = [cmd("cargo clippy", false)];
+        let kept = runnable(&explicit, &mut warnings, || panic!("probed without clippy"));
+        assert_eq!(kept, explicit);
+        assert_eq!(warnings.len(), 1);
     }
 }

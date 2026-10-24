@@ -57,6 +57,12 @@ impl Toolchain {
         Ok(Self::parse(&rustc_verbose, cargo_version.trim()))
     }
 
+    /// Whether `cargo clippy` works in `dir`: clippy is an optional rustup
+    /// component, missing from minimal installs.
+    pub fn clippy_available(dir: &Path) -> bool {
+        capture("cargo", &["clippy", "--version"], dir).is_ok()
+    }
+
     pub fn parse(rustc_verbose: &str, cargo_version: &str) -> Self {
         let field = |name: &str| {
             rustc_verbose

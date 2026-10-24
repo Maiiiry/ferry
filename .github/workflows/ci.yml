@@ -72,6 +72,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
         with:
           toolchain: ${{ matrix.rust }}
+          components: clippy
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
@@ -91,7 +92,7 @@ jobs:
         env:
           # Fail instead of skipping tests when a capability these runners
           # have goes undetected.
-          FERRY_TEST_REQUIRE: ${{ runner.os == 'Linux' && 'userns,overlay' || 'reflink' }}
+          FERRY_TEST_REQUIRE: ${{ runner.os == 'Linux' && 'userns,overlay,clippy' || 'reflink,clippy' }}
         run: |
           unset CARGO_INCREMENTAL
           cargo test --locked
@@ -108,6 +109,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
         with:
           toolchain: stable
+          components: clippy
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
@@ -121,10 +123,10 @@ jobs:
       - name: cargo test (sandbox tests through the profiled binary)
         env:
           FERRY_TEST_BIN: /usr/local/bin/ferry
-          FERRY_TEST_REQUIRE: userns,overlay
+          FERRY_TEST_REQUIRE: userns,overlay,clippy
         run: |
           unset CARGO_INCREMENTAL
-          cargo test --locked --test spawn --test isolation --test concurrency --test contamination --test shim
+          cargo test --locked --test spawn --test isolation --test concurrency --test contamination --test shim --test warm
 
   rustdoc:
     name: rustdoc
