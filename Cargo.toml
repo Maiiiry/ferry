@@ -30,6 +30,12 @@ path = "src/lib.rs"
 name = "ferry"
 path = "src/main.rs"
 
+# Entering a namespace needs a single-threaded process, and libtest runs every
+# test on a spawned thread.
+[[test]]
+name = "sandbox_linux"
+harness = false
+
 [dependencies]
 anstream = "1"
 anstyle = "1"
