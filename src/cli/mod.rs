@@ -1,6 +1,7 @@
 //! Command-line interface. Errors are `anyhow` here and typed below.
 
 mod output;
+mod setup;
 
 use std::ffi::OsString;
 use std::path::PathBuf;
@@ -150,8 +151,41 @@ pub enum Command {
         event: HookEvent,
     },
 
+    /// Change the system so Ferry's namespace sandbox works (asks first).
+    Setup {
+        #[command(subcommand)]
+        what: SetupCommand,
+    },
+
     #[command(name = "__probe-sandbox", hide = true)]
     ProbeSandbox { dir: PathBuf },
+
+    /// Prints this binary's capabilities as JSON, probing under DIR.
+    #[command(name = "__detect", hide = true)]
+    Detect { dir: PathBuf },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum SetupCommand {
+    /// Let ferry create user namespaces on Ubuntu 24.04+: install it to a
+    /// root-owned path and load its `AppArmor` profile, with one sudo call.
+    ///
+    /// Prints every step, the profile and the root script first, and asks
+    /// before running sudo.
+    Apparmor {
+        /// Run without asking; the plan is still printed.
+        #[arg(short = 'y', long, conflicts_with = "dry_run")]
+        yes: bool,
+        /// Print the plan and exit without changing anything.
+        #[arg(long)]
+        dry_run: bool,
+        /// Unload and remove Ferry's profile instead.
+        #[arg(long)]
+        uninstall: bool,
+        /// Where to install ferry when its current path cannot be profiled.
+        #[arg(long, value_name = "DIR", default_value = crate::setup::DEFAULT_BIN_DIR)]
+        bin_dir: PathBuf,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -250,7 +284,12 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
             Ok(ExitCode::SUCCESS)
         }
         Command::Hook { event } => hook(&event),
+        Command::Setup { what } => setup::run(&what, json),
         Command::ProbeSandbox { dir } => probe(&dir),
+        Command::Detect { dir } => {
+            output::json(&crate::platform::Capabilities::detect(&dir))?;
+            Ok(ExitCode::SUCCESS)
+        }
     }
 }
 
@@ -646,5 +685,34 @@ mod tests {
         assert!(cli.json);
         let cli = Cli::try_parse_from(["ferry", "--json", "doctor"]).unwrap();
         assert!(cli.json);
+    }
+
+    #[test]
+    fn setup_apparmor_dry_run_excludes_yes() {
+        assert!(Cli::try_parse_from(["ferry", "setup", "apparmor", "--dry-run", "--yes"]).is_err());
+        let cli =
+            Cli::try_parse_from(["ferry", "--json", "setup", "apparmor", "--dry-run"]).unwrap();
+        assert!(cli.json);
+        let Command::Setup {
+            what: SetupCommand::Apparmor {
+                dry_run, bin_dir, ..
+            },
+        } = cli.command
+        else {
+            panic!()
+        };
+        assert!(dry_run);
+        assert_eq!(bin_dir, PathBuf::from("/usr/local/bin"));
+        let cli = Cli::try_parse_from(["ferry", "setup", "apparmor", "-y", "--uninstall"]).unwrap();
+        assert!(matches!(
+            cli.command,
+            Command::Setup {
+                what: SetupCommand::Apparmor {
+                    yes: true,
+                    uninstall: true,
+                    ..
+                }
+            }
+        ));
     }
 }

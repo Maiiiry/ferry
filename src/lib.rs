@@ -44,6 +44,8 @@ pub mod remap;
 #[cfg(unix)]
 pub mod sandbox;
 #[cfg(unix)]
+pub mod setup;
+#[cfg(unix)]
 pub mod shim;
 #[cfg(unix)]
 pub mod store;

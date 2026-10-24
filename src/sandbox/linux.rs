@@ -54,6 +54,10 @@ const LEGACY_OPTIONS_MAX: usize = 4096;
 pub struct ProbeResult {
     pub userns: Probe,
     pub overlay: Probe,
+    /// The probe process's `AppArmor` label (or other LSM context), which
+    /// shows whether a profile attached to it.
+    #[serde(default)]
+    pub label: Option<String>,
 }
 
 /// Device and inode of a file; for `/proc/<pid>/ns/*` the namespace identity.
@@ -306,10 +310,16 @@ pub fn users(ns_record: &Path) -> Result<Vec<u32>, SandboxError> {
 /// mount namespace, bind-mounts and mounts an overlay using scratch dirs
 /// under `scratch`, and reports which step failed.
 pub fn probe_in_child(scratch: &Path) -> ProbeResult {
+    // Read before unshare, which may move the process to another profile.
+    let label = fs::read_to_string("/proc/self/attr/current")
+        .ok()
+        .map(|l| l.trim_end_matches(['\n', '\0']).to_owned())
+        .filter(|l| !l.is_empty());
     match probe(scratch) {
         Ok(()) => ProbeResult {
             userns: Probe::Ok,
             overlay: Probe::Ok,
+            label,
         },
         Err((stage, error)) => {
             let failed = Probe::Failed {
@@ -324,6 +334,7 @@ pub fn probe_in_child(scratch: &Path) -> ProbeResult {
             ProbeResult {
                 userns,
                 overlay: failed,
+                label,
             }
         }
     }

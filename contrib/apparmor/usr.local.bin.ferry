@@ -1,6 +1,7 @@
-# AppArmor profile: lets /usr/local/bin/ferry create unprivileged user namespaces.
+# Ferry: lets /usr/local/bin/ferry create user namespaces; what it runs gets no capabilities in them.
+# Managed by `ferry setup apparmor`; remove with `ferry setup apparmor --uninstall`.
 # The path must be root-owned and not writable by users.
-# Install: sudo cp this-file /etc/apparmor.d/ferry && sudo apparmor_parser -r /etc/apparmor.d/ferry
+# Manual install: sudo install -m 644 this-file /etc/apparmor.d/usr.local.bin.ferry && sudo apparmor_parser -r /etc/apparmor.d/usr.local.bin.ferry
 abi <abi/4.0>,
 include <tunables/global>
 
@@ -18,6 +19,9 @@ profile ferry /usr/local/bin/ferry flags=(attach_disconnected) {
   allow umount,
   allow pivot_root,
   allow dbus,
+  # ferry re-running itself (the namespace probe) must keep its capabilities;
+  # an exact path takes precedence over the pattern below.
+  allow ix /usr/local/bin/ferry,
   allow px /** -> ferry//&unpriv_ferry,
 
   include if exists <local/ferry>

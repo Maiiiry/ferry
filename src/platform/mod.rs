@@ -84,6 +84,9 @@ pub struct Capabilities {
     pub overlay: Probe,
     /// Linux sysctls that commonly explain a failed `userns` probe.
     pub sysctls: Vec<Sysctl>,
+    /// The namespace probe process's `AppArmor` label, e.g. `ferry (enforce)`.
+    #[serde(default)]
+    pub probe_label: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
