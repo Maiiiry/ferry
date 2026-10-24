@@ -12,14 +12,18 @@
     reason = "helpers outside #[test] functions fail the test by panicking"
 )]
 
+mod common;
+
 use std::collections::HashSet;
 use std::ffi::OsStr;
 use std::fmt::Write as _;
 use std::fs;
+use std::io::Write as _;
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use common::{Snapshot, TestRepo, str_of};
 use ferry::remap::{TARGET_LINK, WRAPPER_NAME};
 use ferry::toolchain::Toolchain;
 
@@ -41,10 +45,7 @@ struct Fork {
 
 #[test]
 fn forked_target_keeps_incremental_state_through_the_wrapper() {
-    let rustc = Command::new("rustc").arg("-vV").output().unwrap();
-    let toolchain = Toolchain::parse(&String::from_utf8_lossy(&rustc.stdout), "");
-    if let Err(why) = ferry::remap::supported(&toolchain) {
-        eprintln!("skipping the remap test: {why}");
+    if !remap_supported() {
         return;
     }
     let tmp = tempfile::tempdir().unwrap();
@@ -54,15 +55,64 @@ fn forked_target_keeps_incremental_state_through_the_wrapper() {
 
     let with = fork_and_edit(&root.join("with"), Some(&wrapper));
     let without = fork_and_edit(&root.join("without"), None);
+    report("fork + edit", &with, &without);
+    assert_reuse(&with, &without);
+}
+
+/// The same through Ferry: a base and an agent without the namespace
+/// sandbox, so the agent builds at another path than its base did. The
+/// timed case of the benchmark's `edit_on_spawn`: spawn, edit, build.
+#[test]
+fn ferry_agents_reuse_incremental_state_with_remap_paths() {
+    if !remap_supported() {
+        return;
+    }
+    let with = agent_first_edit(true);
+    let without = agent_first_edit(false);
+    report("ferry spawn + edit", &with, &without);
+    assert_reuse(&with, &without);
+}
+
+/// Skips the calling test (or fails it, when `FERRY_TEST_REQUIRE` lists
+/// `remap`) unless the host rustc can remap.
+fn remap_supported() -> bool {
+    let rustc = Command::new("rustc").arg("-vV").output().unwrap();
+    let toolchain = Toolchain::parse(&String::from_utf8_lossy(&rustc.stdout), "");
+    match ferry::remap::supported(&toolchain) {
+        Ok(()) => true,
+        Err(why) => {
+            assert!(
+                !common::required("remap"),
+                "remap required by FERRY_TEST_REQUIRE but unsupported: {why}"
+            );
+            common::skip(&why);
+            false
+        }
+    }
+}
+
+/// Printed uncaptured, so CI logs carry the measured counts.
+fn report(what: &str, with: &Fork, without: &Fork) {
     for (krate, with, without) in [(LIB, with.lib, without.lib), (BIN, with.bin, without.bin)] {
-        eprintln!(
-            "{krate}: {}/{} codegen units reused after fork + edit with {WRAPPER_NAME}, {}/{} without",
-            with.reused, with.total, without.reused, without.total
+        let _ = writeln!(
+            std::io::stderr(),
+            "{krate}: {}/{} codegen units reused after {what} with {WRAPPER_NAME}, {}/{} without",
+            with.reused,
+            with.total,
+            without.reused,
+            without.total
         );
     }
-    // Only the library is asserted: on targets that embed gdb scripts
-    // (Linux), every codegen unit of a binary reads the absolute paths of its
-    // dependencies, so the binary rebuilds fully either way.
+}
+
+fn assert_reuse(with: &Fork, without: &Fork) {
+    // On targets that embed gdb scripts (Linux), every codegen unit of a
+    // binary reads the absolute paths of its dependencies, so the binary
+    // rebuilds fully either way. Apple targets embed none.
+    if cfg!(target_vendor = "apple") {
+        assert!(with.bin.total > MODULES, "{:?}", with.bin);
+        assert!(with.bin.reused + 2 >= with.bin.total, "{:?}", with.bin);
+    }
     let (with, without) = (with.lib, without.lib);
     assert!(with.total > MODULES, "{with:?}");
     assert!(with.reused + 2 >= with.total, "{with:?}");
@@ -116,19 +166,7 @@ fn fork_and_edit(dir: &Path, wrapper: Option<&Path>) -> Fork {
     ferry::remap::prepare(&b, &target_b).unwrap();
     assert_eq!(fs::read_link(b.join(TARGET_LINK)).unwrap(), target_b);
 
-    // Appended, so every existing item keeps its position.
-    fs::write(
-        b.join(LIB).join("src/lib.rs"),
-        modules() + "\npub fn added() -> usize {\n    42\n}\n",
-    )
-    .unwrap();
-    fs::write(
-        b.join(BIN).join("src/main.rs"),
-        main_rs(&format!(
-            "println!(\"{{}} {{}} {{}}\", {LIB}::total(2), total(1), {LIB}::added());"
-        )),
-    )
-    .unwrap();
+    edit_workspace(&b);
     let incremental = target_b.join("debug/incremental");
     let before = object_inodes(&incremental);
     assert_eq!(cargo_build(&b, wrapper), [BIN, LIB]);
@@ -136,22 +174,8 @@ fn fork_and_edit(dir: &Path, wrapper: Option<&Path>) -> Fork {
     let output = Command::new(target_b.join("debug").join(BIN))
         .output()
         .unwrap();
-    let total = |x: usize| (0..MODULES).map(|i| x * (i + 1) + i).sum::<usize>();
-    assert_eq!(
-        String::from_utf8_lossy(&output.stdout),
-        format!("{} {} 42\n", total(2), total(1))
-    );
-    let reuse = |krate| {
-        let objects = object_inodes(&newest_session(&incremental, krate));
-        Reuse {
-            reused: objects.intersection(&before).count(),
-            total: objects.len(),
-        }
-    };
-    let fork = Fork {
-        lib: reuse(LIB),
-        bin: reuse(BIN),
-    };
+    assert_eq!(String::from_utf8_lossy(&output.stdout), edited_output());
+    let fork = reuse_since(&incremental, &before);
     assert_eq!(
         cargo_build(&b, wrapper),
         Vec::<String>::new(),
@@ -159,6 +183,68 @@ fn fork_and_edit(dir: &Path, wrapper: Option<&Path>) -> Fork {
     );
     fs::remove_dir_all(dir).unwrap();
     fork
+}
+
+/// `ferry base`, then `ferry spawn`, an edit of both crates and the agent's
+/// first build; the base must come out of it unchanged.
+fn agent_first_edit(remap: bool) -> Fork {
+    let repo = TestRepo::with_workspace(
+        &[
+            ("FERRY_SANDBOX", "off"),
+            ("FERRY_REMAP_PATHS", if remap { "1" } else { "0" }),
+        ],
+        |root| {
+            write_workspace(root);
+            // Committed, so the agent's checkout has nothing untracked.
+            run(Command::new(env!("CARGO"))
+                .args(["generate-lockfile", "--offline"])
+                .current_dir(root));
+        },
+    );
+    let report = repo.ferry_json(["base"]);
+    assert_eq!(report["base"]["isolation"], "none", "{report}");
+    assert_eq!(report["base"]["remap_paths"], remap, "{report}");
+    let base_dir = repo.base_dir(str_of(&report["base"]["id"]));
+    let base_before = Snapshot::of(&base_dir);
+
+    let worktree = repo.spawn("a");
+    let target = repo.store().join("agents/a/target");
+    if remap {
+        assert_eq!(fs::read_link(worktree.join(TARGET_LINK)).unwrap(), target);
+    }
+    let status = ["status", "--porcelain", "--untracked-files=all"];
+    assert_eq!(repo.git(&worktree, status), "");
+
+    edit_workspace(&worktree);
+    let incremental = target.join("debug/incremental");
+    let before = object_inodes(&incremental);
+    repo.build("a").assert_rebuilt(&[BIN, LIB]);
+    let fork = reuse_since(&incremental, &before);
+    let output = common::run(repo.agent_cargo("a").args(["run", "-q", "-p", BIN])).ok();
+    assert_eq!(output.stdout, edited_output());
+    repo.build("a").assert_rebuilt(&[]);
+
+    repo.git(&worktree, ["checkout", "--", "."]);
+    // Without --force: .ferry-target must count as build output.
+    repo.ferry(["rm", "a"]).ok();
+    base_before.assert_unchanged(&Snapshot::of(&base_dir));
+    fork
+}
+
+/// Codegen units of the newest sessions under `incremental` whose object
+/// files are among `before`.
+fn reuse_since(incremental: &Path, before: &HashSet<u64>) -> Fork {
+    let reuse = |krate| {
+        let objects = object_inodes(&newest_session(incremental, krate));
+        Reuse {
+            reused: objects.intersection(before).count(),
+            total: objects.len(),
+        }
+    };
+    Fork {
+        lib: reuse(LIB),
+        bin: reuse(BIN),
+    }
 }
 
 /// A library and a binary using it, each with one module (and so one
@@ -191,6 +277,28 @@ fn write_workspace(root: &Path) {
         )),
     )
     .unwrap();
+}
+
+/// Edits both crates; appended, so every existing item keeps its position.
+fn edit_workspace(root: &Path) {
+    fs::write(
+        root.join(LIB).join("src/lib.rs"),
+        modules() + "\npub fn added() -> usize {\n    42\n}\n",
+    )
+    .unwrap();
+    fs::write(
+        root.join(BIN).join("src/main.rs"),
+        main_rs(&format!(
+            "println!(\"{{}} {{}} {{}}\", {LIB}::total(2), total(1), {LIB}::added());"
+        )),
+    )
+    .unwrap();
+}
+
+/// What the binary prints after [`edit_workspace`].
+fn edited_output() -> String {
+    let total = |x: usize| (0..MODULES).map(|i| x * (i + 1) + i).sum::<usize>();
+    format!("{} {} 42\n", total(2), total(1))
 }
 
 fn modules() -> String {
@@ -293,10 +401,12 @@ fn run(command: &mut Command) {
 /// a crate use `#![feature]` on a toolchain that would refuse it.
 #[test]
 fn wrapper_keeps_feature_gates_on_stable() {
+    if !remap_supported() {
+        return;
+    }
     let rustc = Command::new("rustc").arg("-vV").output().unwrap();
-    let toolchain = Toolchain::parse(&String::from_utf8_lossy(&rustc.stdout), "");
-    if toolchain.is_nightly() || ferry::remap::supported(&toolchain).is_err() {
-        eprintln!("skipping the feature-gate test: it needs a stable or beta rustc 1.98+");
+    if Toolchain::parse(&String::from_utf8_lossy(&rustc.stdout), "").is_nightly() {
+        common::skip("it needs a stable or beta rustc");
         return;
     }
     let tmp = tempfile::tempdir().unwrap();
@@ -342,4 +452,219 @@ fn wrapper_keeps_feature_gates_on_stable() {
         "{}",
         String::from_utf8_lossy(&nightly.stderr)
     );
+}
+
+/// Debug info on Apple targets stays in the object files
+/// (`split-debuginfo=unpacked`), and the binary only records where they
+/// are. Remapping must not lose that record: backtraces need it from any
+/// working directory.
+#[cfg(target_os = "macos")]
+#[test]
+fn debug_info_survives_remapping() {
+    if !remap_supported() || !xcrun_has(&["dsymutil", "dwarfdump"]) {
+        return;
+    }
+    let tmp = tempfile::tempdir().unwrap();
+    let root = fs::canonicalize(tmp.path()).unwrap();
+    let wrapper = wrapper_in(&root);
+    for (name, wrapper) in [("with", Some(wrapper.as_path())), ("without", None)] {
+        let (dir, bin) = build_panicking(&root.join(name), wrapper);
+
+        // rust-lang/rust#132143: ld can drop an object's entry when its
+        // DWARF has relative paths.
+        let map = xcrun(&["dsymutil", "--dump-debug-map"], &bin, &root);
+        let objects: Vec<&str> = map
+            .lines()
+            .filter_map(|l| l.trim().strip_prefix("filename:"))
+            .map(|v| v.trim().trim_matches('\''))
+            .collect();
+        assert!(
+            objects.iter().any(|o| o.contains(LIB)),
+            "{name}: no {LIB} object in the debug map:\n{map}"
+        );
+        for object in &objects {
+            // An archive member is listed as `lib….rlib(member.o)`.
+            let file = Path::new(
+                object
+                    .split_once('(')
+                    .map_or(*object, |(archive, _)| archive),
+            );
+            assert!(
+                file.is_absolute() && file.exists(),
+                "{name}: debug map entry {object} is not an existing absolute path:\n{map}"
+            );
+        }
+
+        let package = dir.join(BIN);
+        for cwd in [Path::new("/"), package.as_path()] {
+            let output = Command::new(&bin)
+                .current_dir(cwd)
+                .env("RUST_BACKTRACE", "1")
+                .env("REMAP_PANIC", "1")
+                .output()
+                .unwrap();
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            assert!(!output.status.success(), "{stderr}");
+            // The panic message names the file even without debug info.
+            let frames = stderr
+                .split_once("stack backtrace:")
+                .map_or_else(|| panic!("no backtrace:\n{stderr}"), |(_, f)| f);
+            assert!(
+                frames.contains(&format!("{LIB}/src/lib.rs:")),
+                "{name}, cwd {}: no file:line for {LIB}:\n{stderr}",
+                cwd.display()
+            );
+        }
+
+        let deps = dir.join(TARGET_LINK).join("debug/deps");
+        let prefix = format!("{BIN}-");
+        let units: Vec<PathBuf> = fs::read_dir(&deps)
+            .unwrap()
+            .map(|e| e.unwrap().path())
+            .filter(|p| {
+                p.extension() == Some(OsStr::new("o"))
+                    && p.file_name()
+                        .is_some_and(|n| n.to_string_lossy().starts_with(&prefix))
+            })
+            .collect();
+        assert!(!units.is_empty(), "no {BIN} objects in {}", deps.display());
+        let expected = if wrapper.is_some() {
+            ".".to_owned()
+        } else {
+            dir.display().to_string()
+        };
+        for unit in units {
+            let dump = xcrun(&["dwarfdump", "--debug-info"], &unit, &root);
+            let comp_dirs: Vec<&str> = dump
+                .lines()
+                .filter(|l| l.contains("DW_AT_comp_dir"))
+                .filter_map(|l| l.split_once("(\"").and_then(|(_, v)| v.split_once("\")")))
+                .map(|(v, _)| v)
+                .collect();
+            assert!(
+                !comp_dirs.is_empty() && comp_dirs.iter().all(|d| *d == expected),
+                "{name}: DW_AT_comp_dir of {} is {comp_dirs:?}, expected {expected:?}",
+                unit.display()
+            );
+        }
+    }
+}
+
+/// Measured, not asserted in CI (it runs with continue-on-error there):
+/// whether lldb started from the worktree root finds sources recorded
+/// relative to comp dir ".". Runner VMs may not allow lldb to launch
+/// processes at all.
+#[cfg(target_os = "macos")]
+#[test]
+#[ignore = "needs lldb permission to launch processes; CI runs it as a measurement"]
+fn lldb_finds_sources_from_the_worktree_root() {
+    if !remap_supported() || !xcrun_has(&["lldb"]) {
+        return;
+    }
+    let tmp = tempfile::tempdir().unwrap();
+    let root = fs::canonicalize(tmp.path()).unwrap();
+    let wrapper = wrapper_in(&root);
+    let (dir, bin) = build_panicking(&root.join("with"), Some(&wrapper));
+    let source = fs::read_to_string(dir.join(LIB).join("src/lib.rs")).unwrap();
+    let line = 1 + source.lines().position(|l| l.contains(BREAKPOINT)).unwrap();
+    let mut found = Vec::new();
+    for cwd in [dir.as_path(), Path::new("/")] {
+        let output = Command::new("xcrun")
+            .arg("lldb")
+            .arg("--batch")
+            .args(["-o", &format!("breakpoint set -f lib.rs -l {line}")])
+            .args(["-o", "process launch"])
+            .args(["-o", &format!("source list -f lib.rs -l {line} -c 1")])
+            .arg("--")
+            .arg(&bin)
+            .current_dir(cwd)
+            .output()
+            .unwrap();
+        let text = format!(
+            "{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let _ = writeln!(
+            std::io::stderr(),
+            "lldb from {}: source {}found\n{text}",
+            cwd.display(),
+            if text.contains(BREAKPOINT) {
+                ""
+            } else {
+                "not "
+            }
+        );
+        found.push(text.contains(BREAKPOINT));
+    }
+    assert!(
+        found[0],
+        "lldb did not show the source from the worktree root"
+    );
+}
+
+#[cfg(target_os = "macos")]
+const BREAKPOINT: &str = "// remap breakpoint";
+
+/// The remap workspace, built at `dir` (target through `.ferry-target`),
+/// with a library function that panics when `REMAP_PANIC` is set. Returns
+/// the workspace root and the binary.
+#[cfg(target_os = "macos")]
+fn build_panicking(dir: &Path, wrapper: Option<&Path>) -> (PathBuf, PathBuf) {
+    let target = dir.with_extension("target");
+    write_workspace(dir);
+    fs::write(
+        dir.join(LIB).join("src/lib.rs"),
+        modules()
+            + "\n#[inline(never)]\npub fn check(x: usize) -> usize {\n    \
+               if std::env::var_os(\"REMAP_PANIC\").is_some() {\n        \
+               panic!(\"remap panic\");\n    }\n    \
+               x * 3 "
+            + BREAKPOINT
+            + "\n}\n",
+    )
+    .unwrap();
+    fs::write(
+        dir.join(BIN).join("src/main.rs"),
+        main_rs(&format!("println!(\"{{}}\", {LIB}::check(total(1)));")),
+    )
+    .unwrap();
+    fs::create_dir_all(&target).unwrap();
+    run(Command::new("git").args(["init", "-q"]).arg(dir));
+    ferry::remap::prepare(dir, &target).unwrap();
+    assert_eq!(cargo_build(dir, wrapper), [BIN, LIB]);
+    (dir.to_path_buf(), target.join("debug").join(BIN))
+}
+
+/// Whether every tool is available through `xcrun`; skips (or fails, when
+/// remap is required) otherwise.
+#[cfg(target_os = "macos")]
+fn xcrun_has(tools: &[&str]) -> bool {
+    for tool in tools {
+        let found = Command::new("xcrun")
+            .args(["--find", tool])
+            .output()
+            .is_ok_and(|o| o.status.success());
+        if !found {
+            assert!(
+                !common::required("remap"),
+                "remap required by FERRY_TEST_REQUIRE but xcrun cannot find {tool}"
+            );
+            common::skip(&format!("xcrun cannot find {tool}"));
+            return false;
+        }
+    }
+    true
+}
+
+#[cfg(target_os = "macos")]
+fn xcrun(args: &[&str], file: &Path, cwd: &Path) -> String {
+    let output = Command::new("xcrun")
+        .args(args)
+        .arg(file)
+        .current_dir(cwd)
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "xcrun {args:?} failed: {output:?}");
+    String::from_utf8_lossy(&output.stdout).into_owned()
 }
