@@ -519,6 +519,8 @@ fn create(plan: &Plan) -> Result<(), SandboxError> {
     // After unshare these read as the overflow id until the maps are written.
     let uid = rustix::process::getuid().as_raw();
     let gid = rustix::process::getgid().as_raw();
+    // The container seccomp profile in the troubleshooting guide allows
+    // unshare with exactly these flags.
     // SAFETY: the caller checked that the process is single-threaded, and
     // without CLONE_FILES no file descriptor table is split.
     unsafe { rustix::thread::unshare_unsafe(UnshareFlags::NEWUSER | UnshareFlags::NEWNS) }
