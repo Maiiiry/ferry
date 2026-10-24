@@ -122,13 +122,20 @@ pub fn build(ctx: &Context, rev: &str) -> Result<BuildReport> {
         &paths.src,
         &format!("ferry base {} (immutable)", id.short()),
     )?;
+    if remap {
+        // Before stamping, so the link is part of the root directory agents
+        // compare against.
+        crate::remap::prepare(&paths.src, &paths.target)?;
+    }
     let index = git::ls_files(&paths.src)?;
     freshness::stamp_base_checkout(&paths.src, &index)?;
     let toolchain = Toolchain::detect(&paths.src)?;
     fs::create_dir_all(&paths.target).at("create directory", &paths.target)?;
+    // Best effort: failing to exclude build output from backups is no
+    // reason to fail the build.
+    let _ = crate::platform::exclude_from_backups(&paths.target);
 
     let remap_wrapper = if remap {
-        crate::remap::prepare(&paths.src, &paths.target)?;
         Some(crate::remap::ensure_wrapper(ctx)?)
     } else {
         None

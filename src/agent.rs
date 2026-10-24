@@ -237,6 +237,10 @@ fn populate(
     ctx.repo
         .add_branch_worktree(&meta.worktree, &meta.branch, &meta.from)?;
     copy_untracked_lockfile(&base_paths.src, &meta.worktree)?;
+    if base.remap_paths && meta.isolation == Isolation::None {
+        // Before stamping, so the root directory's entries match the base's.
+        crate::remap::prepare(&meta.worktree, &paths.target)?;
+    }
 
     let base_tree = ctx.repo.ls_tree(&base.commit)?;
     let index = git::ls_files(&meta.worktree)?;
@@ -260,6 +264,7 @@ fn populate(
     meta.backend = choice.kind;
     fsutil::write_json_atomic(&paths.meta, &*meta)?;
     let stats = fork::backend(choice.kind)?.fork(&fork_paths(paths, &base_paths.target))?;
+    let _ = crate::platform::exclude_from_backups(&paths.dir);
     if meta.isolation == Isolation::None {
         // The agent builds at a different absolute source path than the
         // base did. Only the source root matters: the base's target dir is
@@ -276,9 +281,6 @@ fn populate(
                 "{} unit(s) captured the base's absolute paths (e.g. env!(\"CARGO_MANIFEST_DIR\")) and will rebuild",
                 invalidated.len()
             ));
-        }
-        if base.remap_paths {
-            crate::remap::prepare(&meta.worktree, &paths.target)?;
         }
     }
 
