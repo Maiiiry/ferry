@@ -139,8 +139,8 @@ acceptable, leave the restriction on and use `sandbox = "off"`.
 **overlayfs fails.** The overlay backend needs Linux 5.11 or newer and a store
 filesystem that supports user extended attributes: ext4, btrfs and XFS do,
 tmpfs only from Linux 6.6. Overlayfs cannot use another overlayfs as its
-upper layer, which matters inside containers. Without overlay, `auto` uses
-reflink or copy instead.
+upper layer, which matters inside containers. `auto` uses overlay only where
+copy-on-write clones are unavailable; without either, it uses copy.
 
 **Slow or flaky builds on a network filesystem.** `ferry doctor` warns when
 the store is on NFS, CIFS or FUSE: builds are slow there and mtimes
@@ -161,13 +161,14 @@ namespace sandbox) or full copies.
 `ferry list` shows each base's size and each agent's `DISK`: the build state
 it holds beyond the base.
 
-- **Overlay agents** copy a file into their upper layer the first time they
-  write to it. Relinked binaries and rustc's incremental session directories
-  account for most of it. On ext4 every copy-up is a full copy: in the
-  prototype on ripgrep (ext4) each agent's upper layer was about 190 MB over a
-  536 MB base. The upper layer and the base are both in the store, so on
-  btrfs and XFS a copy-up is a reflink that shares the data.
 - **Reflink agents** share all data with the base until they rewrite a file.
+  `du` counts shared data once per agent, so it reports about a full target
+  dir for each; `btrfs filesystem du` or `compsize` show what is exclusive.
+- **Overlay agents** (where clones are unavailable, such as ext4) copy a file
+  into their upper layer the first time they write to it. Relinked binaries
+  and rustc's incremental session directories account for most of it. On
+  ext4 every copy-up is a full copy: in the prototype on ripgrep (ext4) each
+  agent's upper layer was about 190 MB over a 536 MB base.
 - **Copy agents** cost a full copy of the target dir each.
 - **Bases** stay until no agent uses them and they are not current. Every
   `ferry base` for a new commit creates a new base seeded from the previous

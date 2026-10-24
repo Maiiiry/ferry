@@ -26,8 +26,8 @@ edits are incremental either way.
 
 | Platform | Fork backends | Sandbox | First edit after spawn |
 |---|---|---|---|
-| Linux with unprivileged user namespaces (Debian, Fedora, Arch, NixOS, RHEL without STIG hardening, ...) | overlay, reflink, copy | namespace sandbox with canonical paths | incremental reuse |
-| Ubuntu 24.04 and later, with Ferry's AppArmor profile installed | overlay, reflink, copy | namespace sandbox | incremental reuse |
+| Linux with unprivileged user namespaces (Debian, Fedora, Arch, NixOS, RHEL without STIG hardening, ...) | reflink, overlay, copy | namespace sandbox with canonical paths | incremental reuse |
+| Ubuntu 24.04 and later, with Ferry's AppArmor profile installed | reflink, overlay, copy | namespace sandbox | incremental reuse |
 | Ubuntu 24.04 and later, default policy | reflink, copy | none | dependency reuse |
 | Docker, default seccomp profile | reflink, copy | none | dependency reuse |
 | macOS (APFS) | reflink (`clonefile`), copy | none | dependency reuse; experimental remap-paths mode |
@@ -39,7 +39,9 @@ Ferry does not build on Windows: compiling it there stops with a
 ## Linux
 
 The full feature set: agents build in a private user and mount namespace, at
-canonical paths, and the overlay backend forks in constant time. This needs:
+canonical paths. Forks are copy-on-write clones where the store's filesystem
+supports them; elsewhere the overlay backend forks in constant time. This
+needs:
 
 - unprivileged user namespaces, which are on by default on Debian 12 and 13,
   Fedora, RHEL 9 and 10, Arch and NixOS, but not on Ubuntu 24.04 and later
@@ -82,14 +84,17 @@ been tested in containers.
 
 Where the store lives decides which fork backends work and what they cost.
 
-| Filesystem | reflink backend | overlay upper layer | Notes |
-|---|---|---|---|
-| btrfs | yes | yes | overlay copy-up is a reflink |
-| XFS | yes (`reflink=1`, the mkfs default since xfsprogs 5.1) | expected to work, not tested | overlay copy-up is a reflink |
-| OpenZFS | 2.2.0, and 2.3.0 or newer; off by default in 2.2.2 to 2.2.x | not tested | |
-| ext4 | no | yes | overlay copy-up copies the whole file |
-| tmpfs | no | Linux 6.6 or newer | |
-| NFS, CIFS, FUSE | not recommended | not recommended | `ferry doctor` warns: slow builds, unreliable mtimes |
+| Filesystem | reflink backend | overlay upper layer | `auto` picks | Notes |
+|---|---|---|---|---|
+| btrfs | yes | yes | reflink | overlay copy-up is a reflink |
+| XFS | yes (`reflink=1`, the mkfs default since xfsprogs 5.1) | expected to work, not tested | reflink | overlay copy-up is a reflink |
+| OpenZFS | 2.2.0, and 2.3.0 or newer; off by default in 2.2.2 to 2.2.x | not tested | reflink where block cloning is on | |
+| ext4 | no | yes | overlay | overlay copy-up copies the whole file |
+| tmpfs | no | Linux 6.6 or newer | overlay | |
+| NFS, CIFS, FUSE | not recommended | not recommended | | `ferry doctor` warns: slow builds, unreliable mtimes |
+
+Without the namespace sandbox `auto` never picks overlay: it uses reflink
+where clones work and copy elsewhere.
 
 `ferry doctor` probes reflinks and overlayfs on the store's actual filesystem
 rather than trusting this table.
@@ -132,7 +137,13 @@ caches.
 The plan line reads like:
 
 ```text
-  → agents fork with overlay (overlayfs works in the namespace sandbox on btrfs) and build in a namespace sandbox at canonical paths (incremental reuse on the first edit)
+  → agents fork with reflink (btrfs supports copy-on-write clones) and build in a namespace sandbox at canonical paths (incremental reuse on the first edit)
+```
+
+on ext4:
+
+```text
+  → agents fork with overlay (overlayfs works in the namespace sandbox on ext4; no copy-on-write clones on ext4 (FICLONE: Operation not supported (os error 95))) and build in a namespace sandbox at canonical paths (incremental reuse on the first edit)
 ```
 
 or, without namespaces:

@@ -7,8 +7,7 @@
 # Keep all build state on a fast local disk. A leading "~" is expanded, and a
 # relative path is relative to the main checkout. Agent worktrees then default
 # to <dir>/worktrees unless [agent] worktree-dir is set. Use a copy-on-write
-# filesystem (btrfs, XFS) if you can: forks and overlay copy-ups become
-# reflinks.
+# filesystem (btrfs, XFS) if you can: forks become reflinks.
 dir = "/fast/disk/ferry"
 
 [agent]
@@ -22,7 +21,8 @@ backend = "auto"
 # Require the namespace sandbox: spawning fails instead of silently losing
 # incremental reuse if user namespaces stop working.
 sandbox = "namespace"
-backend = "overlay"
+# backend stays "auto": reflink on btrfs and XFS, overlay on ext4. Forcing
+# "overlay" would give up reflinks where the store has them.
 
 [macos]
 # macOS has no mount namespaces; clonefile(2) on APFS is the fast fork.

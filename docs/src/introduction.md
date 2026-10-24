@@ -32,10 +32,10 @@ edits each build their own code.
 1. **`ferry base`** builds one immutable, warm copy of your workspace for a
    commit.
 2. **`ferry spawn <name>`** creates a git worktree and branch for an agent and
-   forks the base's target dir for it: an overlayfs layer, a copy-on-write
-   clone, or a plain copy. An overlay fork takes the same time whatever the
-   size of the target dir; a copy-on-write clone costs time per file, not per
-   byte.
+   forks the base's target dir for it: a copy-on-write clone, or where the
+   filesystem has none an overlayfs layer, or a plain copy. A copy-on-write
+   clone costs time per file, not per byte; an overlay fork takes the same
+   time whatever the size of the target dir.
 3. **`ferry run <name> -- cargo test`**, or plain `cargo` with Ferry's shim on
    `PATH`, builds in that agent's own target dir. Cargo sees the fork as fresh
    for every file that is identical to the base, so only what the agent

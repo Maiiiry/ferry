@@ -61,11 +61,12 @@ want everyone on the project to warm the same commands. Note that a
 
 ## Where are my agent's binaries?
 
-Inside its sandbox. With the overlay backend the target dir exists only
-there, at the path `ferry --json env <name>` prints as `build_target_dir`.
+In its own target dir, at the path `ferry --json env <name>` prints as
+`build_target_dir`; in the namespace sandbox that path exists only inside it.
 Use `ferry run <name> -- cargo run`, or work inside `ferry shell <name>`. With
 the reflink and copy backends, `host_target_dir` is a real directory you can
-also read from the host.
+also read from the host; with the overlay backend the target dir exists only
+inside the sandbox.
 
 ## Which cargo commands go through Ferry?
 

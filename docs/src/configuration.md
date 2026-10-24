@@ -140,8 +140,8 @@ The worktree parent directory is, in order of precedence:
 | `dir` | path | `$XDG_CACHE_HOME/ferry` or `~/.cache/ferry` (Linux), `~/Library/Caches/ferry` (macOS) | Parent directory for Ferry's build state: one store per repository (bases, forks, canonical mount points) plus `bin/`, which holds the cargo shim. A leading `~` is expanded; a relative path is relative to the main checkout. |
 
 `FERRY_HOME` overrides it. The resolved path must be absolute. Put it on a
-local disk, ideally a copy-on-write filesystem (btrfs, XFS): forks and overlay
-copy-ups then become reflinks. Network and FUSE filesystems make builds slow
+local disk, ideally a copy-on-write filesystem (btrfs, XFS): forks then become
+reflinks. Network and FUSE filesystems make builds slow
 and mtimes unreliable; `ferry doctor` warns about them. On Linux kernels
 before 6.13, the overlay backend refuses store paths containing `,`, `:`, `\`
 or a newline, which those kernels' overlayfs mount options cannot express.
@@ -152,9 +152,10 @@ or a newline, which those kernels' overlayfs mount options cannot express.
 |---|---|---|
 | `backend` | `"auto"`, `"reflink"`, `"overlay"`, `"copy"` | `"auto"` |
 
-- `auto` picks `overlay` when the agent runs in the namespace sandbox and
-  overlayfs works there, else `reflink` when the store's filesystem supports
-  copy-on-write clones, else `copy`.
+- `auto` picks `reflink` when the store's filesystem supports copy-on-write
+  clones, else `overlay` when the agent runs in the namespace sandbox and
+  overlayfs works there, else `copy`. An agent keeps the backend it was
+  spawned with.
 - `overlay`: Linux only, and needs the namespace sandbox.
 - `reflink`: Linux on btrfs, XFS or OpenZFS 2.2+; macOS on APFS.
 - `copy`: a full copy, available everywhere.
