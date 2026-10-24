@@ -3,6 +3,8 @@
 
 mod common;
 
+use std::path::Path;
+
 use common::{App, Build, TestRepo, path_of, str_of};
 
 #[test]
@@ -35,6 +37,39 @@ fn warm_test_targets_are_reused() {
             .args(["test", "--workspace", "--no-run"]),
     )
     .assert_rebuilt(&[]);
+    common::run(repo.agent_cargo("a").args(["test", "--workspace", "-q"])).ok();
+}
+
+/// macOS's default worktree directory (under `~/Library/Application
+/// Support`) contains a space; the harness's own `FERRY_HOME` never does.
+/// Without the sandbox, so that cargo runs at that path on Linux too
+/// instead of at the namespace's canonical one.
+#[test]
+fn spawn_and_build_in_a_worktree_path_with_spaces() {
+    let repo = TestRepo::with_env(&[("FERRY_SANDBOX", "off")]);
+    repo.base();
+    let parent = repo.scratch().join("Application Support/wt");
+    let mut spawn = repo.ferry_cmd(["--json", "spawn", "a"]);
+    spawn.env("FERRY_WORKTREES", &parent);
+    let worktree = path_of(&common::run(&mut spawn).ok().json()["agent"]["worktree"]);
+    assert!(worktree.starts_with(&parent), "{}", worktree.display());
+    let manifest = common::run(repo.agent_cargo("a").args([
+        "locate-project",
+        "--workspace",
+        "--message-format=plain",
+    ]))
+    .ok();
+    assert_eq!(
+        Path::new(manifest.stdout.trim()),
+        worktree.join("Cargo.toml"),
+        "cargo must run at the spaced path"
+    );
+    // At another path than the base's, the first build may rebuild the
+    // local crates (see `freshness::relocate`); that is not what this tests.
+    repo.build("a");
+    repo.set_marker(&worktree, "EDITED");
+    repo.build("a").assert_rebuilt(&["leaf", "mid", "app"]);
+    assert_eq!(repo.app("a").marker, "EDITED");
     common::run(repo.agent_cargo("a").args(["test", "--workspace", "-q"])).ok();
 }
 

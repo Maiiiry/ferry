@@ -8,11 +8,21 @@ every number to be checked.
 
 ## Running
 
-Prerequisites: `git`, `cargo`/`rustc`, `hyperfine` (1.19+, for `--conclude`),
-`jq`, GNU coreutils, `findmnt`; optional `btrfs-progs` for exclusive-bytes
-disk numbers; `python3` (standard library only) for the chart. The harness
-builds Ferry from this checkout (`cargo build --release`) and installs kache
-1.2.2 into `bench/.cache` on first use.
+Prerequisites: bash 4.4+, `git`, `cargo`/`rustc`, `hyperfine` (1.19+, for
+`--conclude`), `jq`, GNU coreutils, `findmnt` (Linux); optional
+`btrfs-progs` for exclusive-bytes disk numbers; `python3` (standard library
+only) for the chart. The harness builds Ferry from this checkout
+(`cargo build --release`) and installs kache 1.2.2 into `bench/.cache` on
+first use.
+
+On macOS, install a newer bash and GNU coreutils and put coreutils' `gnubin`
+first on `PATH` (the harness checks for GNU `date` and `cp`; GNU `cp -a`
+clones files on APFS, as it reflinks them on btrfs):
+
+```sh
+brew install bash coreutils hyperfine jq
+export PATH="$(brew --prefix)/opt/coreutils/libexec/gnubin:$PATH"
+```
 
 ```sh
 # Sanity run on the test fixture (seconds).
@@ -99,12 +109,19 @@ the workspace crates at the new path, which gives them fresh incremental state.
 | `naive` | a new worktree (fresh checkout mtimes) plus `cp -a` of a warm target built in another worktree. GNU cp 9+ reflinks where it can, so this is also what `cp --reflink` (Worktrunk's `copy-ignored`) gives. |
 | `shared` | N worktrees with one shared `CARGO_TARGET_DIR`: (a) N agents with different edits build at once (wall time, per-agent elapsed, crates, and lock waits split into Cargo's build-directory lock and the package-cache lock); (b) contamination: B edits, A edits differently and builds, then B builds; reports B's crates compiled and whether B's rlib holds A's edit, B's, or both (single run). |
 | `kache` | kache 1.2.2 as `RUSTC_WRAPPER` with its daemon running and isolated dirs (`KACHE_CACHE_DIR`, `KACHE_RUNTIME_DIR`, `KACHE_CONFIG`, `KACHE_HOST_CONFIG=`, `XDG_CACHE_HOME`, a short `KACHE_SOCKET_PATH`), as in `research/kache-and-prior-art.md`. The store is warmed by one build in another worktree; each agent is a new worktree with an empty target. Cargo reports restored crates as compiled, so kache's own per-crate events (`events.jsonl`: hits, misses, passthroughs and why) are recorded for every timed build. |
-| `ferry-off` | `FERRY_SANDBOX=off`, backend `auto` (reflink on btrfs): crate-level reuse only, no canonical path. |
+| `ferry-off` | `FERRY_SANDBOX=off`, backend `auto` (reflink on btrfs, clonefile on APFS), `FERRY_REMAP_PATHS=0`: crate-level reuse only, no canonical path. |
+| `ferry-remap` | as `ferry-off` with `FERRY_REMAP_PATHS=1`: builds go through `ferry-rustc` ([remap-paths](../docs/src/remap-paths.md)), so rustc's incremental state survives the agent's new path. |
 | `ferry-overlay`, `ferry-reflink`, `ferry-copy` | `FERRY_SANDBOX=namespace` with that `FERRY_BACKEND`. They share one base. |
-| `refresh` | commits an edit to the workspace's main checkout, then times `ferry base` (seeded from the previous base) and `ferry base --cold`; checks that the new base's rlib holds the committed edit. |
+| `refresh` | with the namespace sandbox and the overlay backend: commits an edit to the workspace's main checkout, then times `ferry base` (seeded from the previous base) and `ferry base --cold`; checks that the new base's rlib holds the committed edit. |
+| `refresh-off`, `refresh-remap` | `refresh` with the settings of `ferry-off` and `ferry-remap`. |
 
-For every Ferry scenario: `ferry base` (cold, for `ferry-off` and
-`ferry-overlay`; the others reuse the overlay base), `ferry spawn`, the four
+Without user namespaces (macOS, or Linux where they are blocked), the
+namespace scenarios (`ferry-overlay`, `ferry-reflink`, `ferry-copy` and
+`refresh`) are recorded as skipped, as `ferry doctor` reports.
+
+For every Ferry scenario: `ferry base` (cold, for `ferry-off`, `ferry-remap`
+and `ferry-overlay`, which each build their own base; the others reuse the
+overlay base), `ferry spawn`, the four
 build steps (builds run as `ferry run <agent> -- cargo build ...`, so Ferry's
 sandbox entry is included), disk per agent right after spawn and after two
 edits, and N agents spawned, each with a different edit, building at once.
@@ -115,7 +132,9 @@ which would make `ferry base` slower than these numbers.
 
 **Disk**: `du` (allocated blocks, counting extents shared with the base) and,
 on btrfs, `btrfs filesystem du` exclusive bytes (blocks no other file shares),
-plus Ferry's own `private_bytes` estimate.
+plus Ferry's own `private_bytes` estimate. APFS has no equivalent of
+exclusive bytes and `du` counts cloned blocks in full, so on macOS
+`private_bytes` is the better estimate of what an agent adds.
 
 ### Statistics
 
@@ -126,7 +145,8 @@ the timed build. Reported: median,
 mean, min, max, standard deviation and every individual time. No run is
 dropped; a failing step stops its scenario, is recorded as failed in
 `results.json`/`results.md`, and the harness continues with the next one.
-A skipped step (only for lack of disk space) is recorded with the reason.
+A skipped step (for lack of disk space, or of user namespaces) is recorded
+with the reason.
 Tables print times to the millisecond; the chart rounds half-up to two
 decimals below 10 s for every bar alike. Nothing is extrapolated: every
 number is a measured wall time of one command.
@@ -141,7 +161,33 @@ directory's filesystem type and mount options, free space, `rustc -vV`,
 workspace commit, start and end time, and the 1/5/15-minute load averages
 before and after. Results taken while the load average is well above zero
 were not taken on an idle machine; compare the load numbers with the CPU
-count before trusting small differences.
+count before trusting small differences. Also recorded: the bash and jq
+versions; on macOS, Xcode and the linker version (`ld -v`), which decide how
+debug info is found; and, when `CI` or `GITHUB_ACTIONS` is set, a `ci` record
+(runner, image version, run URL, commit). On macOS, available memory is
+approximate (free, inactive and speculative pages from `vm_stat`) and the
+CPU governor is not recorded.
+
+### CI runs
+
+`.github/workflows/bench.yml` runs a reduced benchmark (the fixture and
+ripgrep; `cold`, `naive`, `ferry-off`, `ferry-remap`, `refresh-off`,
+`refresh-remap`, and optionally `kache`) on a GitHub-hosted macOS runner when
+started by hand (Actions, Bench, Run workflow). Results are a job summary and
+an artifact holding `bench/results/ci/<runner>/` and the build logs. The job
+fails if a scenario failed or any artifact check is not `ok`; times are never
+asserted.
+
+GitHub-hosted macOS runners are shared virtual machines whose CPUs and RAM
+depend on the runner label (`env.json` records them for each run), so:
+
+- `results.md` from a CI run opens with a notice that its times are not
+  comparable with any other machine or run;
+- `chart.py` refuses to mix CI and other results and never writes the
+  README's `bench/results/chart.svg` from CI results (pass `--out`);
+- read crate counts, artifact checks and ratios within one run, never
+  absolute seconds, and dispatch at least twice before saying anything about
+  noise.
 
 ## Workspaces
 

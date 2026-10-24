@@ -1,0 +1,93 @@
+name: Bench
+
+# Manually started. A reduced benchmark of the no-namespace path on a shared
+# GitHub-hosted macOS runner: the times are noisy and not comparable with any
+# other machine (bench/README.md, "CI runs").
+on:
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: runner label
+        type: choice
+        options: [macos-26, macos-15, macos-26-intel]
+        default: macos-26
+      runs:
+        description: timed runs per step
+        type: string
+        default: "3"
+      kache:
+        description: include kache 1.2.2 (cargo install adds minutes)
+        type: boolean
+        default: false
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ inputs.runner }}
+  cancel-in-progress: false
+
+jobs:
+  bench:
+    name: bench (${{ inputs.runner }})
+    runs-on: ${{ inputs.runner }}
+    # A ceiling, not an estimate: ripgrep's cold build on these VMs is unmeasured.
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    env:
+      # Free-text inputs reach `run:` only through the environment.
+      RUNS: ${{ inputs.runs }}
+      SCENARIOS: cold,naive,${{ inputs.kache && 'kache,' || '' }}ferry-off,ferry-remap,refresh-off,refresh-remap
+      OUT: bench/results/ci/${{ inputs.runner }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
+        with:
+          toolchain: stable
+      # 1.19 added --conclude, which the harness needs; 2.x may change the JSON export.
+      - uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91 # v2.87.31
+        with:
+          tool: hyperfine@1.21.0
+          fallback: none
+      # bench/lib.sh needs bash >= 4.4 (the image has 3.2.57) and GNU date, du
+      # and cp (which clones on APFS).
+      - name: Install bash and GNU coreutils
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+          HOMEBREW_NO_INSTALL_CLEANUP: "1"
+        run: |
+          brew install bash coreutils
+          echo "$(brew --prefix)/opt/coreutils/libexec/gnubin" >>"$GITHUB_PATH"
+          echo "$(brew --prefix)/bin" >>"$GITHUB_PATH"
+      - run: cargo build --release --locked
+      - name: fixture (sanity)
+        run: >
+          bench/run.sh --workspace tests/fixtures/workspace --name fixture
+          --edit leaf/src/lib.rs --runs "$RUNS" --scenarios "$SCENARIOS"
+          --ferry target/release/ferry --out "$OUT/fixture"
+      - name: ripgrep 6892bc2
+        if: ${{ !cancelled() }}
+        run: >
+          bench/run.sh --workspace https://github.com/BurntSushi/ripgrep --rev 6892bc2
+          --edit crates/ignore/src/lib.rs --runs "$RUNS" --scenarios "$SCENARIOS"
+          --ferry target/release/ferry --out "$OUT/ripgrep"
+      - name: Job summary
+        if: ${{ !cancelled() }}
+        run: cat "$OUT"/*/results.md >>"$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: ${{ !cancelled() }}
+        with:
+          name: bench-${{ inputs.runner }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            bench/results/ci/
+            bench/work/*/logs/
+          if-no-files-found: error
+          retention-days: 90
+      # Correctness only; times are never asserted on a shared runner.
+      - name: No failed scenario, every artifact check ok
+        run: |
+          jq -e -s '[.[].scenarios[][] | objects
+            | select(.failed == true or ((.checks_ok // []) | any(. == false)))] | length == 0' \
+            "$OUT"/*/results.json

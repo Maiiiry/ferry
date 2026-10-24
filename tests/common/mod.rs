@@ -82,7 +82,15 @@ impl TestRepo {
     /// silently ignored. Tests that need one use
     /// [`TestRepo::with_default_config`].
     pub fn with_env(env: &[(&str, &str)]) -> Self {
-        let mut repo = Self::with_default_config(env);
+        Self::with_workspace(env, |root| copy_dir(&fixture_dir(), root))
+    }
+
+    /// Like [`TestRepo::with_env`], but the first commit holds what
+    /// `populate` writes into the (not yet created) repository root instead
+    /// of the fixture workspace. Bases warm only `build` and `test`, and a
+    /// `ferry.toml` it writes is ignored, as for [`TestRepo::with_env`].
+    pub fn with_workspace(env: &[(&str, &str)], populate: impl FnOnce(&Path)) -> Self {
+        let mut repo = Self::create(env, populate);
         let config = repo.scratch.join("ferry-test.toml");
         fs::write(&config, "[base]\ntargets = [\"build\", \"test\"]\n").unwrap();
         repo.env.insert(
@@ -94,6 +102,10 @@ impl TestRepo {
 
     /// [`TestRepo::with_env`] with Ferry's built-in configuration.
     pub fn with_default_config(env: &[(&str, &str)]) -> Self {
+        Self::create(env, |root| copy_dir(&fixture_dir(), root))
+    }
+
+    fn create(env: &[(&str, &str)], populate: impl FnOnce(&Path)) -> Self {
         // Under the target dir rather than /tmp: it is on the same
         // filesystem as the project, which is where reflinks are likely to
         // work, and /tmp is often tmpfs.
@@ -103,7 +115,7 @@ impl TestRepo {
             .unwrap();
         let scratch = fs::canonicalize(tmp.path()).unwrap();
         let root = scratch.join("repo");
-        copy_dir(&fixture_dir(), &root);
+        populate(&root);
         let gitconfig = scratch.join("gitconfig");
         fs::write(
             &gitconfig,
@@ -149,6 +161,11 @@ impl TestRepo {
             {
                 cmd.env_remove(&key);
             }
+        }
+        // CI runs the whole suite in remap mode this way; a test's own
+        // FERRY_REMAP_PATHS still wins.
+        if std::env::var_os("FERRY_TEST_REMAP").is_some_and(|v| v == "1") {
+            cmd.env("FERRY_REMAP_PATHS", "1");
         }
         // The ceiling keeps git from finding the repository that contains
         // the target dir when a test runs outside its own repository.
@@ -711,17 +728,20 @@ fn probe(value: &Value) -> Probe {
     }
 }
 
-/// `FERRY_TEST_REQUIRE` lists capabilities (`userns`, `overlay`, `reflink`,
-/// `clippy`) that must be present: CI sets it where they are, so a regression in
-/// detection fails the run instead of silently skipping tests.
+/// Whether `FERRY_TEST_REQUIRE` lists `key`. It lists capabilities
+/// (`userns`, `overlay`, `reflink`, `clippy`, `remap`) that must be present:
+/// CI sets it where they are, so a regression in detection fails the run
+/// instead of silently skipping tests.
+pub fn required(key: &str) -> bool {
+    std::env::var("FERRY_TEST_REQUIRE").is_ok_and(|v| v.split(',').any(|k| k.trim() == key))
+}
+
 fn require(what: &str, key: &str, probe: Probe) -> bool {
     match probe {
         Ok(()) => true,
         Err(reason) => {
-            let required = std::env::var("FERRY_TEST_REQUIRE")
-                .is_ok_and(|v| v.split(',').any(|k| k.trim() == key));
             assert!(
-                !required,
+                !required(key),
                 "{what} required by FERRY_TEST_REQUIRE but unavailable: {reason}"
             );
             skip(&format!("{what} unavailable ({reason})"));

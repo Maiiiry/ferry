@@ -50,7 +50,7 @@ jobs:
       - run: cargo clippy --all-targets --locked -- -D warnings
 
   test:
-    name: test (${{ matrix.os }}, ${{ matrix.rust }})
+    name: test (${{ matrix.os }}, ${{ matrix.rust }}${{ matrix.remap && ', remap-paths' || '' }})
     strategy:
       fail-fast: false
       matrix:
@@ -61,6 +61,12 @@ jobs:
           # auto freshness selects checksum freshness on nightly toolchains.
           - os: ubuntu-24.04
             rust: nightly
+          # The whole suite with remap-paths on. macOS never has the namespace
+          # sandbox, so the mode applies to every agent there. macos-26 is what
+          # macos-latest resolves to today; labels stay pinned.
+          - os: macos-26
+            rust: stable
+            remap: true
     runs-on: ${{ matrix.os }}
     # Nightly can break independently of this repository: a failure here does not
     # fail the workflow, and this leg must not be a required check.
@@ -91,11 +97,20 @@ jobs:
       - name: cargo test
         env:
           # Fail instead of skipping tests when a capability these runners
-          # have goes undetected.
-          FERRY_TEST_REQUIRE: ${{ runner.os == 'Linux' && 'userns,overlay,clippy' || 'reflink,clippy' }}
+          # have goes undetected. remap: tests/remap.rs fails instead of
+          # skipping when the toolchain cannot remap (only 1.88 is too old).
+          FERRY_TEST_REQUIRE: ${{ runner.os == 'Linux' && 'userns,overlay,clippy' || 'reflink,clippy' }}${{ matrix.rust != '1.88' && ',remap' || '' }}
+          # tests/common passes FERRY_REMAP_PATHS=1 to every ferry command.
+          FERRY_TEST_REMAP: ${{ matrix.remap && '1' || '' }}
         run: |
           unset CARGO_INCREMENTAL
           cargo test --locked
+      - name: lldb finds sources (measurement only)
+        if: matrix.remap
+        continue-on-error: true
+        run: |
+          unset CARGO_INCREMENTAL
+          cargo test --locked --test remap -- --ignored --nocapture lldb
 
   # Keeps Ubuntu's default AppArmor userns restriction on, sets the machine up
   # with `ferry setup apparmor`, and checks that its profile is enough for the

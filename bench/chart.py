@@ -23,8 +23,10 @@ ROWS = [
     ("naive", "Naive copied target", False),
     ("kache", "kache", False),
     ("ferry-off", "Ferry, crate-level (sandbox off)", True),
+    ("ferry-remap", "Ferry, remap-paths (sandbox off)", True),
     ("ferry-overlay", "Ferry", True),
 ]
+DEFAULT_OUT = Path(__file__).parent / "results" / "chart.svg"
 
 # Transparent background, so every color must read on GitHub's light
 # (#ffffff) and dark (#0d1117) pages. Checked with the dataviz palette
@@ -119,6 +121,7 @@ def env_caption(env):
     fs = env.get("bench_fs", "?")
     rustc = env.get("rustc", "").split("\n")[0]
     return (
+        f"{'shared CI runner (noisy) · ' if env.get('ci') else ''}"
         f"{env.get('cpu_model', '?')}, {env.get('physical_cores', '?')} cores / "
         f"{env.get('logical_cpus', '?')} threads, {fs}, {rustc}"
     )
@@ -236,11 +239,18 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("results", nargs="+", help="results.json files, one per workspace")
     parser.add_argument("--metric", default="edit_on_spawn", help="step to chart (default: edit_on_spawn)")
-    parser.add_argument("--out", default=str(Path(__file__).parent / "results" / "chart.svg"))
+    parser.add_argument("--out", default=str(DEFAULT_OUT))
     args = parser.parse_args()
     groups = load(args.results, args.metric)
     if not any(r["median"] is not None for g in groups for r in g["rows"]):
         sys.exit(f"no {args.metric} measurements in the given results")
+    # Shared-runner times are not comparable with a dedicated machine's, and
+    # the default chart is the one the README shows.
+    ci = {bool(g["data"]["env"].get("ci")) for g in groups}
+    if len(ci) > 1:
+        sys.exit("the results mix shared CI runners with other machines; chart them separately")
+    if True in ci and Path(args.out).resolve() == DEFAULT_OUT.resolve():
+        sys.exit(f"results from a shared CI runner are never written to {DEFAULT_OUT}; pass --out")
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     Path(args.out).write_text(render(groups, args.metric))
     print(args.out)

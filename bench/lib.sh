@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Functions shared by bench/run.sh and by the commands hyperfine runs.
 #
-# hyperfine calls these as `bash bench/lib.sh <function> [args]` (prepare,
+# hyperfine calls these as `"$BASH" bench/lib.sh <function> [args]` (prepare,
 # conclude and some timed commands), so all state comes from the B_* variables
 # that run.sh exports:
 #
@@ -19,6 +19,24 @@ die() {
   exit 1
 }
 note() { echo "bench: $*" >&2; }
+
+# ${x,,} needs bash 4, and expanding an empty array under `set -u` needs 4.4.
+# macOS ships bash 3.2.
+if ((BASH_VERSINFO[0] < 4 || (BASH_VERSINFO[0] == 4 && BASH_VERSINFO[1] < 4))); then
+  die "bash 4.4 or newer is required, this is $BASH_VERSION (macOS: brew install bash)"
+fi
+
+# Probes with no Linux /proc or GNU-only flag on macOS. Linux keeps the
+# original commands, so its numbers stay comparable with earlier results.
+if [[ $OSTYPE == darwin* ]]; then
+  loadavg() { sysctl -n vm.loadavg | tr -d '{}' | awk '{print $1, $2, $3}'; }
+  du_bytes() { du -sk "$1" | awk '{printf "%.0f\n", $1 * 1024}'; }
+  free_bytes_of() { df -Pk "$1" | awk 'NR == 2 {printf "%.0f\n", $4 * 1024}'; }
+else
+  loadavg() { cut -d' ' -f1-3 /proc/loadavg; }
+  du_bytes() { du -s -B1 "$1" | cut -f1; }
+  free_bytes_of() { df --output=avail -B1 "$1" | tail -n 1; }
+fi
 
 # --- git worktrees -----------------------------------------------------------
 
@@ -93,12 +111,11 @@ verify() { # <log> <agent or -> [expected labels...]
     | {rlib: $rlib, found: $f, expected: $e, ok: ($f == $e)}'
 }
 
-loadavg() { cut -d' ' -f1-3 /proc/loadavg; }
-
 # Allocated bytes (du) and, on btrfs, bytes not shared with any other file.
+# On APFS, du counts cloned blocks in full.
 disk_json() { # <dir>
   local du total excl shared
-  du=$(du -s -B1 "$1" 2>/dev/null | cut -f1 || true)
+  du=$(du_bytes "$1" 2>/dev/null || true)
   read -r total excl shared _ < <(btrfs filesystem du -s --raw "$1" 2>/dev/null | tail -n 1 || true) || true
   [[ $total =~ ^[0-9]+$ ]] || total='' excl='' shared=''
   jq -n -c --arg path "$1" --arg du "${du:-}" --arg t "$total" --arg e "$excl" --arg s "$shared" '
@@ -387,15 +404,20 @@ ferry_conc_conclude() {
   _agents_json "$p" ferry "$1" >"$p.agents.json"
 }
 
-# Checks that a base built from the committed edit contains it. The log has
-# canonical paths; the base's target dir is the host side of them.
+# Checks that a base built from the committed edit contains it. A namespace
+# base's log has canonical paths, whose host side is the base's target dir;
+# a base built without the sandbox logs host paths.
 verify_base() { # <log> <commit> <label>
   local store rlib host base
   store=$(ferry_store)
   rlib=$(rlib_of "$1")
   [[ -n $rlib ]] || die "no rlib for $B_LIB_SRC in $1"
   base=$(ls -d "$store/bases/$2"*/ | head -n 1)
-  host="${base%/}/target/${rlib#"$store/mnt/target/"}"
+  case $rlib in
+    "$store/mnt/target/"*) host="${base%/}/target/${rlib#"$store/mnt/target/"}" ;;
+    /*) host=$rlib ;;
+    *) host="${base%/}/src/$rlib" ;;
+  esac
   local found
   found=$(grep -a -o -E 'FERRY_MARK\[[a-z0-9_]+\]' "$host" | sort -u || true)
   jq -n -c --arg rlib "$host" --arg found "$found" --arg expected "$(marker "$3")" '
@@ -403,9 +425,9 @@ verify_base() { # <log> <commit> <label>
     | {rlib: $rlib, found: $f, expected: [$expected], ok: ($f == [$expected])}'
 }
 
-refresh_conclude() { # <step> <commit> <label>
-  local p="$B_LOGS/refresh-$1.${HYPERFINE_ITERATION:?}"
-  verify_base "$p.err" "$2" "$3" >"$p.verify.json"
+refresh_conclude() { # <scenario> <step> <commit> <label>
+  local p="$B_LOGS/$1-$2.${HYPERFINE_ITERATION:?}"
+  verify_base "$p.err" "$3" "$4" >"$p.verify.json"
 }
 
 if [[ ${BASH_SOURCE[0]} == "$0" ]]; then

@@ -40,6 +40,7 @@ CI runs these on every pull request. Run them locally before pushing:
 | clippy (Linux, macOS) | `cargo clippy --all-targets --locked -- -D warnings` |
 | test (Linux, macOS; stable and 1.88) | `cargo test --locked` and `cargo +1.88 test --locked` |
 | test (Linux, nightly; not required) | `cargo +nightly test --locked` |
+| test (macos-26, stable, remap-paths) | `FERRY_TEST_REMAP=1 cargo test --locked` |
 | rustdoc | `RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --locked` |
 | cargo-deny | `cargo deny --locked check` |
 | typos | `typos` |
@@ -83,6 +84,18 @@ proves less than it looks. Check the output for skips before concluding a
 change is covered. In CI, the Linux jobs lift the AppArmor restriction and
 fail if namespaces still do not work; macOS covers `clonefile` and the
 non-namespace path.
+
+`FERRY_TEST_REQUIRE` turns those skips into failures: it lists what must be
+available (`userns`, `overlay`, `reflink`, and `remap` for a rustc that
+supports [remap-paths](docs/src/remap-paths.md), 1.98 or newer). CI sets it
+on every leg. `FERRY_TEST_REMAP=1` gives every ferry command the tests run
+`FERRY_REMAP_PATHS=1` (a test's own setting still wins); the `remap-paths`
+leg runs the whole suite that way on macOS, where every agent builds without
+the namespace sandbox. That leg also runs an ignored lldb test as a
+measurement that may fail without failing the job.
+
+The `Bench` workflow (`.github/workflows/bench.yml`) is started by hand and
+runs a reduced benchmark on a macOS runner; see `bench/README.md`.
 
 ## Commits and pull requests
 

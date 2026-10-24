@@ -26,6 +26,29 @@ not scaled up to large ones.
 
 No results from the Ferry binary have been published yet.
 
+## CI runs (macOS)
+
+macOS has no namespace sandbox, so its numbers come from a reduced benchmark
+that the `Bench` workflow runs on a GitHub-hosted macOS runner when started
+by hand (see `bench/README.md`, "CI runs"). These runners are shared virtual
+machines. Their results are published in their own table, never next to the
+results above, and each table states the runner label, image version, run
+link and date; the Ferry commit, rustc, Xcode and linker versions; the runs
+per step with the minimum and maximum of each step; and the load before and
+after. Every such table carries this note, with the hardware taken from that
+run's `env.json` (`logical_cpus`, `cpu_model` and `ram_bytes`), because it
+depends on the runner label:
+
+> Measured on a shared GitHub-hosted VM (_logical CPUs_ vCPU _CPU model_,
+> _RAM_ GiB). Not comparable with the local results above or with other CI
+> runs; ratios within one run are indicative, absolute seconds are not.
+
+Claims about how much of rustc's incremental state survives on macOS come
+from the test suite's codegen-unit counts, which do not depend on timing
+noise, and not from these times.
+
+No CI results have been published yet.
+
 ## Prototype results
 
 Before Ferry was written, a bash prototype tested the approach. These are its
