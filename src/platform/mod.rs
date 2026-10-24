@@ -119,6 +119,20 @@ pub fn fs_info(path: &Path) -> FsInfo {
     }
 }
 
+/// Excludes `path` from Time Machine backups, as Cargo does for its target
+/// dirs. A no-op on Linux.
+pub fn exclude_from_backups(path: &Path) -> std::io::Result<()> {
+    #[cfg(target_os = "macos")]
+    {
+        macos::exclude_from_backups(path)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = path;
+        Ok(())
+    }
+}
+
 /// Tries a copy-on-write clone between two scratch files in `dir`, using the
 /// same call the reflink backend uses.
 pub fn probe_reflink(dir: &Path) -> Probe {
