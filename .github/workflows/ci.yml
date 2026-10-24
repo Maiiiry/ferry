@@ -97,8 +97,9 @@ jobs:
           unset CARGO_INCREMENTAL
           cargo test --locked
 
-  # Keeps Ubuntu's default AppArmor userns restriction on and checks that the
-  # profile from `ferry doctor --apparmor-profile` is enough for the sandbox.
+  # Keeps Ubuntu's default AppArmor userns restriction on, sets the machine up
+  # with `ferry setup apparmor`, and checks that its profile is enough for the
+  # sandbox.
   apparmor:
     name: test (ubuntu-24.04, AppArmor profile)
     runs-on: ubuntu-24.04
@@ -113,13 +114,12 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
-      - name: Install ferry with its AppArmor profile
+      - name: Install ferry with `ferry setup apparmor`
         run: |
           test "$(cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns)" = 1
           cargo build --locked
-          sudo install -m 755 target/debug/ferry /usr/local/bin/ferry
-          /usr/local/bin/ferry doctor --apparmor-profile | sudo tee /etc/apparmor.d/ferry
-          sudo apparmor_parser -r /etc/apparmor.d/ferry
+          target/debug/ferry --json setup apparmor --yes | tee setup.json
+          jq -e '.verified.userns.status == "ok"' setup.json
       - name: cargo test (sandbox tests through the profiled binary)
         env:
           FERRY_TEST_BIN: /usr/local/bin/ferry
@@ -127,6 +127,12 @@ jobs:
         run: |
           unset CARGO_INCREMENTAL
           cargo test --locked --test spawn --test isolation --test concurrency --test contamination --test shim --test warm
+      - name: cargo test (setup round trip through sudo and AppArmor)
+        env:
+          FERRY_TEST_SYSTEM_SETUP: 1
+        run: |
+          unset CARGO_INCREMENTAL
+          cargo test --locked --test setup -- --ignored
 
   # The runners' ext4 has no reflinks, so `test` only exercises auto's
   # overlay choice. Here the target dir, and with it every test store, is on

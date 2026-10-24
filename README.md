@@ -57,7 +57,8 @@ brew install patwrall/tap/ferry
 
 Until then, build from source: `git clone https://github.com/patwrall/ferry && cargo install --path ferry --locked`.
 
-On Ubuntu 24.04 or later, see
+On Ubuntu 24.04 or later, run `ferry setup apparmor` once (it shows each step
+and asks before one `sudo` call); see
 [AppArmor on Ubuntu](https://patwrall.github.io/ferry/troubleshooting.html#apparmor-on-ubuntu-2404-and-later).
 
 ## Quickstart
@@ -162,7 +163,7 @@ Ferry is not a security sandbox: agents run with your user's full privileges
 | Platform | Fork | Builds run | First edit after spawn |
 |---|---|---|---|
 | Linux with unprivileged user namespaces | reflink, overlay or copy | in a namespace sandbox at canonical paths | incremental reuse |
-| Ubuntu 24.04 and later | as above, once the AppArmor profile from `ferry doctor --apparmor-profile` is loaded for a root-owned `ferry` binary | as above; without the profile, at host paths | incremental reuse with the profile; dependency reuse without |
+| Ubuntu 24.04 and later | as above, once `ferry setup apparmor` has installed Ferry's AppArmor profile | as above; without the profile, at host paths | incremental reuse with the profile; dependency reuse without |
 | Containers (Docker's default seccomp blocks namespaces) | reflink or copy | at host paths | dependency reuse |
 | macOS | `clonefile` (APFS) or copy | at host paths: no canonical path | dependency reuse; incremental state is lost on the first edit. The experimental remap-paths mode reused 12 of 13 library codegen units after a fork on Linux, against 0 of 13 without; unverified on a real Mac |
 | Windows | unsupported | | Ferry does not compile there (compile-time error) |
@@ -251,7 +252,8 @@ more than the absolute times.
 as you, with your files and network.
 
 **Do I need root?** No. `ferry doctor` may suggest `sudo` commands (a sysctl,
-or loading the AppArmor profile on Ubuntu) for you to review and run.
+for example) for you to review and run. Ferry runs `sudo` itself only in
+`ferry setup apparmor` on Ubuntu, once, after showing the command and asking.
 
 **Do I have to commit `ferry.toml`?** No. Ferry reads it from your main
 checkout's working tree.

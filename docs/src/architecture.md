@@ -99,7 +99,8 @@ src/
   sandbox/       Plan, enter(), users(); linux.rs: user+mount namespaces,
                  canonical bind mounts, overlay mount, join-or-create
   platform/      Capabilities probes (fs type, reflink, userns, overlay, sysctls)
-  doctor.rs      checks + fixes + "what spawn would do"
+  doctor.rs      checks + fixes + "what spawn would do"; the AppArmor profile text
+  setup.rs       `setup apparmor`: facts, a pure decision, the one sudo script
 ```
 
 Git is driven through the `git` binary rather than libgit2 or gix: worktree

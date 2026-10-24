@@ -51,14 +51,18 @@ pub fn ensure() -> Result<PathBuf> {
 /// taken from a repository's `ferry.toml`: this directory goes first on
 /// agents' `PATH`, so repository content must not choose it.
 pub fn bin_dir() -> Result<PathBuf> {
+    crate::fsutil::private_dir(&home()?.join("bin"))
+}
+
+/// `$FERRY_HOME`, or the platform cache dir, created private to the user.
+pub fn home() -> Result<PathBuf> {
     let home = std::env::var_os("FERRY_HOME")
         .filter(|h| !h.is_empty())
         .map(PathBuf::from)
         .filter(|h| h.is_absolute())
         .or_else(crate::store::default_store_parent)
         .ok_or(Error::NoStoreDir)?;
-    crate::fsutil::private_dir(&home)?;
-    crate::fsutil::private_dir(&home.join("bin"))
+    crate::fsutil::private_dir(&home)
 }
 
 /// [`bin_dir`], creating it and (re)pointing the `name` symlink at the

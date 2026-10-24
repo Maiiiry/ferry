@@ -276,6 +276,7 @@ mod tests {
             userns: probe(overlay),
             overlay: probe(overlay),
             sysctls: Vec::new(),
+            probe_label: None,
         }
     }
 

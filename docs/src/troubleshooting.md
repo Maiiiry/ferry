@@ -30,7 +30,7 @@ The common causes, in the order `ferry doctor` checks them:
 
 | Cause | Typical systems | Fix |
 |---|---|---|
-| `kernel.apparmor_restrict_unprivileged_userns = 1` | Ubuntu 24.04 and later | install the AppArmor profile: see [below](#apparmor-on-ubuntu-2404-and-later) |
+| `kernel.apparmor_restrict_unprivileged_userns = 1` | Ubuntu 24.04 and later | `ferry setup apparmor`: see [below](#apparmor-on-ubuntu-2404-and-later) |
 | `kernel.unprivileged_userns_clone = 0` | Debian kernels with the default changed | `sudo sysctl kernel.unprivileged_userns_clone=1` |
 | `user.max_user_namespaces = 0` | RHEL hardened to the DISA STIG; NixOS with `security.allowUserNamespaces = false` | `sudo sysctl user.max_user_namespaces=15000` (on NixOS, set `security.allowUserNamespaces = true`) |
 | a seccomp filter | Docker's default profile; agent sandboxes | see [Containers](#containers) and [Agent sandboxes](#agent-sandboxes) |
@@ -45,19 +45,71 @@ workspace's own crates rebuild once after spawn.
 
 ### Containers
 
-Docker's default seccomp profile blocks `unshare` and `mount` for processes
-without `CAP_SYS_ADMIN`, so inside Docker Ferry falls back to dependency
-reuse. Options:
+Inside a container, Ferry falls back to dependency reuse unless the container
+allows the namespace sandbox. Accepting the fallback needs nothing else.
+Otherwise up to four layers are in the way:
 
-- Accept the fallback. Nothing else is needed.
-- Run the container with a seccomp profile that allows `unshare` with
-  `CLONE_NEWUSER` (for example `--security-opt seccomp=unconfined`), and keep
-  Ferry's store on a volume or `--tmpfs` mount rather than the container's
-  overlay root filesystem, which overlayfs cannot use as an upper layer.
-- Use rootless Podman, whose default seccomp profile allows these calls.
+1. **Seccomp.** Docker's default profile allows `unshare`, `mount`, `setns`,
+   `fsopen`, `fsconfig`, `fsmount` and `move_mount` only to containers with
+   `CAP_SYS_ADMIN`, and fails them with `EPERM` otherwise. Rootless Podman's
+   default profile allows them.
+2. **AppArmor, on AppArmor hosts (Ubuntu, Debian, SUSE).** Docker's
+   `docker-default` and rootful Podman's `containers-default` profiles contain
+   `deny mount`, so Ferry's bind and overlay mounts fail even inside its own
+   user namespace. Rootless Podman applies no AppArmor profile.
+3. **Ubuntu 24.04 and later hosts.** With `apparmor=unconfined`, container
+   processes are AppArmor's `unconfined` profile, which the host's
+   restriction moves to `unprivileged_userns`, so nothing inside the container
+   fixes this. Either lift the restriction on the host, or load a container
+   AppArmor profile without `deny mount` on the host and name it with
+   `--security-opt apparmor=<name>`. `ferry setup apparmor` refuses to run
+   inside a container, because only the host can load AppArmor policy.
+4. **The store's filesystem.** The container's root filesystem is overlayfs,
+   which overlayfs cannot use as its upper layer (`ferry doctor` warns when
+   the store is on overlayfs). Put `FERRY_HOME` on a volume or bind mount
+   (ext4, XFS or btrfs), or on a tmpfs on Linux 6.6 or newer that allows exec.
+   Without that, `auto` uses reflink or copy, and the sandbox itself still
+   works. `FERRY_HOME` must be owned by the container user and not group or
+   world writable, so a fresh volume needs a `chown`; worktrees then default
+   to `$FERRY_HOME/worktrees`, which survives container rebuilds.
 
-These container facts come from Ferry's research probes and the profiles'
-sources; Ferry itself has not been tested in containers.
+For seccomp, either use `--security-opt seccomp=unconfined`, which removes
+all syscall filtering, or your Docker version's default profile with two
+rules added: `unshare` only with exactly the flags Ferry passes
+(`CLONE_NEWUSER | CLONE_NEWNS` = 268566528), and the mount calls:
+
+```sh
+jq '.syscalls += [
+  {"names":["unshare"],"action":"SCMP_ACT_ALLOW","args":[{"index":0,"value":268566528,"op":"SCMP_CMP_EQ"}]},
+  {"names":["mount","setns","fsopen","fsconfig","fsmount","move_mount"],"action":"SCMP_ACT_ALLOW"}
+]' default.json > .devcontainer/ferry-seccomp.json
+```
+
+`setns` joins a running overlay sandbox; the `fs*` calls are optional, as
+Ferry falls back to `mount(2)`. The kernel still requires `CAP_SYS_ADMIN`
+over the target namespace, so container root gains no mount power outside
+user namespaces. Do not use `--privileged` or `--cap-add SYS_ADMIN`: they
+grant real `CAP_SYS_ADMIN`, far more than Ferry needs.
+
+A devcontainer that does all of this (on a Debian host, or any AppArmor host
+without Ubuntu's restriction, add `"apparmor=unconfined"` to `securityOpt`):
+
+```jsonc
+{
+  "image": "mcr.microsoft.com/devcontainers/rust:1",
+  "securityOpt": ["seccomp=unconfined"], // or "seccomp=${localWorkspaceFolder}/.devcontainer/ferry-seccomp.json"
+  "mounts": [{ "type": "volume", "source": "ferry-${devcontainerId}", "target": "/ferry" }],
+  "containerEnv": { "FERRY_HOME": "/ferry" },
+  "postCreateCommand": "sudo chown \"$(id -u):$(id -g)\" /ferry && chmod 700 /ferry"
+}
+```
+
+Docker Desktop runs containers in a Linux VM without the host's AppArmor, so
+seccomp should be the only layer there. On SELinux hosts, nested container
+tooling commonly needs `--security-opt label=disable`.
+
+These container facts come from the profiles' and the kernel's sources and
+from Ferry's research probes; Ferry itself has not been tested in containers.
 
 ### Agent sandboxes
 
@@ -75,41 +127,71 @@ create user namespaces but gives them no capabilities inside. Ferry's sandbox
 then fails at the uid mapping or the first mount, and `ferry doctor` shows:
 
 ```text
-  ! namespaces  ...
-    fix: Ubuntu's AppArmor policy denies capabilities in unprivileged user namespaces. Install ferry to a root-owned path (e.g. /usr/local/bin/ferry) and load the profile it prints: ...
+  ! namespaces  setgroups failed: Permission denied ...
+    fix: Ubuntu's AppArmor policy denies capabilities in unprivileged user namespaces: run `ferry setup apparmor`, ...
 ```
 
 The fix is an AppArmor profile that allows the `ferry` binary, and only it,
-to use user namespaces:
+to use user namespaces. `ferry setup apparmor` installs it:
+
+```sh
+ferry setup apparmor            # shows every step, then asks
+ferry setup apparmor --dry-run  # only shows them
+```
+
+It prints why the setup is needed, each step, the profile, the root script
+and the exact `sudo` command, and asks before running that one command. As
+root, it copies the running ferry to `/usr/local/bin/ferry` (owned by root),
+writes `/etc/apparmor.d/usr.local.bin.ferry`, checks that it parses, removes
+older Ferry profiles such as `/etc/apparmor.d/ferry`, and loads it. Then, as
+you, it checks that `/usr/local/bin/ferry` can create a user namespace and
+points the cargo shim at it. Run `ferry base` again in each repository
+afterwards: agents spawned before keep building at host paths until they are
+spawned again. See [`ferry setup apparmor`](cli.md#ferry-setup-apparmor) for
+its options and the cases where it refuses. Ferry's CI sets up its Ubuntu
+24.04 AppArmor job this way, with the restriction on.
+
+The profile persists across reboots. **After upgrading Ferry,** run the
+upgraded copy: after `cargo install`, that is `~/.cargo/bin/ferry setup
+apparmor`. It installs the new binary and leaves the profile alone. A bare
+`ferry` may still be the old `/usr/local/bin/ferry`, which reports that it is
+already set up and says when `~/.cargo/bin/ferry` is a different build. **To
+undo it,** run `ferry setup apparmor --uninstall`, which unloads
+and removes Ferry's profile files and leaves `/usr/local/bin/ferry` for you to
+remove.
+
+To do it by hand instead (remove an older `/etc/apparmor.d/ferry` first, so
+that only one file defines the profile):
 
 ```sh
 # 1. Install ferry to a root-owned path.
 sudo install -m 755 "$(command -v ferry)" /usr/local/bin/ferry
 
 # 2. Generate the profile for that path and load it.
-/usr/local/bin/ferry doctor --apparmor-profile | sudo tee /etc/apparmor.d/ferry
-sudo apparmor_parser -r /etc/apparmor.d/ferry
+/usr/local/bin/ferry doctor --apparmor-profile | sudo tee /etc/apparmor.d/usr.local.bin.ferry
+sudo apparmor_parser -r /etc/apparmor.d/usr.local.bin.ferry
 
 # 3. Check.
 /usr/local/bin/ferry doctor
 ```
 
-The profile persists across reboots. The same profile for
-`/usr/local/bin/ferry` is in the repository as
-[`contrib/apparmor/ferry`](https://github.com/patwrall/ferry/blob/main/contrib/apparmor/ferry).
-Ferry's CI runs its sandbox tests on Ubuntu 24.04 with the restriction on and
-this profile loaded.
+The same profile for `/usr/local/bin/ferry` is in the repository as
+[`contrib/apparmor/usr.local.bin.ferry`](https://github.com/patwrall/ferry/blob/main/contrib/apparmor/usr.local.bin.ferry).
 
 **Why a root-owned path.** AppArmor attaches the profile by path. If the path
 is writable by your user (for example `~/.cargo/bin/ferry`), any process
 running as you could replace the binary and inherit the permission. `ferry
-doctor --apparmor-profile` warns when the binary's path is not root-owned.
+setup apparmor` therefore installs a copy, and `ferry doctor
+--apparmor-profile` warns when the binary's path is not root-owned. If
+`/usr/local/bin` is group-writable on your system, pass `--bin-dir
+/opt/ferry/bin`.
 
 **Make sure that binary is the one that runs.** The profile covers only
-`/usr/local/bin/ferry`. Remove other copies (or put `/usr/local/bin` first on
-`PATH`), and re-run `ferry shim` (or any command that uses the shim) from the
-installed binary, so the shim link points at it. After upgrading Ferry,
-install the new binary to the same path again; the profile stays valid.
+`/usr/local/bin/ferry`. Remove other copies, or put `/usr/local/bin` first on
+`PATH`: the shim link follows whichever ferry ran last, and Claude Code's
+hooks call `ferry` through `PATH`. `ferry setup apparmor` warns when the first
+`ferry` on `PATH` is another copy, and `ferry doctor` says when a Ferry
+profile covers a different binary than the one you ran.
 
 **What the profile allows.** It is the stacked form Ubuntu uses for its own
 `bwrap-userns-restrict` profile: `ferry` itself may create the namespace and
@@ -117,9 +199,21 @@ mount, while everything it runs (cargo, build scripts, tests, your agent) runs
 under a second profile, `unpriv_ferry`, that denies capabilities. Your agent's
 processes therefore cannot create privileged user namespaces themselves. A
 simpler `flags=(unconfined)` profile would exempt the agent's whole process
-tree from the restriction. The remaining trade-off is that any local process
-that can run `/usr/local/bin/ferry` can use it to create user namespaces; see
+tree from the restriction. One exception: ferry re-running its own binary (the
+namespace probe does) stays under `ferry` (an `ix` rule for its exact path),
+because a capability-less probe would report that namespaces do not work. The
+remaining trade-off is that any local process that can run
+`/usr/local/bin/ferry` can use it to create user namespaces. On Ubuntu 24.04
+and 24.10, where `kernel.apparmor_restrict_unprivileged_unconfined` is `0`,
+an unconfined process can also run any program under the `ferry` profile with
+`aa-exec -p ferry`; that holds for every user-namespace profile Ubuntu ships,
+and 25.04 and later set the sysctl to `1`. See
 [`SECURITY.md`](https://github.com/patwrall/ferry/blob/main/SECURITY.md).
+
+**Tools that need their own namespaces break under `ferry run`.** Because of
+that stacking, a sandbox tool such as `bwrap` (used by Claude Code's sandbox)
+or a test that calls `unshare` gets no capabilities inside its namespace and
+fails. Ubuntu ships its own `bwrap` profile disabled for similar breakage.
 
 **Last resort: turn the restriction off.**
 
@@ -139,8 +233,10 @@ acceptable, leave the restriction on and use `sandbox = "off"`.
 **overlayfs fails.** The overlay backend needs Linux 5.11 or newer and a store
 filesystem that supports user extended attributes: ext4, btrfs and XFS do,
 tmpfs only from Linux 6.6. Overlayfs cannot use another overlayfs as its
-upper layer, which matters inside containers. `auto` uses overlay only where
-copy-on-write clones are unavailable; without either, it uses copy.
+upper layer, which matters inside containers: `ferry doctor` warns when the
+store is on overlayfs, and the fix is a volume for `FERRY_HOME` (see
+[Containers](#containers)). `auto` uses overlay only where copy-on-write
+clones are unavailable; without either, it uses copy.
 
 **Slow or flaky builds on a network filesystem.** `ferry doctor` warns when
 the store is on NFS, CIFS or FUSE: builds are slow there and mtimes

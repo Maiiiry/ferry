@@ -155,6 +155,11 @@ matter for Ferry:
 - **Nested user namespaces.** Claude Code 2.1.305 and later block them inside
   the sandbox by default, so the shim cannot create the agent's namespace.
   Claude Code 2.1.280 still allowed them.
+- **Ubuntu 24.04 and later with Ferry's AppArmor profile.** Everything
+  `ferry run` starts runs under the `unpriv_ferry` profile, without
+  capabilities in user namespaces, so Claude's own `bwrap` sandbox is expected
+  to fail inside `ferry run a1 -- claude` there (not yet measured). Recipes 2
+  and 3 below start Claude outside `ferry run`.
 
 Pick one of these:
 

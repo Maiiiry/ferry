@@ -61,10 +61,14 @@ Ubuntu restricts unprivileged user namespaces with AppArmor
 but the process gets no capabilities inside it, so mapping its uid and
 mounting fail. Ferry detects this and either:
 
-- uses the namespace sandbox once you install the AppArmor profile from
-  `ferry doctor --apparmor-profile` for a root-owned `ferry` binary (CI runs
-  Ferry's sandbox tests on Ubuntu 24.04 this way), or
+- uses the namespace sandbox once `ferry setup apparmor` has installed ferry
+  to a root-owned path with its AppArmor profile (one confirmed `sudo` call;
+  CI runs Ferry's sandbox tests on Ubuntu 24.04 this way), or
 - falls back to dependency reuse.
+
+Ubuntu on WSL2 runs Microsoft's kernel, which has no such sysctl, and Linux
+Mint 22 ships the restriction switched off; `ferry setup apparmor` reads the
+sysctl and says when nothing is needed.
 
 See [AppArmor on Ubuntu](troubleshooting.md#apparmor-on-ubuntu-2404-and-later).
 Ubuntu 23.10 ships the restriction switched off.
@@ -72,13 +76,17 @@ Ubuntu 23.10 ships the restriction switched off.
 ### Containers
 
 Docker's default seccomp profile allows `unshare` and `mount` only with
-`CAP_SYS_ADMIN`, so Ferry falls back to dependency reuse inside Docker.
-Rootless Podman's default profile allows them. If you run Ferry in a
-container with namespaces allowed, the store must not be on the container's
-overlay root filesystem, because overlayfs cannot use another overlayfs as its
-upper layer: put it on a volume or a tmpfs. These container facts come from
-the profiles' sources and probes during Ferry's research; Ferry itself has not
-been tested in containers.
+`CAP_SYS_ADMIN`, and on AppArmor hosts Docker's default AppArmor profile
+denies mounts, so Ferry falls back to dependency reuse inside Docker. Rootless
+Podman's default profiles allow them. On Ubuntu 24.04 and later hosts, the
+host's restriction applies to container processes too, and only the host can
+lift it. If you run Ferry in a container with namespaces allowed, put
+`FERRY_HOME` on a volume, because overlayfs cannot use the container's overlay
+root filesystem as its upper layer. See
+[Containers](troubleshooting.md#containers) for the seccomp profile and a
+devcontainer example. These container facts come from the profiles' sources
+and probes during Ferry's research; Ferry itself has not been tested in
+containers.
 
 ### Filesystems
 
@@ -129,9 +137,9 @@ caches.
 | `toolchain` | ok or fail | the `rustc` and `cargo` the repository selects |
 | `clippy` | ok or info | whether `cargo clippy` works, when the toolchain works and the warm commands include the generated clippy command; bases skip it when it does not |
 | `freshness` | ok | `checksum freshness (content hashes)` or `mtime stamping of files proven identical to the base` |
-| `store` | ok or warn | the store path, its filesystem and free space; warns on NFS, CIFS and FUSE |
+| `store` | ok or warn | the store path, its filesystem and free space; warns on NFS, CIFS and FUSE, and on overlayfs (a container's root filesystem) |
 | `reflink` | ok or info | whether copy-on-write clones work on the store's filesystem |
-| `namespaces` | ok or warn (Linux) | whether an unprivileged user and mount namespace with a bind mount works; the fix names the cause it found (AppArmor, a sysctl, or a container) |
+| `namespaces` | ok or warn (Linux) | whether an unprivileged user and mount namespace with a bind mount works; the fix names the cause it found (AppArmor, with `ferry setup apparmor` as the fix or the path of a different ferry binary a Ferry profile covers; a sysctl; or a container) |
 | `overlayfs` | ok or warn (Linux) | whether overlayfs mounts inside such a namespace, with upper and work dirs in the store |
 | `sandbox` | info (macOS) | that macOS has no mount namespaces |
 | `remap-paths` | info | when bases would remap paths (remap-paths on, no namespace sandbox, rustc 1.98 or newer): `cargo clippy` runs are not remapped |
@@ -159,4 +167,5 @@ namespace failures: `user.max_user_namespaces`,
 `kernel.unprivileged_userns_clone`,
 `kernel.apparmor_restrict_unprivileged_userns`,
 `kernel.apparmor_restrict_unprivileged_unconfined` and
-`kernel.yama.ptrace_scope`, where they exist.
+`kernel.yama.ptrace_scope`, where they exist, and `probe_label`, the namespace
+probe's AppArmor label (`ferry (enforce)` when Ferry's profile attached).

@@ -604,7 +604,7 @@ pub fn unapplied_cargo_configs(ctx: &Context) -> Result<Vec<std::path::PathBuf>>
     Ok(unapplied)
 }
 
-fn cargo_home() -> Option<std::path::PathBuf> {
+pub(crate) fn cargo_home() -> Option<std::path::PathBuf> {
     std::env::var_os("CARGO_HOME")
         .map(std::path::PathBuf::from)
         .or_else(|| std::env::var_os("HOME").map(|h| std::path::Path::new(&h).join(".cargo")))

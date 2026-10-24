@@ -18,6 +18,7 @@ Usage: ferry [OPTIONS] <COMMAND>
 | [`doctor`](#ferry-doctor) | Check platform capabilities and print fixes for what is missing |
 | [`shim`](#ferry-shim) | Print the directory holding Ferry's cargo shim |
 | [`hook`](#ferry-hook) | Hook handlers for agent tools (reads the tool's JSON on stdin) |
+| [`setup`](#ferry-setup-apparmor) | Change the system so Ferry's namespace sandbox works (asks first) |
 | `help` | Print this message or the help of the given subcommand(s) |
 
 ## Global options
@@ -49,9 +50,9 @@ error: no warm base exists for this repository
 with `caused by:` lines in between when there is an underlying error.
 
 `--json` is accepted by every command. It switches `init`, `base`, `spawn`,
-`env`, `list`, `rm`, `gc`, `doctor` (also with `--apparmor-profile`) and
-`shim` to a single JSON document on stdout; the shapes are listed under each
-command. Ferry is pre-1.0, so fields may still change between releases.
+`env`, `list`, `rm`, `gc`, `doctor` (also with `--apparmor-profile`), `shim`
+and `setup apparmor` to a single JSON document on stdout; the shapes are
+listed under each command. Ferry is pre-1.0, so fields may still change between releases.
 `--json` has no effect on `run` and `shell`, which replace themselves with
 your command, or on the `hook` handlers, which speak the agent tool's
 protocol.
@@ -312,8 +313,9 @@ With `--json` it prints `{ "binary", "profile", "warning" }`. See
 [AppArmor on Ubuntu](troubleshooting.md#apparmor-on-ubuntu-2404-and-later).
 
 JSON: `{ "checks": [{ "name", "status", "detail", "fix" }], "capabilities": {...}, "plan": {...} }`.
-`capabilities` has `os`, `kernel`, `store_fs`, `reflink`, `userns`, `overlay`
-and `sysctls`; `plan` has `backend`, `backend_reason`, `isolation`,
+`capabilities` has `os`, `kernel`, `store_fs`, `reflink`, `userns`, `overlay`,
+`sysctls` and `probe_label` (the namespace probe's AppArmor label, such as
+`ferry (enforce)`, or `null`); `plan` has `backend`, `backend_reason`, `isolation`,
 `freshness` and `incremental_reuse`.
 
 ## `ferry shim`
@@ -349,6 +351,76 @@ Hook handlers for agent tools (reads the tool's JSON on stdin).
 
 See [Claude Code](agents/claude-code.md#what-each-hook-does) for what each
 handler reads and does.
+
+## `ferry setup apparmor`
+
+```text
+Usage: ferry setup apparmor [OPTIONS]
+```
+
+Let ferry create user namespaces on Ubuntu 24.04+: install it to a root-owned
+path and load its `AppArmor` profile, with one sudo call.
+
+| Option | Meaning |
+|---|---|
+| `-y`, `--yes` | Run without asking; the plan is still printed |
+| `--dry-run` | Print the plan and exit without changing anything (not with `--yes`) |
+| `--uninstall` | Unload and remove Ferry's profile instead |
+| `--bin-dir <DIR>` | Where to install ferry when its current path cannot be profiled (default `/usr/local/bin`) |
+
+It first checks whether anything is needed. It does nothing, and exits 0, on
+macOS, when the running ferry can already create user namespaces, when the
+kernel has no `kernel.apparmor_restrict_unprivileged_userns` sysctl, and when
+that sysctl is `0`. It refuses, and exits 1, when run as root, inside a Ferry
+agent or a container, without the AppArmor 4.0 userspace, or when a file in
+`/etc/apparmor.d` that Ferry did not write already defines a profile named
+`ferry` or `unpriv_ferry`. It never reads the current repository or its
+`ferry.toml`.
+
+Otherwise it prints, on stderr: why the setup is needed (the sysctl, the
+probe's failure and its AppArmor label), each step, what the profile allows,
+the full profile, the root script and the exact `sudo` command. The steps,
+each listed only when needed:
+
+1. Install the running binary as `<bin-dir>/ferry`, owned by root with mode
+   0755, unless it already sits at a root-owned path a profile can name or
+   `<bin-dir>/ferry` is already a root-owned copy of it. A copy your user
+   owns, or a symlink, is replaced. Root copies the binary from
+   `/proc/<pid>/exe`, so nothing your user can write is copied.
+2. Write `/etc/apparmor.d/<path with . for />` (for `/usr/local/bin/ferry`,
+   `usr.local.bin.ferry`), check that it parses, and remove older Ferry
+   profile files such as `/etc/apparmor.d/ferry`.
+3. Load it with `apparmor_parser -r`; AppArmor loads it again at every boot.
+
+Then, without sudo, it checks that the profiled binary can create a user
+namespace, points the cargo shim at it, and warns if the first `ferry` on
+`PATH` is another copy.
+
+| Situation | What happens |
+|---|---|
+| stdin is a terminal, no `--yes` | asks `Run it? [y/N]`; only `y` or `yes` runs it |
+| `--yes` | runs without asking; with stdin not a terminal, sudo gets `-n`, so a needed password fails at once |
+| stdin is not a terminal, no `--yes` | refuses: `refusing to run sudo without confirmation: stdin is not a terminal` |
+| `--json` without `--yes` | refuses, like stdin not being a terminal |
+| `--dry-run` | prints the plan and exits 0 |
+
+Running the upgraded copy is the upgrade path: after `cargo install`
+upgrades `~/.cargo/bin/ferry`, run `~/.cargo/bin/ferry setup apparmor`. It
+installs the new binary and leaves the profile alone. A bare `ferry setup
+apparmor` with `/usr/local/bin` first on `PATH` runs the old installed copy.
+That copy is set up already, so it reports `already-done` and says when
+`~/.cargo/bin/ferry` is a different build. With
+`--uninstall` it unloads and removes every Ferry profile file (one sudo call,
+same confirmation rules); it leaves the installed binary and any
+`/etc/apparmor.d/local/ferry` in place and says so.
+
+JSON: `{ "action": "install" | "uninstall", "outcome", "reason", "binary",
+"profile_path", "steps": [...], "command": [...], "verified": { "userns",
+"overlay", "label" } | null, "warnings": [...] }`. `outcome` is one of
+`not-applicable`, `not-needed`, `already-done`, `refused`, `planned` (a dry
+run), `done` and `failed`; `command` is the full `sudo` argv. Exit status is 1
+for `refused` and `failed`. See
+[AppArmor on Ubuntu](troubleshooting.md#apparmor-on-ubuntu-2404-and-later).
 
 ## Ferry under other names
 

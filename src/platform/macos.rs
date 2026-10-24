@@ -22,6 +22,7 @@ pub fn detect(store_root: &Path) -> Capabilities {
         userns: no_namespaces(),
         overlay: no_namespaces(),
         sysctls: Vec::new(),
+        probe_label: None,
     }
 }
 

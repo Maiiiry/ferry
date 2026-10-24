@@ -121,8 +121,11 @@ checkout, and `git worktree prune`.
 ## Does Ferry need root?
 
 No. It uses unprivileged user namespaces where they are available.
-`ferry doctor` may suggest `sudo` commands (a sysctl, or loading the AppArmor
-profile on Ubuntu) for you to review and run; Ferry never runs them itself.
+`ferry doctor` may suggest `sudo` commands (a sysctl, for example) for you to
+review and run; it never runs them itself. The one exception is `ferry setup
+apparmor` on Ubuntu 24.04 and later, which you run on purpose: it prints the
+profile, the root script and the exact `sudo` command, asks, and then runs
+that one command.
 
 ## Windows?
 

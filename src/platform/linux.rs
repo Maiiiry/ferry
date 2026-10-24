@@ -39,6 +39,7 @@ pub fn detect(store_root: &Path) -> Capabilities {
         userns: namespaces.userns,
         overlay: namespaces.overlay,
         sysctls: sysctls(),
+        probe_label: namespaces.label,
     }
 }
 
@@ -100,6 +101,7 @@ fn probe_namespaces(store_root: &Path) -> ProbeResult {
     result.unwrap_or_else(|failed| ProbeResult {
         userns: failed.clone(),
         overlay: failed,
+        label: None,
     })
 }
 

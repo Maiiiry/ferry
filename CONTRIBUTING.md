@@ -65,7 +65,14 @@ you what yours does:
   and the overlay backend. Ubuntu 23.10 and later block them by default; to
   run these tests, lift the restriction until the next reboot with
   `sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0`. Check with
-  `unshare --user --map-root-user --mount true`.
+  `unshare --user --map-root-user --mount true`. The unit tests of `ferry
+  setup apparmor` also run its root scripts as root of such a namespace.
+- **`ferry setup apparmor` against the real system.** `tests/setup.rs` has
+  an ignored round trip that installs, re-runs, uninstalls and reinstalls
+  through real `sudo` and AppArmor. It changes the machine, so it runs only
+  with `FERRY_TEST_SYSTEM_SETUP=1` on Ubuntu 24.04 or later with the
+  restriction on and passwordless `sudo`, as CI's AppArmor job does:
+  `FERRY_TEST_SYSTEM_SETUP=1 cargo test --test setup -- --ignored`.
 - **Reflinks.** Needed by the reflink backend: btrfs, XFS, bcachefs or
   OpenZFS 2.2+ on Linux, APFS on macOS. `/tmp` is often tmpfs, which has no
   reflinks.
