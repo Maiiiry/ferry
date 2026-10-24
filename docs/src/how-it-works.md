@@ -40,12 +40,15 @@ they were forked from until you remove them.
 
 Refreshing is cheap: a new base for a later commit is seeded from the newest
 ready base with the same fingerprint, so only what changed between the two
-commits is rebuilt. Seeding needs the two commits to have identical
-`Cargo.toml`s, `Cargo.lock`s, Cargo configs and toolchain files (and the same
-`RUSTFLAGS`-style variables): a seeded target also holds units from older
-commits, and a feature switched off and on again, or a dependency bump that
-was reverted, would select one of those as if it were fresh. After such a
-change the refresh is a cold build. `ferry base --cold` skips the seeding.
+commits is rebuilt. That includes changes to `Cargo.toml`s, `Cargo.lock`s,
+Cargo configs and toolchain files, with one more step: the seed's target
+holds units the new build may not select any more, and a feature switched off
+and on again, or a dependency bump that was reverted, would select one of
+those as if it were fresh. So Ferry watches the warm build through the cargo
+shim and deletes every unit it neither compiled nor found fresh before the
+base is published. When it cannot see every cargo call (see
+[Refreshing a base](configuration.md#refreshing-a-base)), such a refresh is a
+cold build. `ferry base --cold` skips the seeding.
 
 ## Forks
 

@@ -1,9 +1,13 @@
 //! Bases are immutable once built, and a refreshed base never disturbs the
 //! agents still using an older one.
 
+// clippy's allow-unwrap-in-tests covers only #[test] functions, not their
+// helpers.
+#![allow(clippy::unwrap_used)]
+
 mod common;
 
-use common::{BASE_MARKER, Snapshot, TestRepo, str_of};
+use common::{BASE_MARKER, Build, Snapshot, TestRepo, str_of};
 use serde_json::Value;
 
 fn current_base(list: &Value) -> &str {
@@ -147,15 +151,57 @@ fn a_refreshed_base_is_seeded_from_the_previous_one_and_rebuilds_only_changes() 
     let cold = repo.ferry(["--json", "base", "--cold"]).ok();
     assert_eq!(cold.json()["base"]["seeded_from"], Value::Null);
     assert!(compiled_in_base_build(&cold.stderr).len() >= common::ALL_PACKAGES.len());
+
+    // The shim records the JSON messages the command asked for without
+    // printing them a second time.
+    let artifacts: Vec<&str> = refresh
+        .stderr
+        .lines()
+        .filter(|l| l.starts_with(r#"{"reason":"compiler-artifact""#))
+        .collect();
+    let unique: std::collections::BTreeSet<&str> = artifacts.iter().copied().collect();
+    assert_eq!(artifacts.len(), unique.len(), "{}", refresh.stderr);
 }
 
-/// A seeded target also holds units from the seed's own seeds. When a
-/// manifest change selects one of those again (here a default feature turned
-/// off and back on), it was built from older sources than the ones stamping
-/// compared against, so the seed must not be used.
+/// Files named `name` in the fingerprint dirs of a base's target, in either
+/// Cargo build-dir layout: one per unit of that target kind and name.
+fn fingerprint_files(repo: &TestRepo, base: &str, name: &str) -> usize {
+    let mut count = 0;
+    let mut stack = vec![repo.base_dir(base).join("target")];
+    while let Some(dir) = stack.pop() {
+        for entry in std::fs::read_dir(&dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                stack.push(path);
+            } else if path.file_name().is_some_and(|n| n == name) {
+                let parent = dir.file_name().unwrap_or_default();
+                let grandparent = dir.parent().and_then(|p| p.file_name()).unwrap_or_default();
+                if parent == "fingerprint" || grandparent == ".fingerprint" {
+                    count += 1;
+                }
+            }
+        }
+    }
+    count
+}
+
+/// A refresh seeded across a manifest change deletes the seed's units it no
+/// longer uses. One left behind (here the library with a default feature
+/// that B turns off) would look fresh to C, which turns the feature back on,
+/// while holding A's code.
 #[test]
-fn a_base_is_not_seeded_across_manifest_changes() {
-    let repo = TestRepo::new();
+fn a_feature_switched_off_and_on_is_rebuilt_not_reused() {
+    feature_switched_off_and_on(&TestRepo::new());
+}
+
+/// Without the namespace sandbox the seed's local units are invalidated when
+/// its target is cloned, which leaves their outputs behind.
+#[test]
+fn a_feature_switched_off_and_on_is_rebuilt_not_reused_without_the_sandbox() {
+    feature_switched_off_and_on(&TestRepo::with_env(&[("FERRY_SANDBOX", "off")]));
+}
+
+fn feature_switched_off_and_on(repo: &TestRepo) {
     let manifest = repo.root().join("leaf/Cargo.toml");
     let plain = std::fs::read_to_string(&manifest).unwrap();
     let with_feature = format!("{plain}\n[features]\ndefault = [\"x\"]\nx = []\n");
@@ -163,21 +209,232 @@ fn a_base_is_not_seeded_across_manifest_changes() {
     repo.write(&manifest, &with_feature);
     repo.set_marker(repo.root(), "LEAF_A");
     repo.commit_all("A: feature on");
-    let a = repo.base();
+    let a = repo.ferry_json(["base"]);
+    assert_eq!(a["base"]["observed"], true, "{a}");
+    let a = str_of(&a["base"]["id"]).to_owned();
 
     repo.write(&manifest, &plain);
     repo.set_marker(repo.root(), "LEAF_B");
     repo.commit_all("B: feature off");
-    // So that B, were it eligible, would be the newest seed for C.
+    // So that B is the newest seed for C.
     std::thread::sleep(std::time::Duration::from_millis(1100));
     let b = repo.ferry_json(["base"]);
-    assert_eq!(b["base"]["seeded_from"], Value::Null, "{b}");
+    assert_eq!(b["base"]["seeded_from"], a.as_str(), "{b}");
+    assert!(b["base"]["pruned"]["units"].as_u64() > Some(0), "{b}");
+    let b = str_of(&b["base"]["id"]).to_owned();
+    assert_eq!(
+        fingerprint_files(repo, &b, "lib-leaf"),
+        fingerprint_files(repo, &a, "lib-leaf"),
+        "B kept A's build of leaf"
+    );
 
     repo.write(&manifest, &with_feature);
     repo.commit_all("C: feature on again");
     let c = repo.ferry_json(["base"]);
-    assert_eq!(c["base"]["seeded_from"], a.as_str(), "{c}");
+    assert_eq!(c["base"]["seeded_from"], b.as_str(), "{c}");
 
     repo.spawn("agent");
     assert_eq!(repo.app("agent").marker, "LEAF_B");
+}
+
+/// The unit hashes of `package` in a base's dev profile, in either layout.
+fn unit_hashes(repo: &TestRepo, base: &str, package: &str) -> Vec<String> {
+    let profile = repo.base_dir(base).join("target/debug");
+    let names = |dir: std::path::PathBuf| {
+        std::fs::read_dir(dir)
+            .into_iter()
+            .flatten()
+            .filter_map(|e| e.unwrap().file_name().into_string().ok())
+            .collect::<Vec<_>>()
+    };
+    let prefix = format!("{package}-");
+    let mut hashes: Vec<String> = names(profile.join(".fingerprint"))
+        .into_iter()
+        .chain(names(profile.join("build")))
+        .filter_map(|n| n.strip_prefix(&prefix).map(str::to_owned))
+        .collect();
+    hashes.extend(names(profile.join("build").join(package)));
+    assert!(!hashes.is_empty(), "no units of {package} in base {base}");
+    hashes
+}
+
+fn set_leaf_version(repo: &TestRepo, version: &str) {
+    let manifest = repo.root().join("leaf/Cargo.toml");
+    let text: String = std::fs::read_to_string(&manifest)
+        .unwrap()
+        .lines()
+        .map(|l| {
+            if l.starts_with("version") {
+                format!("version = \"{version}\"\n")
+            } else {
+                format!("{l}\n")
+            }
+        })
+        .collect();
+    repo.write(&manifest, &text);
+    common::run(
+        repo.cargo_in(repo.root())
+            .args(["generate-lockfile", "--offline"]),
+    )
+    .ok();
+}
+
+#[test]
+fn a_reverted_version_bump_is_rebuilt_not_reused() {
+    let repo = TestRepo::new();
+    repo.set_marker(repo.root(), "LEAF_A");
+    repo.commit_all("A: leaf 0.1.0");
+    let a = repo.base();
+    let a_leaf = unit_hashes(&repo, &a, "leaf");
+
+    set_leaf_version(&repo, "0.2.0");
+    repo.set_marker(repo.root(), "LEAF_B");
+    repo.commit_all("B: leaf 0.2.0");
+    std::thread::sleep(std::time::Duration::from_millis(1100));
+    let b = repo.ferry_json(["base"]);
+    assert_eq!(b["base"]["seeded_from"], a.as_str(), "{b}");
+    let b = str_of(&b["base"]["id"]).to_owned();
+    let mut stack = vec![repo.base_dir(&b).join("target")];
+    while let Some(dir) = stack.pop() {
+        for entry in std::fs::read_dir(&dir).unwrap() {
+            let path = entry.unwrap().path();
+            let text = path.to_string_lossy();
+            if let Some(hash) = a_leaf.iter().find(|h| text.contains(h.as_str())) {
+                panic!("B kept A's leaf unit {hash}: {}", path.display());
+            }
+            if path.is_dir() {
+                stack.push(path);
+            }
+        }
+    }
+
+    set_leaf_version(&repo, "0.1.0");
+    repo.commit_all("C: leaf 0.1.0 again");
+    let c = repo.ferry_json(["base"]);
+    assert_eq!(c["base"]["seeded_from"], b.as_str(), "{c}");
+    repo.spawn("agent");
+    assert_eq!(repo.app("agent").marker, "LEAF_B");
+}
+
+/// Two builds of one binary with different features are both fresh in a
+/// refresh and both uplifted to target/debug/app; pruning must tell them
+/// apart (on Linux by the hard link Cargo made) and keep both.
+#[test]
+fn fresh_variants_of_one_binary_survive_pruning() {
+    let repo = TestRepo::with_env(&[(
+        "FERRY_BASE_COMMAND",
+        "cargo build --workspace && cargo build -p app --features extra",
+    )]);
+    add_line(&repo, "app/Cargo.toml", "\n[features]\nextra = []");
+    repo.commit_all("app: feature extra");
+    let base1 = repo.base();
+
+    add_line(
+        &repo,
+        "side/Cargo.toml",
+        "# unit inputs change, units do not",
+    );
+    repo.commit_all("side: comment");
+    let base2 = repo.ferry_json(["base"]);
+    assert_eq!(base2["base"]["seeded_from"], base1.as_str(), "{base2}");
+    assert_eq!(base2["base"]["observed"], true, "{base2}");
+    assert_eq!(base2["base"]["pruned"]["units"], 0, "{base2}");
+
+    repo.spawn("a");
+    repo.build("a").assert_rebuilt(&[]);
+    Build::run(
+        repo.agent_cargo("a")
+            .args(["build", "-p", "app", "--features", "extra"]),
+    )
+    .assert_rebuilt(&[]);
+}
+
+fn add_line(repo: &TestRepo, file: &str, line: &str) {
+    let path = repo.root().join(file);
+    let text = std::fs::read_to_string(&path).unwrap();
+    repo.write(&path, &format!("{text}{line}\n"));
+}
+
+#[test]
+fn an_unobservable_lineage_is_not_seeded_across_inputs() {
+    let repo = TestRepo::with_env(&[(
+        "FERRY_BASE_COMMAND",
+        "cargo build --workspace --message-format=short",
+    )]);
+    let a = repo.ferry_json(["base"]);
+    assert_eq!(a["base"]["observed"], false, "{a}");
+
+    add_line(&repo, "leaf/Cargo.toml", "# B");
+    repo.commit_all("B: manifest");
+    let b = repo.ferry_json(["base"]);
+    assert_eq!(b["base"]["seeded_from"], Value::Null, "{b}");
+
+    repo.set_marker(repo.root(), "LEAF_C");
+    repo.commit_all("C: source");
+    let c = repo.ferry_json(["base"]);
+    assert_eq!(c["base"]["seeded_from"], b["base"]["id"], "{c}");
+}
+
+#[test]
+fn pruning_can_be_turned_off() {
+    let repo = TestRepo::with_env(&[("FERRY_BASE_PRUNE", "0")]);
+    let a = repo.ferry_json(["base"]);
+    assert_eq!(a["base"]["observed"], false, "{a}");
+    add_line(&repo, "leaf/Cargo.toml", "# B");
+    repo.commit_all("B: manifest");
+    let b = repo.ferry_json(["base"]);
+    assert_eq!(b["base"]["seeded_from"], Value::Null, "{b}");
+}
+
+/// The warm commands are part of a base's fingerprint, but a script they
+/// run is not. When it stops being observable, the seeded refresh is redone
+/// from scratch instead of publishing a target that may hold unused units.
+#[test]
+fn observability_lost_mid_lineage_falls_back_to_a_cold_refresh() {
+    let repo = TestRepo::with_env(&[("FERRY_BASE_COMMAND", "sh ./warm.sh")]);
+    let script = repo.root().join("warm.sh");
+    repo.write(&script, "cargo build --workspace\n");
+    repo.commit_all("A: warm script");
+    let a = repo.ferry_json(["base"]);
+    assert_eq!(a["base"]["observed"], true, "{a}");
+
+    repo.write(&script, "cargo build --workspace --message-format=short\n");
+    add_line(&repo, "leaf/Cargo.toml", "# B");
+    repo.set_marker(repo.root(), "LEAF_B");
+    repo.commit_all("B: unobservable script");
+    let b = repo.ferry_json(["base"]);
+    assert_eq!(b["base"]["seeded_from"], Value::Null, "{b}");
+    assert_eq!(b["base"]["observed"], false, "{b}");
+    assert!(b["warnings"].to_string().contains("from scratch"), "{b}");
+
+    repo.spawn("agent");
+    repo.build("agent").assert_rebuilt(&[]);
+    assert_eq!(repo.app("agent").marker, "LEAF_B");
+}
+
+#[test]
+fn program_output_of_warm_commands_is_forwarded() {
+    let repo = TestRepo::with_env(&[(
+        "FERRY_BASE_COMMAND",
+        "cargo build --workspace && cargo run -q -p app",
+    )]);
+    let run = repo.ferry(["--json", "base"]).ok();
+    assert_eq!(run.json()["base"]["observed"], true, "{run}");
+    assert!(
+        run.stderr.contains(&format!("marker={BASE_MARKER}")),
+        "{run}"
+    );
+    assert!(
+        !run.stderr.lines().any(|l| l.starts_with(r#"{"reason""#)),
+        "{run}"
+    );
+}
+
+#[test]
+fn a_failing_warm_cargo_call_fails_the_base() {
+    let repo = TestRepo::with_env(&[("FERRY_BASE_COMMAND", "cargo build -p nosuch")]);
+    let run = repo.ferry(["base"]).failed();
+    assert!(run.stderr.contains("cargo build -p nosuch"), "{run}");
+    let list = repo.ferry_json(["list"]);
+    assert_eq!(list["bases"], serde_json::json!([]), "{list}");
 }

@@ -59,6 +59,9 @@ pub struct BaseConfig {
     pub cargo_args: Vec<String>,
     /// Replaces the generated commands. Each runs with `sh -c`.
     pub commands: Option<Vec<String>>,
+    /// Seed refreshes across unit-input changes, deleting the units their
+    /// warm commands did not use (see `prune`).
+    pub prune: bool,
 }
 
 impl Default for BaseConfig {
@@ -68,6 +71,7 @@ impl Default for BaseConfig {
             profiles: vec!["dev".into()],
             cargo_args: vec!["--workspace".into()],
             commands: None,
+            prune: true,
         }
     }
 }
@@ -175,6 +179,7 @@ pub struct Settings {
     /// Parent directory of agent worktrees (one subdirectory per repository).
     pub worktree_parent: Option<PathBuf>,
     pub remap_paths: bool,
+    pub prune: bool,
     /// The config file that was loaded, if any.
     pub config_path: Option<PathBuf>,
 }
@@ -290,18 +295,8 @@ impl Config {
                 )));
             }
         }
-        let remap_paths = match env("FERRY_REMAP_PATHS").as_deref().map(str::trim) {
-            None => self.sandbox.remap_paths,
-            Some("1" | "true") => true,
-            Some("0" | "false" | "") => false,
-            Some(other) => {
-                return Err(ConfigError::Env {
-                    var: "FERRY_REMAP_PATHS",
-                    value: other.to_owned(),
-                    expected: "1, 0, true, false",
-                });
-            }
-        };
+        let remap_paths = parse_bool_env(env, "FERRY_REMAP_PATHS", self.sandbox.remap_paths)?;
+        let prune = parse_bool_env(env, "FERRY_BASE_PRUNE", self.base.prune)?;
         Ok(Settings {
             store_parent,
             backend,
@@ -311,6 +306,7 @@ impl Config {
             branch_prefix: self.agent.branch_prefix.clone(),
             worktree_parent,
             remap_paths,
+            prune,
             config_path,
         })
     }
@@ -384,6 +380,23 @@ fn parse_env<T: for<'de> Deserialize<'de>>(
     })
 }
 
+fn parse_bool_env(
+    env: &dyn Fn(&str) -> Option<String>,
+    var: &'static str,
+    default: bool,
+) -> Result<bool, ConfigError> {
+    match env(var).as_deref().map(str::trim) {
+        None => Ok(default),
+        Some("1" | "true") => Ok(true),
+        Some("0" | "false" | "") => Ok(false),
+        Some(other) => Err(ConfigError::Env {
+            var,
+            value: other.to_owned(),
+            expected: "1, 0, true, false",
+        }),
+    }
+}
+
 fn expand_dir(dir: &Path, repo_root: &Path) -> PathBuf {
     if let Ok(rest) = dir.strip_prefix("~")
         && let Some(home) = std::env::var_os("HOME")
@@ -423,6 +436,9 @@ profiles = ["dev"]
 cargo-args = ["--workspace"]
 # Replace the generated commands entirely; each entry runs with `sh -c`.
 # commands = ["cargo build --workspace --all-targets --locked"]
+# Seed refreshes across manifest, lockfile and Cargo config changes, deleting the
+# units the warm commands no longer use; false builds such refreshes from scratch.
+prune = true
 
 [agent]
 # Branch created for each agent: <prefix><name>.
@@ -577,6 +593,23 @@ mod tests {
             .resolve(Path::new("/r"), None, &env)
             .unwrap();
         assert_eq!(s.warm_commands, vec!["cargo check"]);
+    }
+
+    #[test]
+    fn prune_env_overrides_the_file() {
+        let config = Config::parse("[base]\nprune = false\n").unwrap();
+        let root = Path::new("/r");
+        assert!(!config.resolve(root, None, &no_env).unwrap().prune);
+        let on = |k: &str| (k == "FERRY_BASE_PRUNE").then(|| "1".to_string());
+        assert!(config.resolve(root, None, &on).unwrap().prune);
+        let bad = |k: &str| (k == "FERRY_BASE_PRUNE").then(|| "yes".to_string());
+        assert!(config.resolve(root, None, &bad).is_err());
+        assert!(
+            Config::default()
+                .resolve(root, None, &no_env)
+                .unwrap()
+                .prune
+        );
     }
 
     #[test]

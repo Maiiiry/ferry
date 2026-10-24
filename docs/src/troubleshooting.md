@@ -219,10 +219,20 @@ base keep that base alive.
   makes them all rebuild once. Dependencies stay reused. Fix the namespace
   sandbox (`ferry doctor`) to avoid it.
 - **A refresh is a cold build after a manifest change.** `ferry base` seeds
-  only from a base whose `Cargo.toml`s, `Cargo.lock`s, Cargo configs,
-  toolchain files and `RUSTFLAGS`-style variables are identical: a seeded
-  target also holds units from older commits, which a reverted change could
-  otherwise select as fresh.
+  across a change to `Cargo.toml`s, `Cargo.lock`s, Cargo configs, toolchain
+  files or `RUSTFLAGS`-style variables only from a base whose warm build it
+  observed (`"observed": true` in `ferry --json list`), because it must then
+  delete the units the new build does not use. Warm commands that run
+  `cargo nextest`, an alias like `cargo xtask`, or pass
+  `--message-format=short` are not observed; see
+  [Refreshing a base](configuration.md#refreshing-a-base). `[base] prune =
+  false` turns this off on purpose.
+- **`warning: rebuilt the base from scratch: could not tell which of the
+  seed's units the warm commands used (...)`** from `ferry base`: the seed's
+  warm build was observed but this one was not, or something in the target
+  dir did not match what Cargo reported. The reason in parentheses says
+  which. The base is correct, just built cold; a cargo call that bypasses the
+  shim and rebuilds something is the usual cause.
 - **`warning: the warm commands wrote N file(s) into the source tree ...`**
   from `ferry base`: a build script writes outside `OUT_DIR`. Agents do not get
   those files, so whatever reads them may rebuild or behave differently.

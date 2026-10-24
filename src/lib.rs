@@ -40,6 +40,8 @@ pub mod lock;
 #[cfg(unix)]
 pub mod platform;
 #[cfg(unix)]
+pub mod prune;
+#[cfg(unix)]
 pub mod remap;
 #[cfg(unix)]
 pub mod sandbox;

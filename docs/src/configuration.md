@@ -43,6 +43,9 @@ profiles = ["dev"]
 cargo-args = ["--workspace"]
 # Replace the generated commands entirely; each entry runs with `sh -c`.
 # commands = ["cargo build --workspace --all-targets --locked"]
+# Seed refreshes across manifest, lockfile and Cargo config changes, deleting the
+# units the warm commands no longer use; false builds such refreshes from scratch.
+prune = true
 
 [agent]
 # Branch created for each agent: <prefix><name>.
@@ -96,6 +99,7 @@ invocation selects the same package, features, profile and target kind.
 | `profiles` | array of profile names | `["dev"]` | Profiles to warm. `"dev"` adds no flag (Cargo's own selection, so tests keep using the `test` profile), `"release"` adds `--release`, any other name adds `--profile <name>`. Names must be non-empty and contain no whitespace. |
 | `cargo-args` | array of strings | `["--workspace"]` | Appended to every generated command, shell-quoted. |
 | `commands` | array of strings | unset | Replaces the generated commands. Each entry is a shell command line. Must not be empty when set. |
+| `prune` | boolean | `true` | Seed a refresh from the previous base even when manifests, lockfiles, Cargo configs, toolchain files or Cargo flag variables changed, and delete the units its warm commands did not use. `false` builds such refreshes from scratch. See [Refreshing a base](#refreshing-a-base). |
 
 Without `commands`, Ferry generates one command per profile and target, in
 that order: for each profile, for each target,
@@ -109,6 +113,31 @@ cargo test --no-run --workspace
 
 The warm commands are part of the base's identity: changing them makes the
 next `ferry base` build a new base.
+
+### Refreshing a base
+
+A refresh is seeded from the newest base with the same fingerprint, so only
+what changed is rebuilt. When the commit's manifests, lockfiles, Cargo
+configs or toolchain files differ from the seed's, the seed's target holds
+units the new build may not select any more, and an agent that selected one
+again (by reverting the change) would find it fresh while it holds older
+code. So Ferry watches the warm build through the cargo shim and deletes,
+before the base is published, every unit the build neither compiled nor
+found fresh.
+
+For that, every cargo call in the warm commands must be one Ferry can
+observe: `build`, `check`, `test`, `bench`, `run`, `rustc`, `rustdoc`, `doc`,
+`fix` or `clippy`, through `cargo` on `PATH`, without
+`--message-format=human` or `short` (JSON formats are fine). The shim adds
+`--message-format=json-render-diagnostics` to calls that do not ask for a
+format; diagnostics still look as usual. A warm build that runs anything else
+(`cargo nextest`, an alias such as `cargo xtask`, `cargo install`) is not
+observed: such a base seeds only refreshes with identical inputs, as with
+`prune = false`. If the warm commands become unobservable in the middle of a
+lineage (a script they run changed), the refresh is built again from scratch,
+with a warning. A cargo call that bypasses the shim (an absolute path to
+cargo, `$CARGO` from a build tool) cannot be seen: what it finds fresh is
+deleted, and what it rebuilds makes Ferry rebuild the base from scratch.
 
 Do not pass `--target-dir` or `--config build.target-dir=...` /
 `--config build.build-dir=...` in warm commands. Command-line options beat
@@ -226,6 +255,7 @@ Variables Ferry reads. They override `ferry.toml`.
 | `FERRY_FRESHNESS` | `freshness` mode | `auto`, `checksum`, `mtime` |
 | `FERRY_BASE_COMMAND` | `[base]` warm commands | One shell command that replaces all warm commands. Blank means unset. |
 | `FERRY_REMAP_PATHS` | `[sandbox] remap-paths` | `1` or `true`; `0`, `false` or empty |
+| `FERRY_BASE_PRUNE` | `[base] prune` | `1` or `true`; `0`, `false` or empty |
 
 An invalid value is an error that names the variable and the accepted values.
 

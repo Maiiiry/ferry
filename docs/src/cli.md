@@ -95,20 +95,27 @@ Checks out the commit into the store, runs the [warm commands](configuration.md#
 and makes the base current, so new agents fork from it. If a base with the
 same commit and fingerprint already exists, it is made current without
 building. Otherwise, unless `--cold` is given, the new base is seeded from the
-newest ready base with the same fingerprint and the same manifests,
-lockfiles, Cargo configs, toolchain files and Cargo flag variables, so only
-what changed is rebuilt. Build output goes to stderr.
+newest ready base with the same fingerprint, so only what changed is rebuilt.
+The seed must have the same manifests, lockfiles, Cargo configs, toolchain
+files and Cargo flag variables, or its warm build must have been observed
+(`[base] prune`, the default): the units the new build does not use are then
+deleted, and the success line says how many (`pruned N units`). Build output
+goes to stderr.
 
 Warnings are printed when the namespace sandbox is unavailable (builds then
 run without canonical paths), when a Cargo config above the repository (or an
-untracked one in it) will not apply to Ferry's builds, and when the warm
+untracked one in it) will not apply to Ferry's builds, when the warm
 commands wrote files into the source tree, which agents will not have (build
-scripts writing outside `OUT_DIR`).
+scripts writing outside `OUT_DIR`), and when a refresh seeded across such
+changes was rebuilt from scratch because Ferry could not tell which units the
+warm commands used.
 
 JSON: `{ "base": {...}, "reused": <bool>, "warnings": [...] }`, where `base`
 has `id`, `commit`, `created_unix`, `build_secs`, `freshness`, `isolation`,
 `toolchain`, `commands`, `ferry_version`, `dirtied`, `remap_paths`,
-`unit_inputs` (the hash seeding compares) and `seeded_from`.
+`unit_inputs` (the hash seeding compares), `seeded_from`, `observed` (Ferry
+saw every cargo call of the warm build) and `pruned` (`{ "units", "bytes" }`
+deleted from the seed's units, or `null`).
 
 ## `ferry spawn`
 

@@ -93,6 +93,20 @@ pub fn remove_dir_all_force(path: &Path) -> Result<()> {
     }
 }
 
+/// Removes everything inside `dir` but not `dir` itself, which may be a
+/// mount point.
+pub(crate) fn clear_dir(dir: &Path) -> Result<()> {
+    for entry in fs::read_dir(dir).at("read directory", dir)? {
+        let path = entry.at("read directory", dir)?.path();
+        if fs::symlink_metadata(&path).at("stat", &path)?.is_dir() {
+            remove_dir_all_force(&path)?;
+        } else {
+            fs::remove_file(&path).at("remove", &path)?;
+        }
+    }
+    Ok(())
+}
+
 fn make_dirs_writable(path: &Path) -> Result<()> {
     let mut stack = vec![path.to_path_buf()];
     while let Some(dir) = stack.pop() {

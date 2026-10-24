@@ -1121,12 +1121,12 @@ fn root_spellings(old_roots: &[PathBuf]) -> Vec<Vec<u8>> {
 
 /// Real subdirectories of `dir` (symlinks are not followed); none if `dir`
 /// does not exist.
-fn subdirs(dir: &Path) -> Result<Vec<PathBuf>> {
+pub(crate) fn subdirs(dir: &Path) -> Result<Vec<PathBuf>> {
     entries_of_type(dir, fs::FileType::is_dir)
 }
 
 /// Regular files in `dir`; none if `dir` does not exist.
-fn files(dir: &Path) -> Result<Vec<PathBuf>> {
+pub(crate) fn files(dir: &Path) -> Result<Vec<PathBuf>> {
     entries_of_type(dir, fs::FileType::is_file)
 }
 
@@ -1147,7 +1147,7 @@ fn entries_of_type(dir: &Path, wanted: fn(&fs::FileType) -> bool) -> Result<Vec<
     Ok(found)
 }
 
-fn is_real_dir(path: &Path) -> Result<bool> {
+pub(crate) fn is_real_dir(path: &Path) -> Result<bool> {
     match fs::symlink_metadata(path) {
         Ok(meta) => Ok(meta.is_dir()),
         Err(e) if is_gone(&e) => Ok(false),

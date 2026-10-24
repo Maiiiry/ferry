@@ -7,6 +7,7 @@
 //! is not current.
 
 use std::collections::BTreeSet;
+use std::ffi::OsString;
 use std::fs;
 use std::os::fd::AsFd;
 use std::process::{Command, Stdio};
@@ -23,6 +24,7 @@ use crate::fsutil;
 use crate::git::{self, CommitId};
 use crate::lock::FileLock;
 use crate::platform::Capabilities;
+use crate::prune::{self, Observation, Pruned};
 use crate::sandbox::{self, Isolation, Plan};
 use crate::store::{BaseId, BasePaths, fnv1a64};
 use crate::toolchain::Toolchain;
@@ -46,13 +48,22 @@ pub struct BaseMeta {
     /// agents must use it too or rustc discards the incremental state.
     #[serde(default)]
     pub remap_paths: bool,
-    /// See `unit_inputs`; only a base with the same value can seed this one's
-    /// successors.
+    /// See `unit_inputs`. A successor with the same value can be seeded from
+    /// this base without pruning.
     #[serde(default)]
     pub unit_inputs: String,
     /// The earlier base whose target this one was seeded from.
     #[serde(default)]
     pub seeded_from: Option<BaseId>,
+    /// Ferry saw every cargo call of the warm build (see `prune`). The warm
+    /// commands are part of the fingerprint, so successors are likely to be
+    /// observable too: only then is one with other unit inputs seeded from
+    /// this base.
+    #[serde(default)]
+    pub observed: bool,
+    /// What a refresh seeded across unit inputs deleted from the seed's units.
+    #[serde(default)]
+    pub pruned: Option<Pruned>,
 }
 
 #[derive(Debug, Serialize)]
@@ -139,7 +150,7 @@ pub fn build(ctx: &Context, rev: &str, cold: bool) -> Result<BuildReport> {
     let seed = if cold {
         None
     } else {
-        seed_for(ctx, &id, &inputs)?
+        seed_for(ctx, &id, &inputs, ctx.settings.prune)?
     };
     let _seed_lock = match &seed {
         Some(seed) => Some(FileLock::shared(
@@ -157,12 +168,12 @@ pub fn build(ctx: &Context, rev: &str, cold: bool) -> Result<BuildReport> {
     };
     let plan = build_plan(ctx, &paths, isolation, remap_wrapper);
     let commands = ctx.settings.warm_commands.clone();
-    if let Err(e) = run_warm_commands(&plan, freshness, &commands) {
+    let warmed = warm(ctx, &paths, &plan, freshness, seed.as_ref(), &inputs).inspect_err(|_| {
         // The process may now be inside the sandbox, but host paths are
         // still reachable, so cleanup works the same way.
         let _ = discard(ctx, &paths);
-        return Err(e);
-    }
+    })?;
+    warnings.extend(warmed.warning);
 
     // Cargo writing (or updating) the lockfile is expected; agents get the
     // base's copy when the repository does not track one.
@@ -190,7 +201,9 @@ pub fn build(ctx: &Context, rev: &str, cold: bool) -> Result<BuildReport> {
         dirtied,
         remap_paths: remap,
         unit_inputs: inputs,
-        seeded_from: seed.map(|s| s.id),
+        seeded_from: seed.filter(|_| warmed.seeded).map(|s| s.id),
+        observed: warmed.observed,
+        pruned: warmed.pruned,
     };
     // Writing base.json is what makes the base ready (and immutable).
     fsutil::write_json_atomic(&paths.meta, &base)?;
@@ -354,14 +367,21 @@ fn prepare(
 }
 
 /// The newest ready base, other than `id`, built with the same fingerprint
-/// (toolchain, warm commands, modes) and unit inputs, and with its checkout
-/// and target intact.
-fn seed_for(ctx: &Context, id: &BaseId, inputs: &str) -> Result<Option<BaseMeta>> {
+/// (toolchain, warm commands, modes) and with its checkout and target
+/// intact. It must have the same unit inputs, unless `cross_inputs` allows
+/// any base whose warm build was observed: the refresh then prunes the
+/// target to the units it uses.
+fn seed_for(
+    ctx: &Context,
+    id: &BaseId,
+    inputs: &str,
+    cross_inputs: bool,
+) -> Result<Option<BaseMeta>> {
     Ok(ready_bases(ctx)?.into_iter().find(|b| {
         let paths = ctx.store.base(&b.id);
         &b.id != id
             && b.id.fingerprint() == id.fingerprint()
-            && b.unit_inputs == inputs
+            && (b.unit_inputs == inputs || (cross_inputs && b.observed))
             && paths.src.is_dir()
             && paths.target.is_dir()
     }))
@@ -630,14 +650,101 @@ fn build_plan(
     }
 }
 
-fn run_warm_commands(plan: &Plan, freshness: FreshnessMode, commands: &[String]) -> Result<()> {
+/// What [`warm`] found out.
+struct Warmed {
+    observed: bool,
+    pruned: Option<Pruned>,
+    /// False if the seed's target was replaced by a build from scratch.
+    seeded: bool,
+    warning: Option<String>,
+}
+
+/// Enters the sandbox and runs the warm commands into the prepared target.
+/// A target seeded across unit inputs is then pruned to the units the
+/// commands used, or, when that cannot be told, emptied and built again.
+fn warm(
+    ctx: &Context,
+    paths: &BasePaths,
+    plan: &Plan,
+    freshness: FreshnessMode,
+    seed: Option<&BaseMeta>,
+    inputs: &str,
+) -> Result<Warmed> {
+    let cross_inputs = seed.is_some_and(|s| s.unit_inputs != inputs);
+    if cross_inputs {
+        // Nested workspaces' target dirs are not observed, so only what this
+        // build puts there may stay.
+        fsutil::remove_dir_all_force(&paths.target.join(crate::shim::NESTED_TARGETS))?;
+    }
+    let watch = if ctx.settings.prune {
+        let seed_meta = seed.map(|s| ctx.store.base(&s.id).meta);
+        Some(prune::Watch::start(
+            &paths.dir.join(WARM_UNITS),
+            seed_meta.as_deref(),
+        )?)
+    } else {
+        None
+    };
     let shim_dir = crate::shim::ensure()?;
     sandbox::enter(plan)?;
-    // The target dir variables stay set for cargo calls that bypass the shim;
-    // through it, each workspace gets the target dir it gets in an agent.
+    let env = warm_env(
+        plan,
+        freshness,
+        &shim_dir,
+        watch.as_ref().map(prune::Watch::dir),
+    );
+    let commands = &ctx.settings.warm_commands;
+    run_warm_commands(plan, &env, commands)?;
+    let mut warmed = Warmed {
+        observed: false,
+        pruned: None,
+        seeded: seed.is_some(),
+        warning: None,
+    };
+    let Some(watch) = watch else {
+        return Ok(warmed);
+    };
+    match watch.used(&paths.target)? {
+        Observation::Used(used) => {
+            warmed.observed = true;
+            if cross_inputs {
+                warmed.pruned = Some(prune::sweep(&used)?);
+            }
+        }
+        Observation::Incomplete(why) if cross_inputs => {
+            // Publishing the target as it is could hand agents units that
+            // this build never checked against its checkout.
+            warmed.warning = Some(format!(
+                "rebuilt the base from scratch: could not tell which of the seed's units the \
+                 warm commands used ({why})"
+            ));
+            fsutil::clear_dir(&paths.target)?;
+            watch.clear()?;
+            run_warm_commands(plan, &env, commands)?;
+            warmed.observed = matches!(watch.used(&paths.target)?, Observation::Used(_));
+            warmed.seeded = false;
+        }
+        Observation::Incomplete(_) => {}
+    }
+    watch.remove()?;
+    Ok(warmed)
+}
+
+/// Where the shim records a warm build's cargo calls while it runs.
+const WARM_UNITS: &str = "warm-units";
+
+/// The warm commands' environment. The target dir variables stay set for
+/// cargo calls that bypass the shim; through it, each workspace gets the
+/// target dir it gets in an agent.
+fn warm_env(
+    plan: &Plan,
+    freshness: FreshnessMode,
+    shim_dir: &std::path::Path,
+    records: Option<&std::path::Path>,
+) -> Vec<(OsString, OsString)> {
     let mut env = crate::agent::cargo_env(plan, freshness);
     env.extend([
-        ("PATH".into(), crate::shim::path_with(&shim_dir)),
+        ("PATH".into(), crate::shim::path_with(shim_dir)),
         (
             crate::shim::WARM_SRC_ENV.into(),
             plan.build_src().as_os_str().to_owned(),
@@ -647,6 +754,16 @@ fn run_warm_commands(plan: &Plan, freshness: FreshnessMode, commands: &[String])
             plan.build_target().into_os_string(),
         ),
     ]);
+    if let Some(records) = records {
+        env.push((
+            crate::shim::WARM_UNITS_ENV.into(),
+            records.as_os_str().to_owned(),
+        ));
+    }
+    env
+}
+
+fn run_warm_commands(plan: &Plan, env: &[(OsString, OsString)], commands: &[String]) -> Result<()> {
     for cmd in commands {
         fsutil::note(&format!("running `{cmd}`"));
         // Build output goes to stderr so `--json` output on stdout stays

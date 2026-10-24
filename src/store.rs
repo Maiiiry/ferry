@@ -8,6 +8,7 @@
 //!   mnt/src, mnt/target         canonical mountpoints (Linux namespace mode)
 //!   bases/<id>/                 immutable once base.json exists
 //!     base.json  src/  target/
+//!     warm-units/               cargo calls the shim recorded; only while building
 //!   bases/<id>.lock             held while the base is being built
 //!   agents/<name>/
 //!     agent.json  lock  target/ | upper/ work/ mount.lock ns.json

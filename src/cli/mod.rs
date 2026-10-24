@@ -317,8 +317,15 @@ fn base_cmd(ctx: &Context, rev: &str, cold: bool, json: bool) -> anyhow::Result<
             .as_ref()
             .map(|s| format!(", seeded from {}", s.short()))
             .unwrap_or_default();
+        let pruned = b
+            .pruned
+            .map(|p| {
+                let s = if p.units == 1 { "" } else { "s" };
+                format!(", pruned {} unit{s} ({})", p.units, human_bytes(p.bytes))
+            })
+            .unwrap_or_default();
         output::success(&format!(
-            "base {} ready in {:.1}s ({}, {} freshness{seeded})",
+            "base {} ready in {:.1}s ({}, {} freshness{seeded}{pruned})",
             b.id.short(),
             b.build_secs,
             match b.isolation {
