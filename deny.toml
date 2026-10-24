@@ -1,0 +1,32 @@
+# cargo-deny configuration: `cargo deny --locked check`.
+# There is no `version` key: since cargo-deny 0.16 the v2 schema is the only one.
+
+[graph]
+# Only the release targets: Ferry does not build on Windows, so Windows-only
+# dependencies never ship and their advisories or licenses should not fail CI.
+targets = [
+    "x86_64-unknown-linux-gnu",
+    "aarch64-unknown-linux-gnu",
+    "x86_64-unknown-linux-musl",
+    "aarch64-unknown-linux-musl",
+    "x86_64-apple-darwin",
+    "aarch64-apple-darwin",
+]
+all-features = true
+
+[advisories]
+unmaintained = "workspace"
+yanked = "deny"
+
+[licenses]
+allow = ["MIT", "Apache-2.0", "Unicode-3.0"]
+confidence-threshold = 0.93
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+allow-wildcard-paths = true
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"

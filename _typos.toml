@@ -1,0 +1,11 @@
+[files]
+# Generated from commit messages, which cannot be fixed after the fact.
+extend-exclude = ["CHANGELOG.md"]
+
+[default]
+# Hex ids (agent ids, hashes) split into "words" such as "abd".
+extend-ignore-re = ["\\b[0-9a-f]{16,}\\b"]
+
+[default.extend-words]
+# Deliberate misspelling in config.rs's unknown-key test.
+bakend = "bakend"
