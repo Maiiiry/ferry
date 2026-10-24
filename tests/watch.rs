@@ -25,8 +25,14 @@ struct Watcher {
 
 impl Watcher {
     fn start(repo: &TestRepo) -> Self {
+        Self::start_with(repo, &[])
+    }
+
+    /// With `args` after `ferry --json base --watch --interval 0.2`.
+    fn start_with(repo: &TestRepo, args: &[&str]) -> Self {
         let mut child = repo
             .ferry_cmd(["--json", "base", "--watch", "--interval", "0.2"])
+            .args(args)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
@@ -199,4 +205,89 @@ fn a_revision_that_does_not_resolve_is_refused_at_startup() {
         stderr.contains("`nosuch` does not name a commit"),
         "{stderr}"
     );
+}
+
+#[test]
+fn with_gc_the_watcher_collects_replaced_bases_and_reports_gc_failures() {
+    let repo = TestRepo::new();
+    repo.ferry(["list"]).ok();
+    // An unfinished base gc must collect, whose lock gc cannot take: a
+    // directory where the lock file goes. Base builds never lock it.
+    let stale = "0000000-00000000";
+    let bases = repo.store().join("bases");
+    std::fs::create_dir_all(bases.join(stale)).unwrap();
+    let stale_lock = bases.join(format!("{stale}.lock"));
+    std::fs::create_dir(&stale_lock).unwrap();
+    let watcher = Watcher::start_with(&repo, &["--gc"]);
+    let first = watcher.wait_for("built", 1);
+    let failed = watcher.wait_for("gc-failed", 1);
+    assert!(failed["error"].to_string().contains(".lock"), "{failed}");
+
+    std::fs::remove_dir(&stale_lock).unwrap();
+    repo.set_marker(repo.root(), "LEAF_V2");
+    repo.commit_all("v2");
+    watcher.wait_for("built", 2);
+    let collected = watcher.wait_for("collected", 1);
+    let base1 = first["report"]["base"]["id"].as_str().unwrap();
+    let mut removed = collected["report"]["removed"].clone();
+    removed
+        .as_array_mut()
+        .unwrap()
+        .sort_by_key(ToString::to_string);
+    assert_eq!(removed, serde_json::json!([stale, base1]), "{collected}");
+    assert!(!repo.base_dir(base1).exists());
+    assert_eq!(watcher.events("gc-failed").len(), 1);
+}
+
+/// A rebase that stops at a conflict leaves `HEAD` at a commit of its own.
+#[test]
+fn a_rebase_in_progress_does_not_trigger_builds() {
+    let repo = TestRepo::new();
+    let git = |args: &[&str]| repo.git(repo.root(), args);
+    git(&["checkout", "-q", "-b", "topic"]);
+    repo.set_asset(repo.root(), "a.txt", "topic");
+    repo.commit_all("T1: applies cleanly");
+    repo.set_marker(repo.root(), "LEAF_TOPIC");
+    let topic = repo.commit_all("T2: conflicts");
+    git(&["checkout", "-q", "main"]);
+    repo.set_marker(repo.root(), "LEAF_MAIN");
+    let main = repo.commit_all("M1");
+    git(&["checkout", "-q", "topic"]);
+    let watcher = Watcher::start(&repo);
+    assert_eq!(watcher.wait_for("built", 1)["commit"], topic.as_str());
+
+    common::run(repo.command("git").args(["rebase", "-q", "main"])).failed();
+    let stopped_at = git(&["rev-parse", "HEAD"]);
+    assert!(stopped_at != topic && stopped_at != main, "{stopped_at}");
+    std::thread::sleep(Duration::from_millis(1500));
+    git(&["rebase", "--abort"]);
+    std::thread::sleep(Duration::from_millis(1000));
+    assert_eq!(watcher.events("building").len(), 1);
+}
+
+/// `--rev main` moving (a fetch, a push from another worktree) while the
+/// watcher's worktree is in a merge waits for the merge to end.
+#[test]
+fn a_merge_in_progress_defers_builds() {
+    let repo = TestRepo::new();
+    let git = |args: &[&str]| repo.git(repo.root(), args);
+    git(&["checkout", "-q", "-b", "topic"]);
+    repo.set_marker(repo.root(), "LEAF_TOPIC");
+    repo.commit_all("T1");
+    git(&["checkout", "-q", "main"]);
+    repo.set_marker(repo.root(), "LEAF_MAIN");
+    let main = repo.commit_all("M1");
+    git(&["checkout", "-q", "-b", "next"]);
+    repo.set_asset(repo.root(), "a.txt", "next");
+    let next = repo.commit_all("X");
+    git(&["checkout", "-q", "topic"]);
+    let watcher = Watcher::start_with(&repo, &["--rev", "main"]);
+    assert_eq!(watcher.wait_for("built", 1)["commit"], main.as_str());
+
+    common::run(repo.command("git").args(["merge", "-q", "main"])).failed();
+    git(&["branch", "-f", "main", "next"]);
+    std::thread::sleep(Duration::from_millis(1500));
+    assert_eq!(watcher.events("building").len(), 1);
+    git(&["merge", "--abort"]);
+    assert_eq!(watcher.wait_for("built", 2)["commit"], next.as_str());
 }
