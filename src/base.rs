@@ -627,7 +627,8 @@ fn fingerprint(
 /// Hash of what decides which units (feature sets, dependency versions,
 /// profiles, flags) a build of `commit` selects: the commit's manifests,
 /// lockfiles, Cargo configs and toolchain files, the Cargo configs above the
-/// store, and Cargo's flag variables. A seed's target still holds units left
+/// store, Cargo's flag variables, `CARGO_INCREMENTAL`, and whether `CI` or
+/// `TF_BUILD` is set. A seed's target still holds units left
 /// from the seeds before it, built from older sources than the ones stamping
 /// compares against; a build with the same inputs selects none of them.
 fn unit_inputs(ctx: &Context, commit: &CommitId) -> Result<String> {
@@ -685,6 +686,16 @@ fn unit_inputs(ctx: &Context, commit: &CommitId) -> Result<String> {
         input.push(b'=');
         input.extend_from_slice(value.as_bytes());
         input.push(0);
+    }
+    // Either one with a UTF-8 value (Cargo tests `std::env::var(name).is_ok()`)
+    // makes Cargo 1.99 and later turn incremental compilation off by default,
+    // which changes every local unit's hash. Hashed only when set, so the
+    // inputs of bases built without them stay the same.
+    if ["CI", "TF_BUILD"]
+        .iter()
+        .any(|name| std::env::var(name).is_ok())
+    {
+        input.extend_from_slice(b"CI\0");
     }
     Ok(format!("{:016x}", fnv1a64(&input)))
 }
@@ -753,7 +764,11 @@ fn selects_units(name: &str) -> bool {
     .any(|prefix| name.starts_with(prefix));
     matches!(
         name,
-        "RUSTFLAGS" | "RUSTDOCFLAGS" | "CARGO_ENCODED_RUSTFLAGS" | "CARGO_ENCODED_RUSTDOCFLAGS"
+        "RUSTFLAGS"
+            | "RUSTDOCFLAGS"
+            | "CARGO_ENCODED_RUSTFLAGS"
+            | "CARGO_ENCODED_RUSTDOCFLAGS"
+            | "CARGO_INCREMENTAL"
     ) || (cargo_config
         && !matches!(
             name,
@@ -992,6 +1007,7 @@ mod tests {
             "CARGO_BUILD_TARGET",
             "CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS",
             "CARGO_UNSTABLE_CHECKSUM_FRESHNESS",
+            "CARGO_INCREMENTAL",
         ] {
             assert!(selects_units(name), "{name}");
         }

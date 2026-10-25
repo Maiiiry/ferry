@@ -48,11 +48,12 @@ Each one is enforced in code (module named) and covered by tests.
    stamping compares. There are three ways to get there: a cold build; a
    refresh seeded from a base with the same *unit inputs* (every manifest,
    lockfile, Cargo config and toolchain file of the commit, the Cargo configs
-   above the store, and Cargo's flag variables), which selects the same
-   units; and a refresh seeded across unit inputs from a base whose warm
-   build was observed, after which every unit the build neither wrote nor
-   reported is deleted. When that observation is incomplete, the target is
-   emptied and built again from scratch rather than published.
+   above the store, Cargo's flag variables, `CARGO_INCREMENTAL`, and whether
+   `CI` or `TF_BUILD` is set), which selects the same units; and a refresh
+   seeded across unit inputs from a base whose warm build was observed,
+   after which every unit the build neither wrote nor reported is deleted.
+   When that observation is incomplete, the target is emptied and built
+   again from scratch rather than published.
 3. **Each agent owns its build state** (`fork`, `sandbox`, `agent`). Forks are
    reflink clones (new inodes), overlayfs upper layers (base is a read-only
    lower), or full copies. There is no hardlink backend: Cargo rewrites
