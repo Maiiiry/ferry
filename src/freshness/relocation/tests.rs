@@ -1561,6 +1561,168 @@ fn plans_are_cached_only_when_they_fit() {
     assert!(!uncacheable.cacheable());
 }
 
+/// An agent checkout at `<root>/agent`. It and the base's both hold
+/// `files`, and each of `links` (path, base target, agent target) is a
+/// symlink in both.
+fn agent_checkout(s: &Synth, files: &[&str], links: &[(&str, &str, &str)]) -> PathBuf {
+    let agent = s.root.join("agent");
+    for root in [&s.src, &agent] {
+        for file in files {
+            put(&root.join(file), *file);
+        }
+    }
+    for (at, in_base, in_agent) in links {
+        for (root, to) in [(&s.src, in_base), (&agent, in_agent)] {
+            let at = root.join(at);
+            fs::create_dir_all(at.parent().unwrap()).unwrap();
+            symlink(to, at).unwrap();
+        }
+    }
+    agent
+}
+
+fn link_rebuilt(s: &Synth, origin: &Origin, agent: &Path) -> Vec<String> {
+    link_rebuilds(&s.target, origin, agent)
+        .unwrap()
+        .iter()
+        .map(|p| p.display().to_string())
+        .collect()
+}
+
+#[test]
+fn units_reading_through_a_retargeted_symlink_rebuild() {
+    let s = Synth::new();
+    let agent_target = s.store.join("agents/a/target");
+    put(&agent_target.join("debug/gen.rs"), "gen");
+    s.put("debug/gen.rs", "gen");
+    let agent = agent_checkout(
+        &s,
+        &["leaf/src/lib.rs", "leaf/data/v1.txt", "leaf/data/v2.txt"],
+        &[
+            ("leaf/data/current.txt", "v1.txt", "v2.txt"),
+            ("leaf/data/same.txt", "v1.txt", "v1.txt"),
+            // Remap mode's link to each one's own target dir.
+            (
+                ".ferry-target",
+                &s.tgt(),
+                &agent_target.display().to_string(),
+            ),
+        ],
+    );
+    let mut expected = Vec::new();
+    for layout in [Layout::Old, Layout::New] {
+        let leaf = U::new("leaf", "1111111111111111", 1).layout(layout);
+        let inputs = ["leaf/src/lib.rs", "leaf/src/../data/current.txt"];
+        let dir = s.compile(leaf, "lib-leaf", &inputs, &[], &[]);
+        expected.push(format!("{dir}/dep-lib-leaf"));
+        let same = U::new("same", "2222222222222222", 2).layout(layout);
+        let inputs = ["leaf/src/lib.rs", "leaf/src/../data/same.txt"];
+        s.compile(same, "lib-same", &inputs, &[], &[]);
+        let generated = U::new("gen", "3333333333333333", 3).layout(layout);
+        let inputs = [".ferry-target/debug/gen.rs"];
+        s.compile(generated, "lib-gen", &inputs, &[], &[]);
+        let registry = U::new("reg", "4444444444444444", 4).layout(layout);
+        s.registry(registry, &[], &[]);
+        // Build-script runs compare mtimes, which stamping covers.
+        let run = U::new("leaf", "5555555555555555", 5).layout(layout);
+        s.run(run, "cargo::rerun-if-changed=data/current.txt\n");
+        // Without rustc's dep-info, nothing shows what a compile read.
+        let blind = U::new("blind", "6666666666666666", 6).layout(layout);
+        let dir = s.fingerprint(blind, "lib-blind");
+        expected.push(format!("{dir}/dep-lib-blind"));
+        let doc = U::new("doc", "7777777777777777", 7).layout(layout);
+        s.fingerprint(doc, "doc-lib-doc");
+    }
+    assert_eq!(link_rebuilt(&s, &s.origin(false), &agent), sorted(expected));
+}
+
+#[test]
+fn invalidated_dep_info_is_emptied_in_the_writable_dir() {
+    let s = Synth::new();
+    let agent = agent_checkout(
+        &s,
+        &["leaf/src/lib.rs", "leaf/data/v1.txt", "leaf/data/v2.txt"],
+        &[("leaf/data/current.txt", "v1.txt", "v2.txt")],
+    );
+    for layout in [Layout::Old, Layout::New] {
+        let leaf = U::new("leaf", "1111111111111111", 1).layout(layout);
+        let inputs = ["leaf/src/../data/current.txt"];
+        s.compile(leaf, "lib-leaf", &inputs, &[], &[]);
+    }
+    let stale = link_rebuilds(&s.target, &s.origin(false), &agent).unwrap();
+    assert_eq!(stale.len(), 2, "{stale:?}");
+    // An overlay's upper dir holds nothing of the unit yet.
+    let upper = s.root.join("upper");
+    fs::create_dir_all(&upper).unwrap();
+    for root in [&s.target, &upper] {
+        invalidate_dep_info(root, &stale).unwrap();
+        for rel in &stale {
+            assert_eq!(fs::read(root.join(rel)).unwrap(), b"", "{}", rel.display());
+        }
+    }
+}
+
+#[test]
+fn inputs_of_a_nested_workspace_resolve_from_its_root() {
+    let s = Synth::new();
+    let agent = agent_checkout(
+        &s,
+        &[
+            "tools/Cargo.toml",
+            "tools/cfg/a.toml",
+            "tools/cfg/b.toml",
+            "cfg/a.toml",
+        ],
+        &[
+            ("tools/cfg/now.toml", "a.toml", "b.toml"),
+            ("cfg/now.toml", "a.toml", "a.toml"),
+        ],
+    );
+    let mut expected = Vec::new();
+    for layout in [Layout::Old, Layout::New] {
+        let tool = U::new("tool", "1111111111111111", 1)
+            .layout(layout)
+            .profile("ferry-ws/tools/debug");
+        let dir = s.compile(tool, "bin-tool", &["cfg/now.toml"], &[], &[]);
+        expected.push(format!("{dir}/dep-bin-tool"));
+        // The same input of the root workspace is another file.
+        let root = U::new("root", "2222222222222222", 2).layout(layout);
+        s.compile(root, "lib-root", &["cfg/now.toml"], &[], &[]);
+    }
+    assert_eq!(link_rebuilt(&s, &s.origin(false), &agent), sorted(expected));
+}
+
+#[test]
+fn absolute_inputs_resolve_below_the_checkout_rustc_saw() {
+    let s = Synth::new();
+    let agent = agent_checkout(
+        &s,
+        &["vendor/v/src/v1.rs", "vendor/v/src/v2.rs"],
+        &[("vendor/v/src/imp.rs", "v1.rs", "v2.rs")],
+    );
+    // A base built in the namespace sandbox saw its checkout at the mount.
+    let mount = s.store.join("mnt/src");
+    let sandboxed = Origin {
+        checkout: mount.clone(),
+        ..s.origin(false)
+    };
+    let mut at_mount = Vec::new();
+    let mut at_host = Vec::new();
+    for layout in [Layout::Old, Layout::New] {
+        for (pkg, meta, hash, checkout, expected) in [
+            ("v", "1111111111111111", 1, &mount, &mut at_mount),
+            ("w", "2222222222222222", 2, &s.src, &mut at_host),
+        ] {
+            let unit = U::new(pkg, meta, hash).layout(layout);
+            let input = format!("{}/vendor/v/src/imp.rs", checkout.display());
+            let dir = s.compile(unit, &format!("lib-{pkg}"), &[&input], &[], &[]);
+            expected.push(format!("{dir}/dep-lib-{pkg}"));
+        }
+    }
+    assert_eq!(link_rebuilt(&s, &sandboxed, &agent), sorted(at_mount));
+    assert_eq!(link_rebuilt(&s, &s.origin(false), &agent), sorted(at_host));
+}
+
 // Real cargo: a workspace built at `<store>/bases/a/{src,target}`, copied to
 // `<tmp>/agent/{ws,target}` as an agent without the sandbox has it.
 

@@ -88,7 +88,11 @@ re-stamps a live worktree, because that could hide an edit or a deletion.
 
 On nightly toolchains Ferry uses Cargo's checksum freshness instead (see
 [Configuration](configuration.md#freshness)), and still stamps, because build
-script inputs are always compared by mtime.
+script inputs are always compared by mtime. A symlink that leads elsewhere
+than in the base needs one more step there. Ferry leaves the files it reaches
+unstamped, but Cargo compares the content of the file the base read through
+it, which the agent has too. So Ferry also empties Cargo's record of what each
+crate that read through the link depends on, and those crates rebuild.
 
 ## Canonical paths: keeping incremental state
 

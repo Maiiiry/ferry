@@ -213,3 +213,22 @@ fn an_unchanged_symlink_leaves_everything_else_stamped() {
     repo.build("a").assert_rebuilt(&[]);
     assert_eq!(repo.app("a").marker, "ONE");
 }
+
+/// A refresh seeded from the base before the retarget builds what a cold
+/// build of its commit would; its agents are stamped against it.
+#[test]
+fn a_refresh_seeded_across_a_retargeted_symlink_is_not_hidden_from_cargo() {
+    let repo = TestRepo::new();
+    put(&repo, &[("data/v1.txt", "ONE"), ("data/v2.txt", "TWO")]);
+    link(&repo, "data/current.txt", "v1.txt");
+    set_leaf(&repo, INCLUDE_CURRENT);
+    repo.commit_all("current.txt -> v1.txt");
+    let seed = repo.base();
+    link(&repo, "data/current.txt", "v2.txt");
+    repo.commit_all("current.txt -> v2.txt");
+    let report = repo.ferry_json(["base"]);
+    assert_eq!(report["base"]["seeded_from"], seed.as_str(), "{report}");
+    repo.spawn("a");
+    repo.build("a").assert_rebuilt(&[]);
+    assert_eq!(repo.app("a").marker, "TWO");
+}

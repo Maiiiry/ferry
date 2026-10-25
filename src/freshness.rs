@@ -27,6 +27,11 @@
 //! its subdirectories and files, and a deleted file is only visible as its
 //! parent directory's mtime change.
 //!
+//! Leaving a file unstamped makes Cargo rebuild only where it compares
+//! mtimes. With checksum freshness it compares content, and a file reached
+//! through a changed symlink is identical to the base's, so the units that
+//! read one also get their dep-info invalidated ([`link_rebuilds`]).
+//!
 //! [`StampPlan`] can only be constructed by [`plan`], so code elsewhere cannot
 //! stamp an unverified path. Stamping happens once, when an agent is
 //! spawned: re-stamping a tree an agent has worked in would hide deletions.
@@ -55,7 +60,7 @@ mod relocation;
 
 pub use relocation::{
     Capture, Origin, RELOCATION_RULES, RelocationPlan, RelocationReport, Removal, apply_relocation,
-    plan_relocation,
+    invalidate_dep_info, link_rebuilds, plan_relocation,
 };
 
 /// The mtime given to stamped files: 2023-11-14T22:13:20Z. Any fixed time
@@ -117,6 +122,8 @@ pub struct StampPlan {
     dirs: Vec<Verified>,
     skipped_dirs: Vec<(PathBuf, SkipReason)>,
     tracked: usize,
+    /// Some symlink leads elsewhere in the agent than in the base.
+    links_changed: bool,
 }
 
 /// A verified path plus what was observed when it was verified, so [`apply`]
@@ -167,6 +174,13 @@ pub struct StampReport {
 impl StampPlan {
     pub fn skipped(&self) -> &[(PathBuf, SkipReason)] {
         &self.skipped
+    }
+
+    /// Whether some symlink leads elsewhere in the agent than in the base.
+    /// Leaving what it reaches unstamped is enough only where Cargo
+    /// compares mtimes; see [`link_rebuilds`] for checksum freshness.
+    pub fn links_changed(&self) -> bool {
+        self.links_changed
     }
 }
 
@@ -295,6 +309,7 @@ pub fn plan(
         dirs: verified_dirs,
         skipped_dirs,
         tracked: index.len(),
+        links_changed: !regions.is_empty(),
     })
 }
 

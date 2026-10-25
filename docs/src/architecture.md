@@ -26,18 +26,20 @@ Each one is enforced in code (module named) and covered by tests.
    Cargo cannot reach it through a symlink that resolves differently in the
    agent and the base (both ends count: Cargo records a rustc input read
    through a link by its canonical path, but follows a build script's
-   `rerun-if-changed` path through it). A directory is stamped only if its
-   entry names equal the base checkout's directory, because Cargo's
-   `rerun-if-changed=<dir>` takes the recursive max mtime of the directory,
-   its subdirectories and its files, and a deletion is only visible as a
-   directory mtime change. `StampPlan` can only be built by the verifying
-   function. The one other stamping function, `stamp_base_checkout`, stamps a
-   fresh, unseeded base checkout, which is the reference itself; only
-   `base::prepare` calls it. Every file and directory that is *not* stamped
-   gets an mtime no older than the base (`freshen_skipped`), so a hook that
-   restores commit times or a clock that went backwards cannot make it look
-   fresh. Stamping happens once, at spawn; a live agent tree is never
-   re-stamped.
+   `rerun-if-changed` path through it). Checksum freshness compares content
+   instead, so the units that read through such a link also get their
+   dep-info invalidated (see [Freshness modes](#freshness-modes)). A
+   directory is stamped only if its entry names equal the base checkout's
+   directory, because Cargo's `rerun-if-changed=<dir>` takes the recursive
+   max mtime of the directory, its subdirectories and its files, and a
+   deletion is only visible as a directory mtime change. `StampPlan` can only
+   be built by the verifying function. The one other stamping function,
+   `stamp_base_checkout`, stamps a fresh, unseeded base checkout, which is
+   the reference itself; only `base::prepare` calls it. Every file and
+   directory that is *not* stamped gets an mtime no older than the base
+   (`freshen_skipped`), so a hook that restores commit times or a clock that
+   went backwards cannot make it look fresh. Stamping happens once, at spawn;
+   a live agent tree is never re-stamped.
 2. **Bases are immutable once built** (`base`). A base is keyed by commit plus
    a fingerprint of toolchain, warm commands and modes. `base.json` is written
    last, atomically, and doubles as the "ready" marker; nothing writes to a
@@ -158,12 +160,13 @@ needs one writable-root entry for it plus the worktree (its working directory).
    `--cold` is given, seed from the newest ready base with the same
    fingerprint at another commit that has the same unit inputs or (with
    `[base] prune`, the default) was observed: clone its target (reflink when
-   possible), relocate the clone without the sandbox (see below), and stamp
-   only files proven identical to its checkout, exactly as for an agent, so
-   the warm build only rebuilds what changed. Otherwise stamp all tracked
-   files and directories (the base is the reference, nothing to compare). A
-   seed with other unit inputs loses its nested workspaces' target dirs
-   (`ferry-ws/`), which are not observed.
+   possible), relocate the clone without the sandbox (see below), stamp only
+   files proven identical to its checkout, and invalidate the units that read
+   through a changed symlink, exactly as for an agent, so the warm build only
+   rebuilds what changed. Otherwise stamp all tracked files and directories
+   (the base is the reference, nothing to compare). A seed with other unit
+   inputs loses its nested workspaces' target dirs (`ferry-ws/`), which are
+   not observed.
 4. Create `warm-units/` and take a write threshold: the mtime of a file
    created there that is strictly newer than one created just before, so
    every file written later is at least as new and every cloned file older.
@@ -236,7 +239,9 @@ build leaves the current base alone and is not retried until `R` moves.
    (invariant 1), stamp, raise the mtimes of what was not stamped,
    `git update-index --refresh`.
 3. Select the backend, fork the base target, and when the agent runs without
-   the namespace sandbox, apply the base's relocation plan (see below). Write
+   the namespace sandbox, apply the base's relocation plan (see below). If a
+   tracked symlink leads elsewhere than in the base, invalidate the units
+   that read through it (see [Freshness modes](#freshness-modes)). Write
    `state: ready`. A failure rolls back only what this spawn created: the
    worktree if it added it, the branch if it still points at the starting
    commit, and the agent dir.
@@ -462,6 +467,17 @@ absolute worktree and target paths in rustc's arguments to relative ones.
 base and every agent. Switching mode rebuilds every unit, so the mode is a
 property of the base. Stamping runs in both modes because build scripts stay
 mtime-based.
+
+Leaving a file unstamped cannot show checksum freshness a symlink that leads
+elsewhere than in the base: Cargo records a rustc input read through the link
+by its canonical path in the base and compares that file's content, which the
+agent has too. So when a tracked symlink differs, spawn (and a seeded
+refresh, against its seed) also empties the Cargo dep-info file (`dep-*` in
+the fingerprint dir, written to an overlay fork's upper dir) of every compile
+unit whose rustc dep-info names an input that resolves differently in the two
+checkouts, or that has no readable rustc dep-info
+(`freshness::link_rebuilds`). Cargo cannot parse it, so it rebuilds the unit
+and its dependents in the same build.
 
 ## Concurrency
 

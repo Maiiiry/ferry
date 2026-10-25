@@ -362,6 +362,17 @@ fn populate(
         let report = freshness::apply_relocation(&paths.target, &plan)?;
         warnings.extend(report.warning());
     }
+    if plan.links_changed() {
+        // An overlay fork shows the base's target until it is mounted, and
+        // takes changes in its upper dir.
+        let (view, writable) = match choice.kind {
+            BackendKind::Overlay => (&base_paths.target, &paths.upper),
+            _ => (&paths.target, &paths.target),
+        };
+        let origin = base::relocation_origin(ctx, &base.id, base.isolation, false);
+        let stale = freshness::link_rebuilds(view, &origin, &meta.worktree)?;
+        freshness::invalidate_dep_info(writable, &stale)?;
+    }
 
     meta.state = AgentState::Ready;
     fsutil::write_json_atomic(&paths.meta, &*meta)?;

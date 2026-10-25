@@ -370,23 +370,28 @@ fn prepare(
         // compare against.
         crate::remap::prepare(&paths.src, &paths.target)?;
     }
-    if let Some(seed) = seed {
+    let links_changed = if let Some(seed) = seed {
         let seed_paths = ctx.store.base(&seed.id);
         crate::agent::copy_untracked_lockfile(&seed_paths.src, &paths.src)?;
         let index = git::ls_files(&paths.src)?;
         let tree = ctx.repo.ls_tree(&seed.commit)?;
-        freshness::apply(&freshness::plan(
-            &tree,
-            &seed_paths.src,
-            &index,
-            &paths.src,
-        )?)?;
+        let plan = freshness::plan(&tree, &seed_paths.src, &index, &paths.src)?;
+        freshness::apply(&plan)?;
+        plan.links_changed()
     } else {
         freshness::stamp_base_checkout(&paths.src, &git::ls_files(&paths.src)?)?;
-    }
+        false
+    };
     let toolchain = Toolchain::detect(&paths.src)?;
     match seed {
-        Some(seed) => clone_seed_target(ctx, seed, paths, isolation)?,
+        Some(seed) => {
+            clone_seed_target(ctx, seed, paths, isolation)?;
+            if links_changed {
+                let origin = relocation_origin(ctx, &seed.id, isolation, false);
+                let stale = freshness::link_rebuilds(&paths.target, &origin, &paths.src)?;
+                freshness::invalidate_dep_info(&paths.target, &stale)?;
+            }
+        }
         None => fs::create_dir_all(&paths.target).at("create directory", &paths.target)?,
     }
     // Best effort: failing to exclude build output from backups is no

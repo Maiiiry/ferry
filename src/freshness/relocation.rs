@@ -222,6 +222,107 @@ pub fn apply_relocation(target: &Path, plan: &RelocationPlan) -> Result<Relocati
     Ok(report)
 }
 
+/// The Cargo dep-info files (relative to `target`) of the compile units in
+/// `target` that read a source which leads elsewhere in `checkout` than in
+/// `origin`'s checkout, through a symlink that differs between the two.
+///
+/// Cargo records such an input by its canonical path in the base. Leaving
+/// that path unstamped makes Cargo rebuild only where it compares mtimes;
+/// with checksum freshness it compares the content there, which the agent
+/// shares with the base. A compile without readable rustc dep-info counts
+/// too. Reads `target` and both checkouts only.
+pub fn link_rebuilds(target: &Path, origin: &Origin, checkout: &Path) -> Result<Vec<PathBuf>> {
+    let base = fs::canonicalize(&origin.host_checkout).at("resolve", &origin.host_checkout)?;
+    let agent = fs::canonicalize(checkout).at("resolve", checkout)?;
+    let store = fs::canonicalize(&origin.store).unwrap_or_else(|_| origin.store.clone());
+    let mut stale = Vec::new();
+    for unit in Inventory::of(target)?.units {
+        let moved = match &unit.detail {
+            Detail::Run(_) => false,
+            Detail::Compile(None) => !unit.kind.starts_with("doc-"),
+            Detail::Compile(Some(info)) => {
+                let ws = workspace_dir(&base, &unit.profile);
+                info.inputs.iter().any(|input| {
+                    let Some(rel) = checkout_input(origin, &ws, input) else {
+                        return false;
+                    };
+                    let (was, now) = (resolve(&base, &rel), resolve(&agent, &rel));
+                    // Remap mode's link to the target dir: Cargo tracks what
+                    // is below it relative to the target, not the checkout.
+                    let output =
+                        |p: &Option<PathBuf>| p.as_ref().is_some_and(|p| p.starts_with(&store));
+                    was != now && !(output(&was) && output(&now))
+                })
+            }
+        };
+        if moved {
+            stale.push(unit.fingerprint.join(format!("dep-{}", unit.kind)));
+        }
+    }
+    stale.sort();
+    Ok(stale)
+}
+
+/// Makes each of `dep_info` (relative to `root`, the fork's writable dir:
+/// the target, or an overlay's upper dir) an empty file, creating missing
+/// parents. Cargo then fails to parse the unit's dep-info, rebuilds it, and
+/// rebuilds its dependents in the same build. Emptying its hash file
+/// instead would leave the dependents fresh.
+pub fn invalidate_dep_info(root: &Path, dep_info: &[PathBuf]) -> Result<()> {
+    for rel in dep_info {
+        let path = root.join(rel);
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).at("create directory", parent)?;
+        }
+        fs::write(&path, b"").at("write", &path)?;
+    }
+    Ok(())
+}
+
+/// `input`, a rustc dep-info input of a compile in workspace `ws` (relative
+/// to the checkout), relative to the checkout; `None` outside it.
+fn checkout_input(origin: &Origin, ws: &Path, input: &[u8]) -> Option<PathBuf> {
+    let path = os(input);
+    if path.is_relative() {
+        return Some(ws.join(path));
+    }
+    [
+        Some(origin.checkout.clone()),
+        fs::canonicalize(&origin.checkout).ok(),
+    ]
+    .into_iter()
+    .flatten()
+    .find_map(|checkout| path.strip_prefix(checkout).ok().map(Path::to_path_buf))
+}
+
+/// Where `rel` leads from `root` (canonical), following symlinks as the
+/// kernel does: relative to `root` inside it, else absolute; `None` if it
+/// leads nowhere.
+fn resolve(root: &Path, rel: &Path) -> Option<PathBuf> {
+    let path = fs::canonicalize(root.join(rel)).ok()?;
+    Some(
+        path.strip_prefix(root)
+            .map_or_else(|_| path.clone(), Path::to_path_buf),
+    )
+}
+
+/// The workspace, relative to `checkout`, whose target dir holds `profile`:
+/// the checkout's own, or the nested workspace whose `ferry-ws/` target dir
+/// holds it.
+fn workspace_dir(checkout: &Path, profile: &Path) -> PathBuf {
+    let mut root = PathBuf::new();
+    if let Ok(rest) = profile.strip_prefix(crate::shim::NESTED_TARGETS) {
+        let mut rel = PathBuf::new();
+        for part in rest.components() {
+            rel.push(part);
+            if checkout.join(&rel).join("Cargo.toml").is_file() {
+                root.clone_from(&rel);
+            }
+        }
+    }
+    root
+}
+
 /// Whether `rel`, a removal path of a plan, can be removed below `target`:
 /// false if an ancestor is gone. A symlinked ancestor (which a plan never
 /// leads through) is refused.
@@ -625,6 +726,10 @@ struct Unit {
     deps: Vec<u64>,
     /// The profile dir, relative to the target.
     profile: PathBuf,
+    /// The fingerprint dir holding its hash file, relative to the target:
+    /// `.fingerprint/<pkg>-<H>` or `build/<pkg>/<H>/fingerprint` below the
+    /// profile.
+    fingerprint: PathBuf,
     /// What removing the unit deletes, relative to the target.
     removal: Vec<PathBuf>,
     /// The fingerprint dir's `dep-*` and `*.json` files, `\0`-separated;
@@ -955,6 +1060,7 @@ impl Inventory {
             hash,
             deps: json.deps.into_iter().map(|d| d.3).collect(),
             profile: profile.to_path_buf(),
+            fingerprint: fingerprint.to_path_buf(),
             removal,
             records,
             detail,
@@ -1639,17 +1745,7 @@ impl<'a> Planner<'a> {
     /// profile.
     fn workspace_root(&self, profile: &Path) -> PathBuf {
         let host = &self.origin.host_checkout;
-        let mut root = host.clone();
-        if let Ok(rest) = profile.strip_prefix(crate::shim::NESTED_TARGETS) {
-            let mut rel = PathBuf::new();
-            for part in rest.components() {
-                rel.push(part);
-                if host.join(&rel).join("Cargo.toml").is_file() {
-                    root = host.join(&rel);
-                }
-            }
-        }
-        root
+        host.join(workspace_dir(host, profile))
     }
 
     /// The units that can invoke proc macro `p`: its dependents, and through
