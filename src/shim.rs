@@ -220,7 +220,8 @@ pub(crate) fn keep_incremental(
     cwd: &Path,
 ) {
     let env = |name: &str| std::env::var_os(name);
-    if needs_incremental(cargo_version, env, || cargo_configs(args, cwd)) {
+    let configs = || cargo_configs(args, cwd, crate::base::cargo_home().as_deref());
+    if needs_incremental(cargo_version, env, configs) {
         command.env("CARGO_INCREMENTAL", "1");
     }
 }
@@ -270,8 +271,8 @@ fn cargo_release(cargo_version: &str) -> Option<(u32, u32)> {
 
 /// The Cargo configs a call with `args` in `cwd` reads, parsed: `--config`
 /// values, then `.cargo/config.toml` and `.cargo/config` in `cwd` and each
-/// ancestor, then in Cargo home. `include`s are not followed.
-fn cargo_configs(args: &[OsString], cwd: &Path) -> Vec<toml::Table> {
+/// ancestor, then in `cargo_home`. `include`s are not followed.
+fn cargo_configs(args: &[OsString], cwd: &Path, cargo_home: Option<&Path>) -> Vec<toml::Table> {
     let mut values = Vec::new();
     let mut options = args.iter().take_while(|a| *a != "--");
     while let Some(arg) = options.next() {
@@ -289,7 +290,7 @@ fn cargo_configs(args: &[OsString], cwd: &Path) -> Vec<toml::Table> {
     let files = cwd
         .ancestors()
         .map(|dir| dir.join(".cargo"))
-        .chain(crate::base::cargo_home())
+        .chain(cargo_home.map(Path::to_path_buf))
         .flat_map(|dir| [dir.join("config.toml"), dir.join("config")]);
     given
         .chain(files.filter_map(|path| read_config(&path)))
@@ -787,7 +788,7 @@ mod tests {
             "--config",
             "program.argument=1",
         ]);
-        let configs = cargo_configs(&args, &cwd);
+        let configs = cargo_configs(&args, &cwd, None);
         let expected: Vec<toml::Table> = [
             "build.incremental = true",
             "build.jobs = 3",
@@ -796,9 +797,25 @@ mod tests {
         .iter()
         .map(|c| c.parse().unwrap())
         .collect();
-        // The rest are Cargo home's.
+        // The rest, if any, are in the temporary directory's ancestors.
         assert_eq!(configs[..3], expected);
         assert!(!configs.iter().any(|c| c.contains_key("program")));
+    }
+
+    #[test]
+    fn build_incremental_in_cargo_home_counts() {
+        let dir = tempfile::tempdir().unwrap();
+        let cwd = dir.path().join("ws");
+        let home = dir.path().join("cargo-home");
+        std::fs::create_dir(&cwd).unwrap();
+        std::fs::create_dir(&home).unwrap();
+        std::fs::write(home.join("config.toml"), "[build]\nincremental = true\n").unwrap();
+
+        let configs = cargo_configs(&[], &cwd, Some(&home));
+        let expected: toml::Table = "build.incremental = true".parse().unwrap();
+        assert_eq!(configs.last(), Some(&expected));
+        let ci = |name: &str| (name == "CI").then(|| OsString::from("true"));
+        assert!(!needs_incremental(CARGO_1_99, ci, || configs));
     }
 
     #[test]
