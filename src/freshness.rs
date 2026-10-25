@@ -122,7 +122,8 @@ pub struct StampPlan {
     dirs: Vec<Verified>,
     skipped_dirs: Vec<(PathBuf, SkipReason)>,
     tracked: usize,
-    /// Some symlink leads elsewhere in the agent than in the base.
+    /// Some symlink leads to another place in the checkout in the agent than
+    /// in the base, or into or out of it.
     links_changed: bool,
 }
 
@@ -176,9 +177,10 @@ impl StampPlan {
         &self.skipped
     }
 
-    /// Whether some symlink leads elsewhere in the agent than in the base.
-    /// Leaving what it reaches unstamped is enough only where Cargo
-    /// compares mtimes; see [`link_rebuilds`] for checksum freshness.
+    /// Whether some symlink leads to another place in the checkout in the
+    /// agent than in the base, or into or out of it. Leaving what it reaches
+    /// unstamped is enough only where Cargo compares mtimes; see
+    /// [`link_rebuilds`] for checksum freshness.
     pub fn links_changed(&self) -> bool {
         self.links_changed
     }
@@ -540,8 +542,9 @@ impl LinkEnd {
 /// agent than in the base.
 ///
 /// Both targets count: Cargo records a rustc input (`include_str!`,
-/// `#[path]`) by its canonical path in the base, but follows a build
-/// script's `rerun-if-changed` path through the link in the agent. `..`
+/// `#[path]`) by its canonical path in the base when that lies inside the
+/// input's package or the target dir, but follows a build script's
+/// `rerun-if-changed` path through the link in the agent. `..`
 /// after a link to a directory climbs out of it, so that region reaches up
 /// to where the two targets' ancestors meet. A symlink inside another link's
 /// region leads on to wherever it points, which the other checkout need not

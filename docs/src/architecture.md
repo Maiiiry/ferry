@@ -25,10 +25,12 @@ Each one is enforced in code (module named) and covered by tests.
    bytes, its metadata did not change between verification and stamping, and
    Cargo cannot reach it through a symlink that resolves differently in the
    agent and the base (both ends count: Cargo records a rustc input read
-   through a link by its canonical path, but follows a build script's
+   through a link by its canonical path when that lies inside the input's
+   package or the target dir, but follows a build script's
    `rerun-if-changed` path through it). Checksum freshness compares content
-   instead, so the units that read through such a link also get their
-   dep-info invalidated (see [Freshness modes](#freshness-modes)). A
+   instead, so the units that read through such a link (one with an end in
+   the checkout) also get their dep-info invalidated (see
+   [Freshness modes](#freshness-modes)). A
    directory is stamped only if its entry names equal the base checkout's
    directory, because Cargo's `rerun-if-changed=<dir>` takes the recursive
    max mtime of the directory, its subdirectories and its files, and a
@@ -162,11 +164,11 @@ needs one writable-root entry for it plus the worktree (its working directory).
    `[base] prune`, the default) was observed: clone its target (reflink when
    possible), relocate the clone without the sandbox (see below), stamp only
    files proven identical to its checkout, and invalidate the units that read
-   through a changed symlink, exactly as for an agent, so the warm build only
-   rebuilds what changed. Otherwise stamp all tracked files and directories
-   (the base is the reference, nothing to compare). A seed with other unit
-   inputs loses its nested workspaces' target dirs (`ferry-ws/`), which are
-   not observed.
+   through a symlink retargeted within, into or out of the checkout, exactly
+   as for an agent, so the warm build only rebuilds what changed. Otherwise
+   stamp all tracked files and directories (the base is the reference,
+   nothing to compare). A seed with other unit inputs loses its nested
+   workspaces' target dirs (`ferry-ws/`), which are not observed.
 4. Create `warm-units/` and take a write threshold: the mtime of a file
    created there that is strictly newer than one created just before, so
    every file written later is at least as new and every cloned file older.
@@ -240,8 +242,9 @@ build leaves the current base alone and is not retried until `R` moves.
    `git update-index --refresh`.
 3. Select the backend, fork the base target, and when the agent runs without
    the namespace sandbox, apply the base's relocation plan (see below). If a
-   tracked symlink leads elsewhere than in the base, invalidate the units
-   that read through it (see [Freshness modes](#freshness-modes)). Write
+   tracked symlink was retargeted within, into or out of the checkout,
+   invalidate the units that read through it (see
+   [Freshness modes](#freshness-modes)). Write
    `state: ready`. A failure rolls back only what this spawn created: the
    worktree if it added it, the branch if it still points at the starting
    commit, and the agent dir.
@@ -469,15 +472,25 @@ property of the base. Stamping runs in both modes because build scripts stay
 mtime-based.
 
 Leaving a file unstamped cannot show checksum freshness a symlink that leads
-elsewhere than in the base: Cargo records a rustc input read through the link
-by its canonical path in the base and compares that file's content, which the
-agent has too. So when a tracked symlink differs, spawn (and a seeded
-refresh, against its seed) also empties the Cargo dep-info file (`dep-*` in
-the fingerprint dir, written to an overlay fork's upper dir) of every compile
-unit whose rustc dep-info names an input that resolves differently in the two
-checkouts, or that has no readable rustc dep-info
-(`freshness::link_rebuilds`). Cargo cannot parse it, so it rebuilds the unit
-and its dependents in the same build.
+elsewhere than in the base. When the canonical path of a rustc input read
+through a link lies inside the input's package or the target dir, Cargo
+records the input by that path (otherwise by the path through the link) and
+compares the content of the base's file there, which the agent has too. So
+when a tracked symlink leads to another place in the checkout than in the
+base, or into or out of it, spawn (and a seeded refresh, against its seed)
+also empties the Cargo dep-info file (`dep-*` in the fingerprint dir, written
+to an overlay fork's upper dir) of these units (`freshness::link_rebuilds`):
+
+- each compile unit whose rustc dep-info names an input in the checkout that
+  resolves differently in the two checkouts, unless it resolves into the
+  store in both (remap mode's `.ferry-target` link, below which Cargo tracks
+  paths relative to the target dir);
+- each compile unit without readable rustc dep-info, except rustdoc's, which
+  compares mtimes.
+
+Build-script runs compare mtimes too, so leaving their inputs unstamped is
+enough. Cargo cannot parse an emptied file, so it rebuilds the unit and its
+dependents in the same build.
 
 ## Concurrency
 

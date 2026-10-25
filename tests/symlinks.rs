@@ -1,9 +1,10 @@
 //! A tracked symlink that leads elsewhere in an agent than in its base must
 //! not let Cargo keep the base's artifacts. Cargo records a rustc input read
-//! through a symlink by its canonical path in the base, and follows a build
-//! script's `rerun-if-changed` path through the link in the agent. Both
-//! targets can be identical to the base's, so spawn leaves both unstamped.
-//! Each test expects what a cold build of the agent's commit prints.
+//! through a symlink by its canonical path in the base when that lies inside
+//! the input's package, as here, and follows a build script's
+//! `rerun-if-changed` path through the link in the agent. Both targets can
+//! be identical to the base's, so spawn leaves both unstamped. Each test
+//! expects what a cold build of the agent's commit prints.
 
 // clippy's allow-unwrap-in-tests covers only #[test] functions, not their
 // helpers.

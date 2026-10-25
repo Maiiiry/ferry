@@ -226,11 +226,15 @@ pub fn apply_relocation(target: &Path, plan: &RelocationPlan) -> Result<Relocati
 /// `target` that read a source which leads elsewhere in `checkout` than in
 /// `origin`'s checkout, through a symlink that differs between the two.
 ///
-/// Cargo records such an input by its canonical path in the base. Leaving
-/// that path unstamped makes Cargo rebuild only where it compares mtimes;
-/// with checksum freshness it compares the content there, which the agent
-/// shares with the base. A compile without readable rustc dep-info counts
-/// too. Reads `target` and both checkouts only.
+/// When the canonical path of such an input lies inside its package or the
+/// target dir, Cargo records it by that path in the base, otherwise by the
+/// path through the link. Leaving the canonical file unstamped makes Cargo
+/// rebuild only where it compares mtimes; with checksum freshness it
+/// compares that file's content, which the agent shares with the base.
+/// Inputs outside the checkout, and ones that resolve into the store in
+/// both checkouts, do not count. A compile without readable rustc dep-info
+/// counts too, except rustdoc's, which compares mtimes, as build-script runs
+/// do. Reads `target` and both checkouts only.
 pub fn link_rebuilds(target: &Path, origin: &Origin, checkout: &Path) -> Result<Vec<PathBuf>> {
     let base = fs::canonicalize(&origin.host_checkout).at("resolve", &origin.host_checkout)?;
     let agent = fs::canonicalize(checkout).at("resolve", checkout)?;
