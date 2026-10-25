@@ -316,11 +316,17 @@ base keep that base alive.
   agent builds incrementally too. This has costs. Release and bench builds
   become incremental, so they are bigger and slower. Their units match
   between a base and an agent only when both have `CI` or `TF_BUILD` set, or
-  both lack them. `incremental = false` in a `[profile.*]` is overridden. A
-  refresh across a change in whether `CI` or `TF_BUILD` is set, or in
-  `CARGO_INCREMENTAL`, is seeded across unit inputs, so it is pruned. To opt
-  out, set `CARGO_INCREMENTAL=0`, which turns incremental compilation off as
-  plain Cargo does under `CI`.
+  both lack them. `incremental = false` in a `[profile.*]` is overridden, so
+  an agent with `CI` set rebuilds that profile's crates of a base warmed
+  without it. `build.incremental = false` keeps both the setting and the
+  reuse. A refresh across a change in whether `CI` or `TF_BUILD` is set, or
+  in `CARGO_INCREMENTAL`, is seeded across unit inputs, so it does not keep
+  the earlier base's units. That holds on every Cargo version, including
+  those before 1.99, where `CI` changes no unit. Ferry does not follow a
+  Cargo config's `include`, `cargo -C`, or a nested workspace's own
+  toolchain file when it looks for `build.incremental` and Cargo's version.
+  To opt out, set `CARGO_INCREMENTAL=0`, which turns incremental compilation
+  off as plain Cargo does under `CI`.
 - **Build caches as `RUSTC_WRAPPER`.** kache strips Cargo's incremental
   argument, so a base built through it has no incremental state; sccache
   refuses incremental units. Neither changes Cargo's fingerprints, so
