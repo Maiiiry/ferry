@@ -101,6 +101,43 @@ fn a_release_build_after_a_refresh_with_ci_set_gets_the_new_code() {
     assert!(run.stdout.lines().any(|l| l == "marker=LEAF_B"), "{run}");
 }
 
+/// A nested workspace has a target dir of its own (`ferry-ws`), and its
+/// builds get `CARGO_INCREMENTAL=1` like the checkout's workspace, both in
+/// the warm commands and in agents: agents with and without `CI` reuse what
+/// a base warmed with it built.
+#[test]
+fn nested_workspaces_reuse_a_base_warmed_with_ci_set() {
+    let repo = TestRepo::with_env(&[(
+        "FERRY_BASE_COMMAND",
+        "cargo build --workspace && cargo build --manifest-path fuzz/Cargo.toml",
+    )]);
+    let fuzz = repo.root().join("fuzz");
+    fs::create_dir_all(fuzz.join("fz/src")).unwrap();
+    fs::write(
+        fuzz.join("Cargo.toml"),
+        "[workspace]\nmembers = [\"fz\"]\nresolver = \"2\"\n",
+    )
+    .unwrap();
+    fs::write(
+        fuzz.join("fz/Cargo.toml"),
+        "[package]\nname = \"fz\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+    )
+    .unwrap();
+    fs::write(fuzz.join("fz/src/main.rs"), "fn main() {}\n").unwrap();
+    common::run(
+        repo.cargo_in(&fuzz)
+            .args(["generate-lockfile", "--offline"]),
+    )
+    .ok();
+    repo.commit_all("nested workspace");
+    common::run(repo.ferry_cmd(["base"]).env("CI", "true")).ok();
+    repo.spawn("a");
+
+    let nested = ["build", "--manifest-path", "fuzz/Cargo.toml"];
+    Build::run(repo.agent_cargo("a").env("CI", "true").args(nested)).assert_rebuilt(&[]);
+    Build::run(repo.agent_cargo("a").args(nested)).assert_rebuilt(&[]);
+}
+
 #[test]
 fn ci_leaves_cargo_incremental_alone() {
     let repo = TestRepo::new();
