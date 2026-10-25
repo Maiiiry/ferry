@@ -311,12 +311,16 @@ base keep that base alive.
   is set, Ferry sets `CARGO_INCREMENTAL=1` for the cargo it runs in agents
   and warm commands, unless `CARGO_INCREMENTAL`, `CARGO_BUILD_INCREMENTAL` or
   `build.incremental` (in a Cargo config or `--config`) is set. `CI` and
-  `TF_BUILD` reach build scripts, tests and `cargo run` unchanged. This has
-  two costs: release and bench builds become incremental too (bigger and
-  slower, and their units no longer match a base warmed without `CI`), and
-  `incremental = false` in a `[profile.*]` is overridden. To opt out, set
-  `CARGO_INCREMENTAL=0`, which turns incremental compilation off as plain
-  Cargo does under `CI`.
+  `TF_BUILD` reach build scripts, tests and `cargo run` unchanged. So does
+  `CARGO_INCREMENTAL=1`: a cargo call they make on a workspace outside the
+  agent builds incrementally too. This has costs. Release and bench builds
+  become incremental, so they are bigger and slower. Their units match
+  between a base and an agent only when both have `CI` or `TF_BUILD` set, or
+  both lack them. `incremental = false` in a `[profile.*]` is overridden. A
+  refresh across a change in whether `CI` or `TF_BUILD` is set, or in
+  `CARGO_INCREMENTAL`, is seeded across unit inputs, so it is pruned. To opt
+  out, set `CARGO_INCREMENTAL=0`, which turns incremental compilation off as
+  plain Cargo does under `CI`.
 - **Build caches as `RUSTC_WRAPPER`.** kache strips Cargo's incremental
   argument, so a base built through it has no incremental state; sccache
   refuses incremental units. Neither changes Cargo's fingerprints, so
@@ -343,8 +347,9 @@ base keep that base alive.
   across a change to `Cargo.toml`s, `Cargo.lock`s, Cargo configs, toolchain
   files or `RUSTFLAGS`-style variables only from a base whose warm build it
   observed (`"observed": true` in `ferry --json list`), because it must then
-  delete the units the new build does not use. Warm commands that run
-  `cargo nextest`, an alias like `cargo xtask`, or pass
+  delete the units the new build does not use. The same goes for a change to
+  `CARGO_INCREMENTAL`, or to whether `CI` or `TF_BUILD` is set. Warm
+  commands that run `cargo nextest`, an alias like `cargo xtask`, or pass
   `--message-format=short` are not observed; see
   [Refreshing a base](configuration.md#refreshing-a-base). `[base] prune =
   false` turns this off on purpose.

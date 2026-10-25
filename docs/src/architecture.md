@@ -283,7 +283,12 @@ unless the call has one of the settings Cargo ranks above the switch:
 `CARGO_INCREMENTAL`, `CARGO_BUILD_INCREMENTAL`, or `build.incremental` in a
 `--config` value or in a `.cargo/config{,.toml}` in the working directory's
 ancestors or Cargo home (`include`s are not followed). `CI` and `TF_BUILD`
-are passed on unchanged. The costs are listed under
+are passed on unchanged. Processes cargo starts inherit
+`CARGO_INCREMENTAL=1`, so a cargo call they make on a workspace outside the
+checkout builds incrementally too. Release and bench units still depend on
+`CI`: by default they are incremental with it and not without. So whether
+`CI` or `TF_BUILD` is set is a unit input (invariant 2). The costs are
+listed under
 [Cargo configuration pitfalls](troubleshooting.md#cargo-configuration-pitfalls).
 
 ### `ferry rm NAME [--force]`
