@@ -550,18 +550,25 @@ fn debug_info_survives_remapping() {
             );
         }
 
-        let deps = dir.join(TARGET_LINK).join("debug/deps");
-        let prefix = format!("{BIN}-");
-        let units: Vec<PathBuf> = fs::read_dir(&deps)
-            .unwrap()
-            .map(|e| e.unwrap().path())
+        // `debug/deps/remapbin-<hash>.….o`, or `remapbin.….o` (no hash) in
+        // `debug/build/remapbin/<hash>/out/` in Cargo's new build-dir layout.
+        // Objects under `debug/incremental` are named by codegen unit only.
+        let profile = dir.join(TARGET_LINK).join("debug");
+        let units: Vec<PathBuf> = object_files(&profile)
+            .into_iter()
             .filter(|p| {
-                p.extension() == Some(OsStr::new("o"))
-                    && p.file_name()
-                        .is_some_and(|n| n.to_string_lossy().starts_with(&prefix))
+                p.file_name().is_some_and(|n| {
+                    n.to_string_lossy()
+                        .strip_prefix(BIN)
+                        .is_some_and(|rest| rest.starts_with(['-', '.']))
+                })
             })
             .collect();
-        assert!(!units.is_empty(), "no {BIN} objects in {}", deps.display());
+        assert!(
+            !units.is_empty(),
+            "no {BIN} objects in {}",
+            profile.display()
+        );
         let expected = if wrapper.is_some() {
             ".".to_owned()
         } else {
