@@ -90,14 +90,23 @@ fn ferry_agents_each_build_their_own_code() {
     repo.build("b").assert_rebuilt(&[]);
 }
 
-/// The single `libleaf-*.rlib` in a `cargo build` target dir.
+/// The single `libleaf-*.rlib` in a `cargo build` target dir, in either
+/// build-dir layout: `debug/deps/`, or `debug/build/leaf/<hash>/out/` in
+/// the new one.
 fn leaf_rlib(target: &Path) -> io::Result<Vec<u8>> {
     let mut rlibs = Vec::new();
-    for entry in fs::read_dir(target.join("debug/deps"))? {
-        let path = entry?.path();
-        let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
-        if name.starts_with("libleaf-") && path.extension().is_some_and(|e| e == "rlib") {
-            rlibs.push(path);
+    let mut stack = vec![target.join("debug")];
+    while let Some(dir) = stack.pop() {
+        for entry in fs::read_dir(dir)? {
+            let path = entry?.path();
+            if path.is_dir() {
+                stack.push(path);
+                continue;
+            }
+            let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+            if name.starts_with("libleaf-") && path.extension().is_some_and(|e| e == "rlib") {
+                rlibs.push(path);
+            }
         }
     }
     assert_eq!(rlibs.len(), 1, "{rlibs:?}");

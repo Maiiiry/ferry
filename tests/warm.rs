@@ -101,6 +101,13 @@ fn clippy_reuses_checked_dependencies_and_relints_only_members() {
         &repo.root().join("leaf/Cargo.toml"),
         "\n[dependencies]\ndep = { path = \"../vendor/dep\" }\n",
     );
+    // An unused dependency is a warning (`cargo::unused_dependencies`),
+    // which the `build.warnings` call below would deny.
+    append(
+        &repo,
+        &repo.root().join("leaf/src/lib.rs"),
+        "\npub use dep::one;\n",
+    );
     commit_files(
         &repo,
         &[

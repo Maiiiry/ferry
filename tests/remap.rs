@@ -5,6 +5,8 @@
 //! Reuse is counted by inode: rustc hard-links
 //! unchanged work products into its new session directory, so a reused
 //! codegen unit's object file keeps the inode it had in the copied target.
+//! Those objects stay linked outside the target until they are counted, so
+//! no new object can be given one of their inode numbers.
 
 #![allow(
     clippy::unwrap_used,
@@ -168,14 +170,14 @@ fn fork_and_edit(dir: &Path, wrapper: Option<&Path>) -> Fork {
 
     edit_workspace(&b);
     let incremental = target_b.join("debug/incremental");
-    let before = object_inodes(&incremental);
+    let before = Before::hold(&incremental, dir);
     assert_eq!(cargo_build(&b, wrapper), [BIN, LIB]);
 
     let output = Command::new(target_b.join("debug").join(BIN))
         .output()
         .unwrap();
     assert_eq!(String::from_utf8_lossy(&output.stdout), edited_output());
-    let fork = reuse_since(&incremental, &before);
+    let fork = reuse_since(&incremental, before);
     assert_eq!(
         cargo_build(&b, wrapper),
         Vec::<String>::new(),
@@ -217,9 +219,9 @@ fn agent_first_edit(remap: bool) -> Fork {
 
     edit_workspace(&worktree);
     let incremental = target.join("debug/incremental");
-    let before = object_inodes(&incremental);
+    let before = Before::hold(&incremental, repo.scratch());
     repo.build("a").assert_rebuilt(&[BIN, LIB]);
-    let fork = reuse_since(&incremental, &before);
+    let fork = reuse_since(&incremental, before);
     let output = common::run(repo.agent_cargo("a").args(["run", "-q", "-p", BIN])).ok();
     assert_eq!(output.stdout, edited_output());
     repo.build("a").assert_rebuilt(&[]);
@@ -231,20 +233,53 @@ fn agent_first_edit(remap: bool) -> Fork {
     fork
 }
 
+/// The object files under an incremental dir before a build, each also
+/// hard-linked into a directory outside the target so that its inode stays
+/// allocated until [`reuse_since`] has counted. rustc may delete the
+/// previous session's objects before it writes the new ones, and ext4 gives
+/// a freed inode number to the next file it creates, which would make a new
+/// object look reused.
+struct Before {
+    inodes: HashSet<u64>,
+    _links: tempfile::TempDir,
+}
+
+impl Before {
+    /// `outside` must be on the target's filesystem.
+    fn hold(incremental: &Path, outside: &Path) -> Self {
+        let links = tempfile::tempdir_in(outside).unwrap();
+        let mut inodes = HashSet::new();
+        for (i, object) in object_files(incremental).iter().enumerate() {
+            let link = links.path().join(i.to_string());
+            fs::hard_link(object, &link).unwrap();
+            inodes.insert(fs::metadata(&link).unwrap().ino());
+        }
+        Self {
+            inodes,
+            _links: links,
+        }
+    }
+}
+
 /// Codegen units of the newest sessions under `incremental` whose object
-/// files are among `before`.
-fn reuse_since(incremental: &Path, before: &HashSet<u64>) -> Fork {
+/// files are among `before`, which is released afterwards.
+fn reuse_since(incremental: &Path, before: Before) -> Fork {
     let reuse = |krate| {
-        let objects = object_inodes(&newest_session(incremental, krate));
+        let objects: HashSet<u64> = object_files(&newest_session(incremental, krate))
+            .iter()
+            .map(|object| fs::metadata(object).unwrap().ino())
+            .collect();
         Reuse {
-            reused: objects.intersection(before).count(),
+            reused: objects.intersection(&before.inodes).count(),
             total: objects.len(),
         }
     };
-    Fork {
+    let fork = Fork {
         lib: reuse(LIB),
         bin: reuse(BIN),
-    }
+    };
+    drop(before);
+    fork
 }
 
 /// A library and a binary using it, each with one module (and so one
@@ -375,21 +410,20 @@ fn newest_session(incremental: &Path, krate: &str) -> PathBuf {
         .path()
 }
 
-/// Inodes of every object file under `dir`.
-fn object_inodes(dir: &Path) -> HashSet<u64> {
-    let mut inodes = HashSet::new();
+/// Every object file under `dir`.
+fn object_files(dir: &Path) -> Vec<PathBuf> {
+    let mut objects = Vec::new();
     let mut stack = vec![dir.to_path_buf()];
     while let Some(dir) = stack.pop() {
         for entry in fs::read_dir(&dir).unwrap().map(Result::unwrap) {
-            let meta = entry.metadata().unwrap();
-            if meta.is_dir() {
+            if entry.metadata().unwrap().is_dir() {
                 stack.push(entry.path());
             } else if entry.path().extension() == Some(OsStr::new("o")) {
-                inodes.insert(meta.ino());
+                objects.push(entry.path());
             }
         }
     }
-    inodes
+    objects
 }
 
 fn run(command: &mut Command) {
@@ -516,18 +550,25 @@ fn debug_info_survives_remapping() {
             );
         }
 
-        let deps = dir.join(TARGET_LINK).join("debug/deps");
-        let prefix = format!("{BIN}-");
-        let units: Vec<PathBuf> = fs::read_dir(&deps)
-            .unwrap()
-            .map(|e| e.unwrap().path())
+        // `debug/deps/remapbin-<hash>.….o`, or `remapbin.….o` (no hash) in
+        // `debug/build/remapbin/<hash>/out/` in Cargo's new build-dir layout.
+        // Objects under `debug/incremental` are named by codegen unit only.
+        let profile = dir.join(TARGET_LINK).join("debug");
+        let units: Vec<PathBuf> = object_files(&profile)
+            .into_iter()
             .filter(|p| {
-                p.extension() == Some(OsStr::new("o"))
-                    && p.file_name()
-                        .is_some_and(|n| n.to_string_lossy().starts_with(&prefix))
+                p.file_name().is_some_and(|n| {
+                    n.to_string_lossy()
+                        .strip_prefix(BIN)
+                        .is_some_and(|rest| rest.starts_with(['-', '.']))
+                })
             })
             .collect();
-        assert!(!units.is_empty(), "no {BIN} objects in {}", deps.display());
+        assert!(
+            !units.is_empty(),
+            "no {BIN} objects in {}",
+            profile.display()
+        );
         let expected = if wrapper.is_some() {
             ".".to_owned()
         } else {
