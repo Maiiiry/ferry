@@ -72,6 +72,35 @@ fn bases_warmed_with_tf_build_set_are_incremental() {
     repo.build("a").assert_rebuilt(&[]);
 }
 
+/// Under `CI`, Ferry's `CARGO_INCREMENTAL=1` makes release units
+/// incremental, so they differ from those of a base warmed without `CI`
+/// (dev units do not). A refresh across that difference must not keep the
+/// seed's release units: a plain agent's release build would find them
+/// fresh, holding the seed's code.
+#[test]
+fn a_release_build_after_a_refresh_with_ci_set_gets_the_new_code() {
+    let repo = TestRepo::with_default_config(&[]);
+    repo.write(
+        &repo.root().join("ferry.toml"),
+        "[base]\ntargets = [\"build\"]\nprofiles = [\"dev\", \"release\"]\n",
+    );
+    repo.commit_all("A: warm dev and release");
+    let a = repo.base();
+
+    repo.set_marker(repo.root(), "LEAF_B");
+    repo.commit_all("B: source");
+    let b = common::run(repo.ferry_cmd(["--json", "base"]).env("CI", "true"))
+        .ok()
+        .json();
+    assert_eq!(b["base"]["seeded_from"], a.as_str(), "{b}");
+
+    repo.spawn("agent");
+    repo.build("agent").assert_rebuilt(&[]);
+    let release = ["run", "-q", "--release", "-p", "app"];
+    let run = common::run(repo.agent_cargo("agent").args(release)).ok();
+    assert!(run.stdout.lines().any(|l| l == "marker=LEAF_B"), "{run}");
+}
+
 #[test]
 fn ci_leaves_cargo_incremental_alone() {
     let repo = TestRepo::new();
