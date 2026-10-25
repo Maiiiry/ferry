@@ -270,10 +270,11 @@ fn an_unchanged_symlink_leaves_everything_else_stamped() {
 fn a_refresh_seeded_across_a_retargeted_symlink_is_not_hidden_from_cargo() {
     // The warm build rewrites leaf's dep-info, so the default warm commands
     // run after listing the size of each `dep-lib-leaf` in the target as the
-    // refresh prepared it.
+    // refresh prepared it. The trailing slash makes `find` enter the target
+    // dir when it is a symlink (remap mode's `.ferry-target`).
     let repo = TestRepo::with_env(&[(
         "FERRY_BASE_COMMAND",
-        "find \"$CARGO_TARGET_DIR\" -name dep-lib-leaf -exec wc -c {} \\; && \
+        "find \"$CARGO_TARGET_DIR/\" -name dep-lib-leaf -exec wc -c {} \\; && \
          cargo build && cargo test --no-run",
     )]);
     put(&repo, &[("data/v1.txt", "ONE"), ("data/v2.txt", "TWO")]);
