@@ -304,6 +304,19 @@ base keep that base alive.
   fingerprint.
 - **`CARGO_INCREMENTAL=0`** (set by some CI images and agent tools) switches
   off incremental compilation, and with it Ferry's incremental reuse. Unset it.
+- **`CI` or `TF_BUILD` set** (some agent tools export `CI`). Cargo 1.99 and
+  later then turn incremental compilation off, ahead of every profile
+  setting, and since a unit's hash includes it, an agent would also rebuild
+  every workspace crate of a base warmed without it. So when either variable
+  is set, Ferry sets `CARGO_INCREMENTAL=1` for the cargo it runs in agents
+  and warm commands, unless `CARGO_INCREMENTAL`, `CARGO_BUILD_INCREMENTAL` or
+  `build.incremental` (in a Cargo config or `--config`) is set. `CI` and
+  `TF_BUILD` reach build scripts, tests and `cargo run` unchanged. This has
+  two costs: release and bench builds become incremental too (bigger and
+  slower, and their units no longer match a base warmed without `CI`), and
+  `incremental = false` in a `[profile.*]` is overridden. To opt out, set
+  `CARGO_INCREMENTAL=0`, which turns incremental compilation off as plain
+  Cargo does under `CI`.
 - **Build caches as `RUSTC_WRAPPER`.** kache strips Cargo's incremental
   argument, so a base built through it has no incremental state; sccache
   refuses incremental units. Neither changes Cargo's fingerprints, so

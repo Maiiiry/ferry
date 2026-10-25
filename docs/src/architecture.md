@@ -269,8 +269,22 @@ It sets `CARGO_TARGET_DIR`, `CARGO_BUILD_BUILD_DIR` and the freshness env
 accordingly and execs the real cargo (the next `cargo` on `PATH` that is not
 ferry). Outside agent worktrees it execs the real cargo unchanged, except
 inside a base's warm commands, where `FERRY_WARM_SRC` and `FERRY_WARM_TARGET`
-apply the same table to the base checkout, and `FERRY_WARM_UNITS` names the
-directory the shim records the call in (see `ferry base`, step 5).
+apply the same table to the base checkout, `FERRY_WARM_CARGO` holds the
+base toolchain's `cargo -V`, and `FERRY_WARM_UNITS` names the directory the
+shim records the call in (see `ferry base`, step 5).
+
+With `CI` or `TF_BUILD` set, Cargo 1.99 and later turn incremental
+compilation off after merging profiles, so ahead of `[profile.*]
+incremental = true`, and the switch enters every unit's hash: an agent with
+`CI` would rebuild every workspace member of a base warmed without it. So
+wherever the shim sets a target dir, it also sets `CARGO_INCREMENTAL=1` when
+either variable is set and the base's toolchain is Cargo 1.99 or later,
+unless the call has one of the settings Cargo ranks above the switch:
+`CARGO_INCREMENTAL`, `CARGO_BUILD_INCREMENTAL`, or `build.incremental` in a
+`--config` value or in a `.cargo/config{,.toml}` in the working directory's
+ancestors or Cargo home (`include`s are not followed). `CI` and `TF_BUILD`
+are passed on unchanged. The costs are listed under
+[Cargo configuration pitfalls](troubleshooting.md#cargo-configuration-pitfalls).
 
 ### `ferry rm NAME [--force]`
 

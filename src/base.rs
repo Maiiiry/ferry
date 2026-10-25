@@ -177,12 +177,12 @@ pub fn build(ctx: &Context, rev: &str, cold: bool) -> Result<BuildReport> {
     } else {
         None
     };
-    let plan = build_plan(ctx, &paths, isolation, remap_wrapper);
     let warmed = warm(
         ctx,
         &paths,
-        &plan,
+        &build_plan(ctx, &paths, isolation, remap_wrapper),
         freshness,
+        &toolchain,
         seed.as_ref(),
         &inputs,
         &commands,
@@ -832,11 +832,13 @@ struct Warmed {
 /// Enters the sandbox and runs `commands` into the prepared target. A
 /// target seeded across unit inputs is then pruned to the units the
 /// commands used, or, when that cannot be told, emptied and built again.
+#[allow(clippy::too_many_arguments)]
 fn warm(
     ctx: &Context,
     paths: &BasePaths,
     plan: &Plan,
     freshness: FreshnessMode,
+    toolchain: &Toolchain,
     seed: Option<&BaseMeta>,
     inputs: &str,
     commands: &[WarmCommand],
@@ -861,6 +863,7 @@ fn warm(
     let env = warm_env(
         plan,
         freshness,
+        toolchain,
         &shim_dir,
         watch.as_ref().map(prune::Watch::dir),
     );
@@ -906,10 +909,12 @@ const WARM_UNITS: &str = "warm-units";
 
 /// The warm commands' environment. The target dir variables stay set for
 /// cargo calls that bypass the shim; through it, each workspace gets the
-/// target dir it gets in an agent.
+/// target dir it gets in an agent, and the same `CARGO_INCREMENTAL` (see
+/// `shim::keep_incremental`).
 fn warm_env(
     plan: &Plan,
     freshness: FreshnessMode,
+    toolchain: &Toolchain,
     shim_dir: &std::path::Path,
     records: Option<&std::path::Path>,
 ) -> Vec<(OsString, OsString)> {
@@ -926,6 +931,10 @@ fn warm_env(
         (
             crate::shim::WARM_TARGET_ENV.into(),
             plan.build_target().into_os_string(),
+        ),
+        (
+            crate::shim::WARM_CARGO_ENV.into(),
+            toolchain.cargo_version.clone().into(),
         ),
     ]);
     if let Some(records) = records {

@@ -189,6 +189,11 @@ fn run(cargo: &Path, args: &[OsString]) -> Result<std::convert::Infallible> {
         let warm_target = PathBuf::from(warm_target);
         let target = workspace(cargo, args, &cwd, &[&src]).target(&warm_target);
         set_target(&mut command, target.clone());
+        if target.is_some()
+            && let Some(cargo_version) = std::env::var_os(WARM_CARGO_ENV)
+        {
+            keep_incremental(&mut command, &cargo_version.to_string_lossy(), args, &cwd);
+        }
         if let (Some(records), Some(target)) = (std::env::var_os(WARM_UNITS_ENV), target) {
             let root = target
                 .strip_prefix(&warm_target)
@@ -199,6 +204,100 @@ fn run(cargo: &Path, args: &[OsString]) -> Result<std::convert::Infallible> {
     }
     command.args(args);
     Err(exec_error(cargo, command.exec()))
+}
+
+/// Variables whose presence makes Cargo 1.99 and later (cargo#17220) turn
+/// incremental compilation off by default.
+const CI_VARS: [&str; 2] = ["CI", "TF_BUILD"];
+
+/// Sets `CARGO_INCREMENTAL=1` for `command`, cargo called with `args` in
+/// `cwd`, when [`needs_incremental`] says so for the toolchain whose
+/// `cargo -V` prints `cargo_version`.
+pub(crate) fn keep_incremental(
+    command: &mut Command,
+    cargo_version: &str,
+    args: &[OsString],
+    cwd: &Path,
+) {
+    let env = |name: &str| std::env::var_os(name);
+    if needs_incremental(cargo_version, env, || cargo_configs(args, cwd)) {
+        command.env("CARGO_INCREMENTAL", "1");
+    }
+}
+
+/// Whether Cargo `cargo_version` turns incremental compilation off only
+/// because `env` has `CI` or `TF_BUILD`: it is 1.99 or newer, and neither
+/// `CARGO_INCREMENTAL`, `CARGO_BUILD_INCREMENTAL` nor one of `configs` sets
+/// `build.incremental`.
+///
+/// Cargo applies that switch after merging profiles, so it beats
+/// `[profile.*] incremental = true`; only the two settings above rank
+/// higher. The profile's `incremental` is part of every unit's hash, so an
+/// agent with `CI` set would otherwise rebuild every workspace member of a
+/// base warmed without it. `CARGO_INCREMENTAL=1` restores the default for
+/// dev and test builds, at a cost under `CI`: release and bench builds
+/// become incremental too, and `[profile.*] incremental = false` is
+/// overridden.
+fn needs_incremental(
+    cargo_version: &str,
+    env: impl Fn(&str) -> Option<OsString>,
+    configs: impl FnOnce() -> Vec<toml::Table>,
+) -> bool {
+    // Cargo tests `std::env::var(name).is_ok()`, false for a non-UTF-8 value.
+    CI_VARS
+        .iter()
+        .any(|name| env(name).is_some_and(|value| value.to_str().is_some()))
+        && env("CARGO_INCREMENTAL").is_none()
+        && env("CARGO_BUILD_INCREMENTAL").is_none()
+        && cargo_release(cargo_version).is_some_and(|release| release >= (1, 99))
+        && !configs().iter().any(|config| {
+            config
+                .get("build")
+                .and_then(|build| build.get("incremental"))
+                .is_some()
+        })
+}
+
+/// Major and minor version in `cargo -V` output such as
+/// `cargo 1.101.0-nightly (2d3e3e5f8 2026-10-02)`.
+fn cargo_release(cargo_version: &str) -> Option<(u32, u32)> {
+    let mut parts = cargo_version
+        .strip_prefix("cargo ")?
+        .split('.')
+        .map(str::parse);
+    Some((parts.next()?.ok()?, parts.next()?.ok()?))
+}
+
+/// The Cargo configs a call with `args` in `cwd` reads, parsed: `--config`
+/// values, then `.cargo/config.toml` and `.cargo/config` in `cwd` and each
+/// ancestor, then in Cargo home. `include`s are not followed.
+fn cargo_configs(args: &[OsString], cwd: &Path) -> Vec<toml::Table> {
+    let mut values = Vec::new();
+    let mut options = args.iter().take_while(|a| *a != "--");
+    while let Some(arg) = options.next() {
+        if arg == "--config" {
+            values.extend(options.next().map(OsString::as_os_str));
+        } else if let Some(value) = arg.as_bytes().strip_prefix(b"--config=") {
+            values.push(OsStr::from_bytes(value));
+        }
+    }
+    // A value is a `KEY=VALUE` pair in TOML or the path of a config file.
+    let given = values.into_iter().filter_map(|value| {
+        let inline = value.to_str().and_then(|v| v.parse().ok());
+        inline.or_else(|| read_config(&cwd.join(value)))
+    });
+    let files = cwd
+        .ancestors()
+        .map(|dir| dir.join(".cargo"))
+        .chain(crate::base::cargo_home())
+        .flat_map(|dir| [dir.join("config.toml"), dir.join("config")]);
+    given
+        .chain(files.filter_map(|path| read_config(&path)))
+        .collect()
+}
+
+fn read_config(path: &Path) -> Option<toml::Table> {
+    std::fs::read_to_string(path).ok()?.parse().ok()
 }
 
 /// What a warm cargo call needs for Ferry to see which units it uses.
@@ -362,6 +461,9 @@ pub(crate) const NESTED_TARGETS: &str = "ferry-ws";
 /// agent's.
 pub(crate) const WARM_SRC_ENV: &str = "FERRY_WARM_SRC";
 pub(crate) const WARM_TARGET_ENV: &str = "FERRY_WARM_TARGET";
+/// Set for a base's warm commands: `cargo -V` of the toolchain the base
+/// records, for [`keep_incremental`].
+pub(crate) const WARM_CARGO_ENV: &str = "FERRY_WARM_CARGO";
 /// Set when Ferry observes which units the warm commands use: the directory
 /// the shim records their cargo calls in (see `prune`).
 pub(crate) const WARM_UNITS_ENV: &str = "FERRY_WARM_UNITS";
@@ -589,6 +691,114 @@ mod tests {
         ] {
             assert_eq!(classify(nothing), Observe::Nothing, "{nothing:?}");
         }
+    }
+
+    const CARGO_1_99: &str = "cargo 1.99.0 (5f94df478 2026-08-27)";
+
+    /// [`needs_incremental`] with `vars` as the environment and `configs`
+    /// as the Cargo configs.
+    fn needs(cargo_version: &str, vars: &[(&str, &str)], configs: &[&str]) -> bool {
+        let env = |name: &str| {
+            vars.iter()
+                .find(|(var, _)| *var == name)
+                .map(|(_, value)| OsString::from(value))
+        };
+        needs_incremental(cargo_version, env, || {
+            configs.iter().map(|c| c.parse().unwrap()).collect()
+        })
+    }
+
+    #[test]
+    fn incremental_is_set_where_only_ci_turns_it_off() {
+        for ci in [
+            ("CI", "true"),
+            ("CI", "1"),
+            ("CI", ""),
+            ("TF_BUILD", "True"),
+        ] {
+            assert!(needs(CARGO_1_99, &[ci], &[]), "{ci:?}");
+        }
+        assert!(!needs(CARGO_1_99, &[], &[]));
+        assert!(!needs(CARGO_1_99, &[("GITHUB_ACTIONS", "true")], &[]));
+        // Cargo does not count a value that is not UTF-8.
+        let not_utf8 = |name: &str| (name == "CI").then(|| OsString::from_vec(vec![0xff]));
+        assert!(!needs_incremental(CARGO_1_99, not_utf8, Vec::new));
+
+        let ci = [("CI", "true")];
+        for explicit in [
+            ("CARGO_INCREMENTAL", "0"),
+            ("CARGO_INCREMENTAL", "1"),
+            ("CARGO_BUILD_INCREMENTAL", "false"),
+        ] {
+            assert!(!needs(CARGO_1_99, &[ci[0], explicit], &[]), "{explicit:?}");
+        }
+        for config in ["[build]\nincremental = false", "build.incremental = true"] {
+            assert!(!needs(CARGO_1_99, &ci, &["", config]), "{config}");
+        }
+        // Cargo's switch beats profile settings.
+        assert!(needs(
+            CARGO_1_99,
+            &ci,
+            &["[build]\njobs = 2\n[profile.dev]\nincremental = true"]
+        ));
+    }
+
+    #[test]
+    fn incremental_is_set_from_cargo_1_99_on() {
+        let ci = [("CI", "true")];
+        for newer in [
+            "cargo 1.99.0-nightly (0123456789 2026-07-20)",
+            "cargo 1.99.1",
+            "cargo 1.101.0-nightly (2d3e3e5f8 2026-10-02)",
+            "cargo 2.0.0",
+        ] {
+            assert!(needs(newer, &ci, &[]), "{newer}");
+        }
+        for older in [
+            "cargo 1.98.0 (5d3e1c0b2 2026-07-16)",
+            "cargo 1.9.0",
+            "cargo 1.88.0 (873a06493 2025-05-10)",
+            "rustc 1.99.0",
+            "cargo",
+            "",
+        ] {
+            assert!(!needs(older, &ci, &[]), "{older}");
+        }
+    }
+
+    #[test]
+    fn configs_come_from_the_command_line_and_the_directory_tree() {
+        let dir = tempfile::tempdir().unwrap();
+        let cwd = dir.path().join("ws/member");
+        std::fs::create_dir_all(&cwd).unwrap();
+        std::fs::create_dir(dir.path().join(".cargo")).unwrap();
+        std::fs::write(
+            dir.path().join(".cargo/config"),
+            "build.incremental = false",
+        )
+        .unwrap();
+        std::fs::write(cwd.join("extra.toml"), "build.jobs = 3").unwrap();
+        let args = os(&[
+            "--config",
+            "build.incremental=true",
+            "build",
+            "--config=extra.toml",
+            "--",
+            "--config",
+            "program.argument=1",
+        ]);
+        let configs = cargo_configs(&args, &cwd);
+        let expected: Vec<toml::Table> = [
+            "build.incremental = true",
+            "build.jobs = 3",
+            "build.incremental = false",
+        ]
+        .iter()
+        .map(|c| c.parse().unwrap())
+        .collect();
+        // The rest are Cargo home's.
+        assert_eq!(configs[..3], expected);
+        assert!(!configs.iter().any(|c| c.contains_key("program")));
     }
 
     #[test]

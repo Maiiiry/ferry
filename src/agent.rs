@@ -872,6 +872,8 @@ pub fn exec_cargo(
     let workspace = shim::workspace(cargo, args, &cwd, &[plan.build_src(), &plan.src]);
     if workspace != shim::Workspace::Outside {
         command.envs(cargo_env(&plan, meta.freshness));
+        let toolchain = base::load(ctx, &meta.base)?.toolchain;
+        shim::keep_incremental(&mut command, &toolchain.cargo_version, args, &cwd);
     }
     shim::set_target(&mut command, workspace.target(&plan.build_target()));
     Err(exec_error(cargo.as_os_str(), command.exec()))
