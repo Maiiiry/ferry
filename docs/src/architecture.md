@@ -48,8 +48,9 @@ Each one is enforced in code (module named) and covered by tests.
    stamping compares. There are three ways to get there: a cold build; a
    refresh seeded from a base with the same *unit inputs* (every manifest,
    lockfile, Cargo config and toolchain file of the commit, the Cargo configs
-   above the store, Cargo's flag variables, `CARGO_INCREMENTAL`, and whether
-   `CI` or `TF_BUILD` is set), which selects the same units; and a refresh
+   above the store, Cargo's flag variables, `CARGO_INCREMENTAL`, whether
+   `CI` or `TF_BUILD` is set, and a version of this list, so that no base
+   recorded under an older list matches), which selects the same units; and a refresh
    seeded across unit inputs from a base whose warm build was observed,
    after which every unit the build neither wrote nor reported is deleted.
    When that observation is incomplete, the target is emptied and built

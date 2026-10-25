@@ -208,7 +208,7 @@ fn run(cargo: &Path, args: &[OsString]) -> Result<std::convert::Infallible> {
 
 /// Variables whose presence makes Cargo 1.99 and later (cargo#17220) turn
 /// incremental compilation off by default.
-const CI_VARS: [&str; 2] = ["CI", "TF_BUILD"];
+pub const CI_VARS: [&str; 2] = ["CI", "TF_BUILD"];
 
 /// Sets `CARGO_INCREMENTAL=1` for `command`, cargo called with `args` in
 /// `cwd`, when [`needs_incremental`] says so for the toolchain whose

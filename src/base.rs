@@ -633,7 +633,11 @@ fn fingerprint(
 /// compares against; a build with the same inputs selects none of them.
 fn unit_inputs(ctx: &Context, commit: &CommitId) -> Result<String> {
     use std::os::unix::ffi::OsStrExt;
-    let mut input = Vec::new();
+    // Bumped whenever what counts as an input changes, so that no base
+    // recorded under the old definition matches. 2 added CARGO_INCREMENTAL
+    // and CI: without it, a base warmed with them by an older Ferry would
+    // match a refresh warmed without them and keep its units unpruned.
+    let mut input = b"unit-inputs-2\0".to_vec();
     for entry in ctx.repo.ls_tree(commit)? {
         let name = entry.path.file_name().and_then(|n| n.to_str());
         let in_dot_cargo = entry
@@ -689,9 +693,9 @@ fn unit_inputs(ctx: &Context, commit: &CommitId) -> Result<String> {
     }
     // Either one with a UTF-8 value (Cargo tests `std::env::var(name).is_ok()`)
     // makes Cargo 1.99 and later turn incremental compilation off by default,
-    // which changes every local unit's hash. Hashed only when set, so the
-    // inputs of bases built without them stay the same.
-    if ["CI", "TF_BUILD"]
+    // which changes every local unit's hash. Hashed on every Cargo version:
+    // the toolchain is known only after this runs.
+    if crate::shim::CI_VARS
         .iter()
         .any(|name| std::env::var(name).is_ok())
     {
