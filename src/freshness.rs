@@ -27,6 +27,11 @@
 //! its subdirectories and files, and a deleted file is only visible as its
 //! parent directory's mtime change.
 //!
+//! Leaving a file unstamped makes Cargo rebuild only where it compares
+//! mtimes. With checksum freshness it compares content, and a file reached
+//! through a changed symlink is identical to the base's, so the units that
+//! read one also get their dep-info invalidated ([`link_rebuilds`]).
+//!
 //! [`StampPlan`] can only be constructed by [`plan`], so code elsewhere cannot
 //! stamp an unverified path. Stamping happens once, when an agent is
 //! spawned: re-stamping a tree an agent has worked in would hide deletions.
@@ -55,7 +60,7 @@ mod relocation;
 
 pub use relocation::{
     Capture, Origin, RELOCATION_RULES, RelocationPlan, RelocationReport, Removal, apply_relocation,
-    plan_relocation,
+    invalidate_dep_info, link_rebuilds, plan_relocation,
 };
 
 /// The mtime given to stamped files: 2023-11-14T22:13:20Z. Any fixed time
@@ -117,6 +122,9 @@ pub struct StampPlan {
     dirs: Vec<Verified>,
     skipped_dirs: Vec<(PathBuf, SkipReason)>,
     tracked: usize,
+    /// Some symlink leads to another place in the checkout in the agent than
+    /// in the base, or into or out of it.
+    links_changed: bool,
 }
 
 /// A verified path plus what was observed when it was verified, so [`apply`]
@@ -167,6 +175,14 @@ pub struct StampReport {
 impl StampPlan {
     pub fn skipped(&self) -> &[(PathBuf, SkipReason)] {
         &self.skipped
+    }
+
+    /// Whether some symlink leads to another place in the checkout in the
+    /// agent than in the base, or into or out of it. Leaving what it reaches
+    /// unstamped is enough only where Cargo compares mtimes; see
+    /// [`link_rebuilds`] for checksum freshness.
+    pub fn links_changed(&self) -> bool {
+        self.links_changed
     }
 }
 
@@ -295,6 +311,7 @@ pub fn plan(
         dirs: verified_dirs,
         skipped_dirs,
         tracked: index.len(),
+        links_changed: !regions.is_empty(),
     })
 }
 
@@ -525,8 +542,9 @@ impl LinkEnd {
 /// agent than in the base.
 ///
 /// Both targets count: Cargo records a rustc input (`include_str!`,
-/// `#[path]`) by its canonical path in the base, but follows a build
-/// script's `rerun-if-changed` path through the link in the agent. `..`
+/// `#[path]`) by its canonical path in the base when that lies inside the
+/// input's package or the target dir, but follows a build script's
+/// `rerun-if-changed` path through the link in the agent. `..`
 /// after a link to a directory climbs out of it, so that region reaches up
 /// to where the two targets' ancestors meet. A symlink inside another link's
 /// region leads on to wherever it points, which the other checkout need not

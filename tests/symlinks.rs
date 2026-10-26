@@ -1,9 +1,10 @@
 //! A tracked symlink that leads elsewhere in an agent than in its base must
 //! not let Cargo keep the base's artifacts. Cargo records a rustc input read
-//! through a symlink by its canonical path in the base, and follows a build
-//! script's `rerun-if-changed` path through the link in the agent. Both
-//! targets can be identical to the base's, so spawn leaves both unstamped.
-//! Each test expects what a cold build of the agent's commit prints.
+//! through a symlink by its canonical path in the base when that lies inside
+//! the input's package, as here, and follows a build script's
+//! `rerun-if-changed` path through the link in the agent. Both targets can
+//! be identical to the base's, so spawn leaves both unstamped. Each test
+//! expects what a cold build of the agent's commit prints.
 
 // clippy's allow-unwrap-in-tests covers only #[test] functions, not their
 // helpers.
@@ -13,8 +14,9 @@ mod common;
 
 use std::fs;
 use std::os::unix::fs::symlink;
+use std::path::{Path, PathBuf};
 
-use common::{TestRepo, is_stamped, path_of};
+use common::{TestRepo, is_stamped, path_of, str_of};
 
 const INCLUDE_CURRENT: &str =
     "pub fn marker() -> &'static str {\n    include_str!(\"../data/current.txt\")\n}\n";
@@ -47,6 +49,46 @@ fn set_leaf(repo: &TestRepo, source: &str) {
     repo.write(&repo.root().join("leaf/src/lib.rs"), source);
 }
 
+/// Whether `path` is the Cargo dep-info file of leaf's library, in either
+/// build-dir layout: `.fingerprint/leaf-<H>/` or `build/leaf/<H>/fingerprint/`.
+fn is_leaf_dep_info(path: &Path) -> bool {
+    let parts: Vec<&str> = path.iter().rev().map(|p| p.to_str().unwrap()).collect();
+    match parts[..] {
+        ["dep-lib-leaf", unit, ".fingerprint", ..] => unit.starts_with("leaf-"),
+        ["dep-lib-leaf", "fingerprint", _, "leaf", "build", ..] => true,
+        _ => false,
+    }
+}
+
+/// Leaf's dep-info files below `dir`, with their sizes.
+fn leaf_dep_info(dir: &Path) -> Vec<(PathBuf, u64)> {
+    let mut found = Vec::new();
+    let mut stack = vec![dir.to_path_buf()];
+    while let Some(dir) = stack.pop() {
+        for entry in fs::read_dir(&dir).unwrap() {
+            let entry = entry.unwrap();
+            if entry.file_type().unwrap().is_dir() {
+                stack.push(entry.path());
+            } else if is_leaf_dep_info(&entry.path()) {
+                found.push((entry.path(), entry.metadata().unwrap().len()));
+            }
+        }
+    }
+    found
+}
+
+/// Requires that `dep_info`, leaf's dep-info files with their sizes, lists
+/// at least one and that all are empty, so Cargo rebuilds leaf under
+/// checksum freshness too. Stable Cargo compares mtimes and rebuilds leaf
+/// anyway, so only this shows there that spawn or a refresh invalidated it.
+#[track_caller]
+fn assert_emptied(dep_info: &[(PathBuf, u64)], context: &str) {
+    assert!(!dep_info.is_empty(), "no dep-info of leaf in {context}");
+    for (path, size) in dep_info {
+        assert_eq!(*size, 0, "{}", path.display());
+    }
+}
+
 /// The base has `current.txt -> v1.txt`, the agent `current.txt -> v2.txt`.
 fn retarget_current_txt(repo: &TestRepo) {
     put(repo, &[("data/v1.txt", "ONE"), ("data/v2.txt", "TWO")]);
@@ -56,10 +98,18 @@ fn retarget_current_txt(repo: &TestRepo) {
     repo.base();
     link(repo, "data/current.txt", "v2.txt");
     repo.commit_all("current.txt -> v2.txt");
-    let worktree = repo.spawn("a");
+    let report = repo.ferry_json(["spawn", "a"]);
+    let worktree = path_of(&report["agent"]["worktree"]);
     for target in ["leaf/data/v1.txt", "leaf/data/v2.txt"] {
         assert!(!is_stamped(&worktree.join(target)), "{target}");
     }
+    // An overlay fork takes what spawn writes in its upper dir, which holds
+    // nothing else before the first build.
+    let fork = match str_of(&report["agent"]["backend"]) {
+        "overlay" => repo.store().join("agents/a/upper"),
+        _ => repo.agent_target("a"),
+    };
+    assert_emptied(&leaf_dep_info(&fork), &fork.display().to_string());
 }
 
 #[test]
@@ -212,4 +262,42 @@ fn an_unchanged_symlink_leaves_everything_else_stamped() {
     }
     repo.build("a").assert_rebuilt(&[]);
     assert_eq!(repo.app("a").marker, "ONE");
+}
+
+/// A refresh seeded from the base before the retarget builds what a cold
+/// build of its commit would; its agents are stamped against it.
+#[test]
+fn a_refresh_seeded_across_a_retargeted_symlink_is_not_hidden_from_cargo() {
+    // The warm build rewrites leaf's dep-info, so the default warm commands
+    // run after listing the size of each `dep-lib-leaf` in the target as the
+    // refresh prepared it. The trailing slash makes `find` enter the target
+    // dir when it is a symlink (remap mode's `.ferry-target`).
+    let repo = TestRepo::with_env(&[(
+        "FERRY_BASE_COMMAND",
+        "find \"$CARGO_TARGET_DIR/\" -name dep-lib-leaf -exec wc -c {} \\; && \
+         cargo build && cargo test --no-run",
+    )]);
+    put(&repo, &[("data/v1.txt", "ONE"), ("data/v2.txt", "TWO")]);
+    link(&repo, "data/current.txt", "v1.txt");
+    set_leaf(&repo, INCLUDE_CURRENT);
+    repo.commit_all("current.txt -> v1.txt");
+    let seed = repo.base();
+    link(&repo, "data/current.txt", "v2.txt");
+    repo.commit_all("current.txt -> v2.txt");
+    let refresh = repo.ferry(["--json", "base"]).ok();
+    let report = refresh.json();
+    assert_eq!(report["base"]["seeded_from"], seed.as_str(), "{report}");
+    // `wc -c` prints `<size> <path>`, the path as the sandbox shows it.
+    let listed: Vec<(PathBuf, u64)> = refresh
+        .stderr
+        .lines()
+        .filter_map(|line| {
+            let (size, path) = line.trim_start().split_once(' ')?;
+            is_leaf_dep_info(Path::new(path)).then(|| (path.into(), size.parse().unwrap()))
+        })
+        .collect();
+    assert_emptied(&listed, &refresh.to_string());
+    repo.spawn("a");
+    repo.build("a").assert_rebuilt(&[]);
+    assert_eq!(repo.app("a").marker, "TWO");
 }
