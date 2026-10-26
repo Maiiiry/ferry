@@ -7,7 +7,7 @@
 
 mod common;
 
-use common::{BASE_MARKER, Build, Snapshot, TestRepo, str_of};
+use common::{App, BASE_MARKER, Build, Snapshot, TestRepo, str_of};
 use serde_json::Value;
 
 fn current_base(list: &Value) -> &str {
@@ -431,6 +431,32 @@ fn a_reverted_version_bump_is_rebuilt_not_reused() {
     assert_eq!(c["base"]["seeded_from"], b.as_str(), "{c}");
     repo.spawn("agent");
     assert_eq!(repo.app("agent").marker, "LEAF_B");
+}
+
+/// `CARGO_INCREMENTAL` changes the profile of every local unit, and so its
+/// hash. A refresh seeded as if it did not would keep the seed's units
+/// built with `CARGO_INCREMENTAL=0`, which an agent building with it would
+/// find fresh, holding the seed's code.
+#[test]
+fn a_refresh_across_a_cargo_incremental_change_is_pruned() {
+    let repo = TestRepo::new();
+    let a = common::run(
+        repo.ferry_cmd(["--json", "base"])
+            .env("CARGO_INCREMENTAL", "0"),
+    )
+    .ok()
+    .json();
+    let a = str_of(&a["base"]["id"]).to_owned();
+
+    repo.set_marker(repo.root(), "LEAF_B");
+    repo.commit_all("B: source");
+    let b = repo.ferry_json(["base"]);
+    assert_eq!(b["base"]["seeded_from"], a.as_str(), "{b}");
+
+    repo.spawn("agent");
+    let app = App::run(repo.agent_cargo("agent").env("CARGO_INCREMENTAL", "0"));
+    assert_eq!(app.marker, "LEAF_B");
+    assert!(b["base"]["pruned"]["units"].as_u64() > Some(0), "{b}");
 }
 
 /// Two builds of one binary with different features are both fresh in a

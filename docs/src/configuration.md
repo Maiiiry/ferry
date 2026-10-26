@@ -104,7 +104,7 @@ invocation selects the same package, features, profile and target kind.
 | `profiles` | array of profile names | `["dev"]` | Profiles to warm. `"dev"` adds no flag (Cargo's own selection, so tests keep using the `test` profile), `"release"` adds `--release`, any other name adds `--profile <name>`. Names must be non-empty and contain no whitespace. |
 | `cargo-args` | array of strings | `["--workspace"]` | Appended to every generated command, shell-quoted. |
 | `commands` | array of strings | unset | Replaces the generated commands. Each entry is a shell command line. Must not be empty when set. |
-| `prune` | boolean | `true` | Seed a refresh from the previous base even when manifests, lockfiles, Cargo configs, toolchain files or Cargo flag variables changed, and delete the units its warm commands did not use. `false` builds such refreshes from scratch. See [Refreshing a base](#refreshing-a-base). |
+| `prune` | boolean | `true` | Seed a refresh from the previous base even when manifests, lockfiles, Cargo configs, toolchain files, Cargo flag variables, `CARGO_INCREMENTAL` or whether `CI` or `TF_BUILD` is set changed, and delete the units its warm commands did not use. `false` builds such refreshes from scratch. See [Refreshing a base](#refreshing-a-base). |
 
 Without `commands`, Ferry generates one command per profile and target, in
 that order: for each profile, for each target,
@@ -178,7 +178,9 @@ units the new build may not select any more, and an agent that selected one
 again (by reverting the change) would find it fresh while it holds older
 code. So Ferry watches the warm build through the cargo shim and deletes,
 before the base is published, every unit the build neither compiled nor
-found fresh.
+found fresh. It does the same when the seed was warmed with other Cargo
+flag variables or another `CARGO_INCREMENTAL`, or when only one of the two
+builds has `CI` or `TF_BUILD` set.
 
 For that, every cargo call in the warm commands must be one Ferry can
 observe: `build`, `check`, `test`, `bench`, `run`, `rustc`, `rustdoc`, `doc`,

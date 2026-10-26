@@ -101,7 +101,8 @@ same commit and fingerprint already exists, it is made current without
 building. Otherwise, unless `--cold` is given, the new base is seeded from the
 newest ready base with the same fingerprint, so only what changed is rebuilt.
 The seed must have the same manifests, lockfiles, Cargo configs, toolchain
-files and Cargo flag variables, or its warm build must have been observed
+files, Cargo flag variables and `CARGO_INCREMENTAL`, and agree on whether
+`CI` or `TF_BUILD` is set. Otherwise its warm build must have been observed
 (`[base] prune`, the default): the units the new build does not use are then
 deleted, and the success line says how many (`pruned N units`). Build output
 goes to stderr.

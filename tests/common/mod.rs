@@ -36,10 +36,11 @@ fn ferry_bin() -> PathBuf {
 /// Removed from every command the harness runs: they would redirect or
 /// reconfigure the builds under test (CI toolchain actions export
 /// `CARGO_INCREMENTAL=0`, and Cargo 1.99 turns incremental off by default
-/// when `CI` is set, for example) or colour the output tests match on.
-/// `GIT_*` and `FERRY_*` variables are removed as well.
+/// when `CI` or `TF_BUILD` is set, for example) or colour the output tests
+/// match on. `GIT_*` and `FERRY_*` variables are removed as well.
 const SCRUBBED_VARS: &[&str] = &[
     "CI",
+    "TF_BUILD",
     "CARGO_INCREMENTAL",
     "CARGO_TARGET_DIR",
     "CARGO_BUILD_TARGET_DIR",

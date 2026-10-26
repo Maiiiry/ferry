@@ -177,12 +177,12 @@ pub fn build(ctx: &Context, rev: &str, cold: bool) -> Result<BuildReport> {
     } else {
         None
     };
-    let plan = build_plan(ctx, &paths, isolation, remap_wrapper);
     let warmed = warm(
         ctx,
         &paths,
-        &plan,
+        &build_plan(ctx, &paths, isolation, remap_wrapper),
         freshness,
+        &toolchain,
         seed.as_ref(),
         &inputs,
         &commands,
@@ -627,12 +627,17 @@ fn fingerprint(
 /// Hash of what decides which units (feature sets, dependency versions,
 /// profiles, flags) a build of `commit` selects: the commit's manifests,
 /// lockfiles, Cargo configs and toolchain files, the Cargo configs above the
-/// store, and Cargo's flag variables. A seed's target still holds units left
+/// store, Cargo's flag variables, `CARGO_INCREMENTAL`, and whether `CI` or
+/// `TF_BUILD` is set. A seed's target still holds units left
 /// from the seeds before it, built from older sources than the ones stamping
 /// compares against; a build with the same inputs selects none of them.
 fn unit_inputs(ctx: &Context, commit: &CommitId) -> Result<String> {
     use std::os::unix::ffi::OsStrExt;
-    let mut input = Vec::new();
+    // Bumped whenever what counts as an input changes, so that no base
+    // recorded under the old definition matches. 2 added CARGO_INCREMENTAL
+    // and CI: without it, a base warmed with them by an older Ferry would
+    // match a refresh warmed without them and keep its units unpruned.
+    let mut input = b"unit-inputs-2\0".to_vec();
     for entry in ctx.repo.ls_tree(commit)? {
         let name = entry.path.file_name().and_then(|n| n.to_str());
         let in_dot_cargo = entry
@@ -685,6 +690,16 @@ fn unit_inputs(ctx: &Context, commit: &CommitId) -> Result<String> {
         input.push(b'=');
         input.extend_from_slice(value.as_bytes());
         input.push(0);
+    }
+    // Either one with a UTF-8 value (Cargo tests `std::env::var(name).is_ok()`)
+    // makes Cargo 1.99 and later turn incremental compilation off by default,
+    // which changes every local unit's hash. Hashed on every Cargo version:
+    // the toolchain is known only after this runs.
+    if crate::shim::CI_VARS
+        .iter()
+        .any(|name| std::env::var(name).is_ok())
+    {
+        input.extend_from_slice(b"CI\0");
     }
     Ok(format!("{:016x}", fnv1a64(&input)))
 }
@@ -753,7 +768,11 @@ fn selects_units(name: &str) -> bool {
     .any(|prefix| name.starts_with(prefix));
     matches!(
         name,
-        "RUSTFLAGS" | "RUSTDOCFLAGS" | "CARGO_ENCODED_RUSTFLAGS" | "CARGO_ENCODED_RUSTDOCFLAGS"
+        "RUSTFLAGS"
+            | "RUSTDOCFLAGS"
+            | "CARGO_ENCODED_RUSTFLAGS"
+            | "CARGO_ENCODED_RUSTDOCFLAGS"
+            | "CARGO_INCREMENTAL"
     ) || (cargo_config
         && !matches!(
             name,
@@ -817,11 +836,13 @@ struct Warmed {
 /// Enters the sandbox and runs `commands` into the prepared target. A
 /// target seeded across unit inputs is then pruned to the units the
 /// commands used, or, when that cannot be told, emptied and built again.
+#[allow(clippy::too_many_arguments)]
 fn warm(
     ctx: &Context,
     paths: &BasePaths,
     plan: &Plan,
     freshness: FreshnessMode,
+    toolchain: &Toolchain,
     seed: Option<&BaseMeta>,
     inputs: &str,
     commands: &[WarmCommand],
@@ -846,6 +867,7 @@ fn warm(
     let env = warm_env(
         plan,
         freshness,
+        toolchain,
         &shim_dir,
         watch.as_ref().map(prune::Watch::dir),
     );
@@ -891,10 +913,12 @@ const WARM_UNITS: &str = "warm-units";
 
 /// The warm commands' environment. The target dir variables stay set for
 /// cargo calls that bypass the shim; through it, each workspace gets the
-/// target dir it gets in an agent.
+/// target dir it gets in an agent, and the same `CARGO_INCREMENTAL` (see
+/// `shim::keep_incremental`).
 fn warm_env(
     plan: &Plan,
     freshness: FreshnessMode,
+    toolchain: &Toolchain,
     shim_dir: &std::path::Path,
     records: Option<&std::path::Path>,
 ) -> Vec<(OsString, OsString)> {
@@ -911,6 +935,10 @@ fn warm_env(
         (
             crate::shim::WARM_TARGET_ENV.into(),
             plan.build_target().into_os_string(),
+        ),
+        (
+            crate::shim::WARM_CARGO_ENV.into(),
+            toolchain.cargo_version.clone().into(),
         ),
     ]);
     if let Some(records) = records {
@@ -992,6 +1020,7 @@ mod tests {
             "CARGO_BUILD_TARGET",
             "CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS",
             "CARGO_UNSTABLE_CHECKSUM_FRESHNESS",
+            "CARGO_INCREMENTAL",
         ] {
             assert!(selects_units(name), "{name}");
         }

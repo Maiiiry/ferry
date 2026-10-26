@@ -304,6 +304,29 @@ base keep that base alive.
   fingerprint.
 - **`CARGO_INCREMENTAL=0`** (set by some CI images and agent tools) switches
   off incremental compilation, and with it Ferry's incremental reuse. Unset it.
+- **`CI` or `TF_BUILD` set** (some agent tools export `CI`). Cargo 1.99 and
+  later then turn incremental compilation off, ahead of every profile
+  setting, and since a unit's hash includes it, an agent would also rebuild
+  every workspace crate of a base warmed without it. So when either variable
+  is set, Ferry sets `CARGO_INCREMENTAL=1` for the cargo it runs in agents
+  and warm commands, unless `CARGO_INCREMENTAL`, `CARGO_BUILD_INCREMENTAL` or
+  `build.incremental` (in a Cargo config or `--config`) is set. `CI` and
+  `TF_BUILD` reach build scripts, tests and `cargo run` unchanged. So does
+  `CARGO_INCREMENTAL=1`: a cargo call they make on a workspace outside the
+  agent builds incrementally too. This has costs. Release and bench builds
+  become incremental, so they are bigger and slower. Their units match
+  between a base and an agent only when both have `CI` or `TF_BUILD` set, or
+  both lack them. `incremental = false` in a `[profile.*]` is overridden, so
+  an agent with `CI` set rebuilds that profile's crates of a base warmed
+  without it. `build.incremental = false` keeps both the setting and the
+  reuse. A refresh across a change in whether `CI` or `TF_BUILD` is set, or
+  in `CARGO_INCREMENTAL`, is seeded across unit inputs, so it does not keep
+  the earlier base's units. That holds on every Cargo version, including
+  those before 1.99, where `CI` changes no unit. Ferry does not follow a
+  Cargo config's `include`, `cargo -C`, or a nested workspace's own
+  toolchain file when it looks for `build.incremental` and Cargo's version.
+  To opt out, set `CARGO_INCREMENTAL=0`, which turns incremental compilation
+  off as plain Cargo does under `CI`.
 - **Build caches as `RUSTC_WRAPPER`.** kache strips Cargo's incremental
   argument, so a base built through it has no incremental state; sccache
   refuses incremental units. Neither changes Cargo's fingerprints, so
@@ -330,8 +353,9 @@ base keep that base alive.
   across a change to `Cargo.toml`s, `Cargo.lock`s, Cargo configs, toolchain
   files or `RUSTFLAGS`-style variables only from a base whose warm build it
   observed (`"observed": true` in `ferry --json list`), because it must then
-  delete the units the new build does not use. Warm commands that run
-  `cargo nextest`, an alias like `cargo xtask`, or pass
+  delete the units the new build does not use. The same goes for a change to
+  `CARGO_INCREMENTAL`, or to whether `CI` or `TF_BUILD` is set. Warm
+  commands that run `cargo nextest`, an alias like `cargo xtask`, or pass
   `--message-format=short` are not observed; see
   [Refreshing a base](configuration.md#refreshing-a-base). `[base] prune =
   false` turns this off on purpose.

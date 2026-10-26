@@ -48,11 +48,13 @@ Each one is enforced in code (module named) and covered by tests.
    stamping compares. There are three ways to get there: a cold build; a
    refresh seeded from a base with the same *unit inputs* (every manifest,
    lockfile, Cargo config and toolchain file of the commit, the Cargo configs
-   above the store, and Cargo's flag variables), which selects the same
-   units; and a refresh seeded across unit inputs from a base whose warm
-   build was observed, after which every unit the build neither wrote nor
-   reported is deleted. When that observation is incomplete, the target is
-   emptied and built again from scratch rather than published.
+   above the store, Cargo's flag variables, `CARGO_INCREMENTAL`, whether
+   `CI` or `TF_BUILD` is set, and a version of this list, so that no base
+   recorded under an older list matches), which selects the same units; and a refresh
+   seeded across unit inputs from a base whose warm build was observed,
+   after which every unit the build neither wrote nor reported is deleted.
+   When that observation is incomplete, the target is emptied and built
+   again from scratch rather than published.
 3. **Each agent owns its build state** (`fork`, `sandbox`, `agent`). Forks are
    reflink clones (new inodes), overlayfs upper layers (base is a read-only
    lower), or full copies. There is no hardlink backend: Cargo rewrites
@@ -268,8 +270,27 @@ It sets `CARGO_TARGET_DIR`, `CARGO_BUILD_BUILD_DIR` and the freshness env
 accordingly and execs the real cargo (the next `cargo` on `PATH` that is not
 ferry). Outside agent worktrees it execs the real cargo unchanged, except
 inside a base's warm commands, where `FERRY_WARM_SRC` and `FERRY_WARM_TARGET`
-apply the same table to the base checkout, and `FERRY_WARM_UNITS` names the
-directory the shim records the call in (see `ferry base`, step 5).
+apply the same table to the base checkout, `FERRY_WARM_CARGO` holds the
+base toolchain's `cargo -V`, and `FERRY_WARM_UNITS` names the directory the
+shim records the call in (see `ferry base`, step 5).
+
+With `CI` or `TF_BUILD` set, Cargo 1.99 and later turn incremental
+compilation off after merging profiles, so ahead of `[profile.*]
+incremental = true`, and the switch enters every unit's hash: an agent with
+`CI` would rebuild every workspace member of a base warmed without it. So
+wherever the shim sets a target dir, it also sets `CARGO_INCREMENTAL=1` when
+either variable is set and the base's toolchain is Cargo 1.99 or later,
+unless the call has one of the settings Cargo ranks above the switch:
+`CARGO_INCREMENTAL`, `CARGO_BUILD_INCREMENTAL`, or `build.incremental` in a
+`--config` value or in a `.cargo/config{,.toml}` in the working directory's
+ancestors or Cargo home (`include`s are not followed). `CI` and `TF_BUILD`
+are passed on unchanged. Processes cargo starts inherit
+`CARGO_INCREMENTAL=1`, so a cargo call they make on a workspace outside the
+checkout builds incrementally too. Release and bench units still depend on
+`CI`: by default they are incremental with it and not without. So whether
+`CI` or `TF_BUILD` is set is a unit input (invariant 2). The costs are
+listed under
+[Cargo configuration pitfalls](troubleshooting.md#cargo-configuration-pitfalls).
 
 ### `ferry rm NAME [--force]`
 
