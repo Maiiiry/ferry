@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2](https://github.com/patwrall/ferry/compare/v0.1.1...v0.1.2) - 2026-10-26
+
+### Fixed
+
+- *(base)* version the unit-inputs hash
+- *(agent)* keep incremental builds when CI is set
+- *(base)* count incremental settings among unit inputs
+- *(freshness)* rebuild units that read through a retargeted symlink under checksum freshness
+
+### Other
+
+- Merge pull request #14 from patwrall/fix/symlink-checksum-freshness
+- *(shim)* check build.incremental in Cargo home's config
+- *(freshness)* say which units a retargeted symlink invalidates
+
 ## [0.1.1](https://github.com/patwrall/ferry/compare/v0.1.0...v0.1.1) - 2026-10-24
 
 ### Other
