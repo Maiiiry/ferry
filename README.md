@@ -22,6 +22,9 @@
   <img src="docs/src/demo.gif" alt="A new git worktree builds ripgrep cold in about 8 s; a Ferry agent spawns in under a second, builds in 0.1 s and rebuilds an edit in about 1.3 s" width="760">
 </p>
 
+> **Are you an AI agent?** Read [AGENTS.md](AGENTS.md): how to install Ferry
+> and set it up for your user.
+
 ## Why
 
 Running several coding agents on one Rust repository means one git worktree
