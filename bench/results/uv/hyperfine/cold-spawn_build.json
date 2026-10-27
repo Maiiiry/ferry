@@ -1,0 +1,23 @@
+{
+  "results": [
+    {
+      "command": "cold/spawn_build",
+      "mean": 80.0072478317,
+      "stddev": null,
+      "median": 80.0072478317,
+      "user": 586.97620134,
+      "system": 134.81861606,
+      "min": 80.0072478317,
+      "max": 80.0072478317,
+      "times": [
+        80.0072478317
+      ],
+      "memory_usage_byte": [
+        1943277568
+      ],
+      "exit_codes": [
+        0
+      ]
+    }
+  ]
+}

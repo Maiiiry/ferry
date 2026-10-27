@@ -80,11 +80,93 @@ What these numbers show:
   library's incremental state at the agent's own path; on Linux the `rg`
   binary, built with debug info, still recompiles from scratch.
 - **These are one workspace's results.** This page does not scale them to
-  larger workspaces. rust-analyzer and macOS results are not published yet.
+  larger workspaces; those are measured below. macOS results are not
+  published yet.
 
 All steps, the disk usage, and the raw run times are in
 [`bench/results/ripgrep/`](https://github.com/patwrall/ferry/tree/main/bench/results/ripgrep)
 (`results.md`, `results.json`, `env.json`, and hyperfine's exports).
+
+### Larger workspaces, Ferry 0.1.2
+
+Measured on the same machine as ripgrep (AMD Ryzen 5 3600X, 6 cores and 12
+threads, 31 GiB RAM, btrfs, NixOS 26.11, Linux 6.18) on 2026-10-27, with the
+release binary of Ferry 0.1.2 (`5be5ee1`). The commits in each `env.json`
+differ from it only in docs and benchmark files. Each value is a median: 3
+runs per step for rust-analyzer (2 for cold builds), 2 runs (1 for cold
+builds) for the others. The machine was a desktop in use; each `env.json`
+records the load. Crates compiled are in brackets.
+
+Every scenario runs the same command. *First build* is an agent's first
+build with no edit; *first edit* is a new agent's first build after one edit;
+*next edit* is a later edit in the same agent. Ferry's rows use the namespace
+sandbox. Reflink is what `auto` picks on this btrfs; overlay is what it picks
+on ext4.
+
+#### rust-analyzer
+
+`0c4d746`, 281 build units cold, edit `crates/ide-db/src/lib.rs` (rebuilds 9
+units), `cargo build`, rustc 1.99.0.
+
+| Scenario | First build | First edit | Next edit | Spawn |
+|---|---:|---:|---:|---:|
+| Cold worktree | 91.9 s (281) | 74.0 s (281) | – | – |
+| Copied warm target | 61.6 s (51) | 67.0 s (51) | – | – |
+| kache 1.2.2 | 2.90 s (58) | 26.0 s (58) | 7.40 s (9) | – |
+| Ferry, sandbox off | 27.3 s (12) | 29.1 s (12) | 7.44 s (9) | 1.38 s |
+| Ferry, remap-paths | 9.27 s (12) | 9.58 s (12) | 7.73 s (9) | 1.10 s |
+| Ferry, overlay | 0.24 s (0) | 7.38 s (9) | 7.29 s (9) | 0.45 s |
+| Ferry, reflink | 0.21 s (0) | 7.69 s (9) | 6.59 s (9) | 1.28 s |
+
+Refreshing the base after a commit: 9.06 s seeded from the previous base, 92.5 s cold.
+
+#### uv
+
+`f8bec5e`, 624 build units cold, edit `crates/uv-resolver/src/lib.rs`,
+`cargo build`, rustc 1.99.0.
+
+| Scenario | First build | First edit | Next edit | Spawn |
+|---|---:|---:|---:|---:|
+| Cold worktree | 80.0 s (624) | 79.5 s (624) | – | – |
+| Copied warm target | 36.8 s (98) | 45.0 s (98) | – | – |
+| kache 1.2.2 | 34.4 s (113) | 40.6 s (113) | 7.09 s (15) | – |
+| Ferry, reflink | 0.46 s (0) | 9.00 s (15) | 6.97 s (15) | 1.25 s |
+
+Refreshing the base after a commit: 10.0 s seeded from the previous base, 79.9 s cold.
+
+#### ruff
+
+`8aeb8e2`, 505 build units cold, edit `crates/ruff_linter/src/lib.rs`,
+`cargo build`, rustc 1.99.0. A Ferry agent's first build recompiles 6 units
+here, where the other workspaces recompile none; the cause is not
+investigated yet.
+
+| Scenario | First build | First edit | Next edit | Spawn |
+|---|---:|---:|---:|---:|
+| Cold worktree | 131.6 s (505) | 142.1 s (505) | – | – |
+| Copied warm target | 89.7 s (68) | 106.0 s (68) | – | – |
+| kache 1.2.2 | 24.6 s (70) | 40.3 s (70) | 31.0 s (11) | – |
+| Ferry, reflink | 3.24 s (6) | 9.97 s (14) | 9.02 s (11) | 2.21 s |
+
+Refreshing the base after a commit: 13.5 s seeded from the previous base, 162.9 s cold.
+
+#### polars
+
+`d0a98d9`, edit `crates/polars-lazy/src/lib.rs`, `cargo build -p polars-sql`
+(212 build units cold), on the nightly polars pins (rustc 1.100.0-nightly
+2026-08-31), so Ferry uses checksum freshness.
+
+| Scenario | First build | First edit | Next edit | Spawn |
+|---|---:|---:|---:|---:|
+| Cold worktree | 71.2 s (212) | 71.0 s (212) | – | – |
+| Copied warm target | 56.6 s (34) | 54.8 s (34) | – | – |
+| kache 1.2.2 | 2.32 s (212) | 9.63 s (212) | 1.62 s (2) | – |
+| Ferry, reflink | 0.26 s (0) | 2.00 s (2) | 1.62 s (2) | 0.80 s |
+
+Refreshing the base after a commit: 2.89 s seeded from the previous base, 70.7 s cold.
+
+Raw results, including min and max of every step and disk usage:
+[`bench/results/`](https://github.com/patwrall/ferry/tree/main/bench/results).
 
 ## CI runs (macOS)
 

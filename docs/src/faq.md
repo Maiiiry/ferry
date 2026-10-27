@@ -133,3 +133,34 @@ that one command.
 
 Not supported. Ferry relies on Unix filesystem and namespace features, and it
 does not compile on Windows.
+
+## What are Ferry's limitations?
+
+- **The incremental win needs Linux user namespaces.** Where they are blocked
+  (Ubuntu 24.04+ without the AppArmor profile, Docker's default seccomp
+  profile, hardened systems), agents reuse unchanged crates but recompile an
+  edited crate from scratch, and the few crates that captured the base's
+  absolute paths rebuild once after spawn.
+- **Overlay copy-up costs disk where clones are unavailable.** On ext4 and
+  tmpfs agents fork with overlay, and an agent's first write to a file copies
+  all of it into the agent's upper layer; relinked binaries and incremental
+  session files make up most of it. `ferry list` shows each agent's share.
+- **Paths that cargo prints in the sandbox do not exist on the host.** Run
+  built binaries through `ferry run` or `ferry shell`. Reflink and copy
+  targets are also reachable on the host at `ferry env`'s
+  `host_target_dir`; an overlay target exists only inside the sandbox.
+- **Build scripts that write outside `OUT_DIR`** write into the base's
+  checkout, and agents do not get those files. `ferry base` warns when it
+  happens.
+- **mtime freshness has blind spots.** A file whose new content arrives with
+  an old mtime (for example copied with preserved timestamps) can look
+  unchanged to Cargo. On nightly, checksum freshness covers rustc's inputs;
+  build-script inputs stay mtime-based.
+- **macOS has no incremental reuse by default.** The remap-paths mode that
+  addresses it is experimental and unverified on a Mac.
+- **rust-analyzer per worktree is not addressed.**
+- **Claude Code 2.1.305 and later** block nested user namespaces in their
+  sandbox unless configured; run the session with `ferry run` or see
+  [Claude Code's sandbox](agents/claude-code.md#claude-codes-sandbox).
+- **Local only.** Ferry does not share builds across machines.
+

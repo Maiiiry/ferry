@@ -1,6 +1,7 @@
 [files]
-# Generated from commit messages, which cannot be fixed after the fact.
-extend-exclude = ["CHANGELOG.md"]
+# Generated from commit messages, which cannot be fixed after the fact; and
+# recorded benchmark results, which name third-party crates.
+extend-exclude = ["CHANGELOG.md", "bench/results/"]
 
 [default]
 # Hex ids (agent ids, hashes) split into "words" such as "abd".

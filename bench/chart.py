@@ -17,14 +17,13 @@ import sys
 from html import escape
 from pathlib import Path
 
-# (scenario key in results.json, row label, emphasized)
+# (scenario keys in results.json, first one measured wins; row label, emphasized)
 ROWS = [
-    ("cold", "Cold worktree", False),
-    ("naive", "Naive copied target", False),
-    ("kache", "kache", False),
-    ("ferry-off", "Ferry, crate-level (sandbox off)", True),
-    ("ferry-remap", "Ferry, remap-paths (sandbox off)", True),
-    ("ferry-overlay", "Ferry", True),
+    (("cold",), "Cold worktree", False),
+    (("naive",), "Copied warm target", False),
+    (("kache",), "kache", False),
+    # Reflink is what `auto` picks on the benchmark machine's btrfs.
+    (("ferry-reflink", "ferry-overlay"), "Ferry", True),
 ]
 DEFAULT_OUT = Path(__file__).parent / "results" / "chart.svg"
 
@@ -95,8 +94,10 @@ def load(paths, metric):
     for path in paths:
         data = json.loads(Path(path).read_text())
         rows = []
-        for key, label, emphasized in ROWS:
-            step = data.get("scenarios", {}).get(key, {}).get(metric)
+        for keys, label, emphasized in ROWS:
+            scenarios = data.get("scenarios", {})
+            key = next((k for k in keys if scenarios.get(k, {}).get(metric)), keys[0])
+            step = scenarios.get(key, {}).get(metric)
             if key == "kache" and data["env"].get("kache"):
                 label = data["env"]["kache"]  # e.g. "kache 1.2.2"
             if step and step.get("median") is not None:

@@ -207,6 +207,17 @@ depend on the runner label (`env.json` records them for each run), so:
   a much larger share of the workspace's compile time); a crate near the top
   such as `ide` rebuilds only itself and `rust-analyzer`.
 
+- **uv** at `f8bec5e` (astral-sh/uv, 2026-10-27), edit
+  `crates/uv-resolver/src/lib.rs`. 624 units cold; the edit rebuilds 15.
+- **ruff** at `8aeb8e2` (astral-sh/ruff, 2026-10-26), edit
+  `crates/ruff_linter/src/lib.rs`. 505 units cold; the edit rebuilds 14. Its
+  build needs `make` (tikv-jemalloc-sys), as uv's does.
+- **polars** at `d0a98d9` (pola-rs/polars, 2026-10-26), edit
+  `crates/polars-lazy/src/lib.rs`, `--build-args "-p polars-sql"` (the
+  workspace root also builds Python bindings). 212 units cold. It pins
+  `nightly-2026-09-01`; run it through rustup's proxies so that toolchain
+  is used.
+
 ## Caveats
 
 - This is a desktop machine (a btrfs `/home` with zstd compression, other
@@ -224,3 +235,23 @@ depend on the runner label (`env.json` records them for each run), so:
   `~/.cargo`, even with separate target dirs; the lock-wait columns show it.
 - kache is benchmarked as released (1.2.2). Its unreleased main branch adds
   incremental seeds between worktrees.
+
+## Demo recording
+
+`bench/demo.sh` records `docs/src/demo.gif`, the README's demo, with
+[vhs](https://github.com/charmbracelet/vhs) and ffmpeg on rust-analyzer at
+`0c4d746`. It clones the workspace into `~/.cache/ferry-demo` and builds a
+base there, then records two parts that it joins into one GIF:
+
+- `bench/demo-cold.tape`: a new git worktree's cold build, recorded in real
+  time and played back 10× faster, which the recording says on screen.
+- `bench/demo-ferry.tape`: a Ferry agent's spawn, first build and first edit,
+  at real speed, ending on the measured times of both parts.
+
+The timings are measured live, so they vary by machine; the benchmark results
+above are the numbers to cite.
+
+```sh
+cargo build --release
+nix-shell -p vhs chromium ffmpeg --run bench/demo.sh
+```
