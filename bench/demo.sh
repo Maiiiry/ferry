@@ -33,7 +33,11 @@ cd "$root"
 mkdir -p target
 vhs bench/demo-cold.tape
 vhs bench/demo-ferry.tape
-# Both parts share one canvas, so they join without a seam.
+# Both parts share one canvas, so they join without a seam. The GIF is for
+# the README; target/demo.mp4 is the same recording for posting elsewhere.
+join="[0:v]setpts=PTS/$speedup[a];[a][1:v]concat=n=2:v=1"
 ffmpeg -v error -y -i target/demo-cold.mp4 -i target/demo-ferry.mp4 -filter_complex \
-  "[0:v]setpts=PTS/$speedup[a];[a][1:v]concat=n=2:v=1[v];[v]fps=12,split[x][y];[x]palettegen=stats_mode=diff[p];[y][p]paletteuse=dither=bayer:bayer_scale=4" \
+  "$join,fps=10,split[x][y];[x]palettegen=max_colors=64:stats_mode=diff[p];[y][p]paletteuse=dither=none" \
   docs/src/demo.gif
+ffmpeg -v error -y -i target/demo-cold.mp4 -i target/demo-ferry.mp4 -filter_complex "$join" \
+  -c:v libx264 -pix_fmt yuv420p -crf 23 -movflags +faststart target/demo.mp4

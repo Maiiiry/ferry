@@ -14,6 +14,9 @@ Set WaitTimeout 600s
 
 # `time` prints the wall time and saves it for part two's summary.
 Hide
+Type `cargo() { command cargo "$@" --color always 2>&1 | sed -u -E 's/ \(\/[^)]*\)//' | grep --line-buffered -E 'Compiling|Finished|error'; return "${PIPESTATUS[0]}"; }`
+Enter
+Wait
 Type `cd "$DEMO_WORK/rust-analyzer" && export PS1='$ '`
 Enter
 Wait
