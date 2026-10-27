@@ -1,8 +1,8 @@
 <h1 align="center">Ferry</h1>
 
-<h3 align="center">Parallel AI agents. One warm Cargo build.</h3>
+<h3 align="center">Blazingly fast Rust worktrees for AI agents.</h3>
 
-<p align="center">Every agent gets its own git worktree with an already-warm, forked target dir.<br>No cold compiles, and no agent ever runs another agent's code.</p>
+<p align="center">Every agent starts from one warm Cargo build.<br>No cold compiles, no crossed builds.</p>
 
 <p align="center">
   <a href="#install">Install</a> ·
