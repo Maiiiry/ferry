@@ -1,6 +1,6 @@
 [package]
 name = "ferry-rs"
-version = "0.1.2"
+version = "0.1.3"
 edition = "2024"
 rust-version = "1.88"
 description = "Parallel AI agents, one warm build: forkable, isolated Cargo target dirs per git worktree"
