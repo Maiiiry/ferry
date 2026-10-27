@@ -228,13 +228,19 @@ depend on the runner label (`env.json` records them for each run), so:
 ## Demo recording
 
 `bench/demo.sh` records `docs/src/demo.gif`, the README's demo, with
-[vhs](https://github.com/charmbracelet/vhs) from `bench/demo.tape`. It
-clones ripgrep at `6892bc2` into `/tmp/ferry-demo`, builds a base there, then
-records a new git worktree's cold build next to a Ferry agent's spawn,
-first build and first edit. The timings in the GIF are measured live, so
-they vary by machine; the benchmark results above are the numbers to cite.
+[vhs](https://github.com/charmbracelet/vhs) and ffmpeg on rust-analyzer at
+`0c4d746`. It clones the workspace into `~/.cache/ferry-demo` and builds a
+base there, then records two parts that it joins into one GIF:
+
+- `bench/demo-cold.tape`: a new git worktree's cold build, recorded in real
+  time and played back 10× faster, which the recording says on screen.
+- `bench/demo-ferry.tape`: a Ferry agent's spawn, first build and first edit,
+  at real speed, ending on the measured times of both parts.
+
+The timings are measured live, so they vary by machine; the benchmark results
+above are the numbers to cite.
 
 ```sh
 cargo build --release
-nix-shell -p vhs chromium --run bench/demo.sh   # or any vhs with ttyd, ffmpeg and a Chromium
+nix-shell -p vhs chromium ffmpeg --run bench/demo.sh
 ```
