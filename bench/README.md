@@ -224,3 +224,17 @@ depend on the runner label (`env.json` records them for each run), so:
   `~/.cargo`, even with separate target dirs; the lock-wait columns show it.
 - kache is benchmarked as released (1.2.2). Its unreleased main branch adds
   incremental seeds between worktrees.
+
+## Demo recording
+
+`bench/demo.sh` records `docs/src/demo.gif`, the README's demo, with
+[vhs](https://github.com/charmbracelet/vhs) from `bench/demo.tape`. It
+clones ripgrep at `6892bc2` into `target/demo`, builds a base there, then
+records a new git worktree's cold build next to a Ferry agent's spawn,
+first build and first edit. The timings in the GIF are measured live, so
+they vary by machine; the benchmark results above are the numbers to cite.
+
+```sh
+cargo build --release
+nix-shell -p vhs chromium --run bench/demo.sh   # or any vhs with ttyd, ffmpeg and a Chromium
+```
