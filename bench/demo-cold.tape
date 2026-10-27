@@ -7,6 +7,7 @@ Set FontSize 20
 Set Width 1000
 Set Height 640
 Set Padding 18
+Set Framerate 10
 Set Theme "Catppuccin Mocha"
 Set TypingSpeed 350ms
 Set WaitPattern /\$\s*$/
@@ -14,10 +15,10 @@ Set WaitTimeout 600s
 
 # `time` prints the wall time and saves it for part two's summary.
 Hide
-Type `cargo() { command cargo "$@" --color always 2>&1 | sed -u -E 's/ \(\/[^)]*\)//' | grep --line-buffered -E 'Compiling|Finished|error'; return "${PIPESTATUS[0]}"; }`
+Type `cd "$DEMO_WORK/rust-analyzer" && export PS1='$ '`
 Enter
 Wait
-Type `cd "$DEMO_WORK/rust-analyzer" && export PS1='$ '`
+Type `cargo() { command cargo "$@" --color always 2>&1 | sed -u -E 's/ [(][/][^)]*[)]//' | grep --line-buffered -E 'Compiling|Finished|error'; return "${PIPESTATUS[0]}"; }`
 Enter
 Wait
 Type `t() { local s=$EPOCHREALTIME rc; "$@"; rc=$?; local d; d=$(awk "BEGIN { printf \"%.2f\", $EPOCHREALTIME - $s }"); echo "$d" >>"$DEMO_WORK/times"; echo "⏱  ${d}s"; return $rc; }; alias time='t '; clear`

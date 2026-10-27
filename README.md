@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/src/demo.gif" alt="A new git worktree builds ripgrep cold in about 8 s; a Ferry agent spawns in under a second, builds in 0.1 s and rebuilds an edit in about 1.3 s" width="760">
+  <img src="docs/src/demo.gif" alt="rust-analyzer: a new git worktree builds cold in about a minute (played 10x faster); a Ferry agent spawns in under a second, builds in 0.3 s and rebuilds an edit incrementally in about 7 s" width="760">
 </p>
 
 ## Why

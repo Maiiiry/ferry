@@ -6,6 +6,7 @@ Set FontSize 20
 Set Width 1000
 Set Height 640
 Set Padding 18
+Set Framerate 10
 Set Theme "Catppuccin Mocha"
 Set TypingSpeed 35ms
 Set WaitPattern /\$\s*$/
@@ -14,10 +15,10 @@ Set WaitTimeout 300s
 # `time` prints and saves each step's wall time; `summary` compares them with
 # part one's cold build.
 Hide
-Type `cargo() { command cargo "$@" --color always 2>&1 | sed -u -E 's/ \(\/[^)]*\)//' | grep --line-buffered -E 'Compiling|Finished|error'; return "${PIPESTATUS[0]}"; }`
+Type `cd "$DEMO_WORK/rust-analyzer" && export PS1='$ ' && mapfile -t TIMES <"$DEMO_WORK/times"`
 Enter
 Wait
-Type `cd "$DEMO_WORK/rust-analyzer" && export PS1='$ ' && mapfile -t TIMES <"$DEMO_WORK/times"`
+Type `cargo() { command cargo "$@" --color always 2>&1 | sed -u -E 's/ [(][/][^)]*[)]//' | grep --line-buffered -E 'Compiling|Finished|error'; return "${PIPESTATUS[0]}"; }`
 Enter
 Wait
 Type `t() { local s=$EPOCHREALTIME rc; "$@"; rc=$?; TIMES+=("$(awk "BEGIN { printf \"%.2f\", $EPOCHREALTIME - $s }")"); echo "⏱  ${TIMES[-1]}s"; return $rc; }; alias time='t '`
@@ -28,7 +29,7 @@ Enter
 Wait
 Show
 
-Type "# With Ferry, the agent forks a warm base (built once by `ferry base`):"
+Type "# With Ferry, the agent forks a warm base built once by `ferry base`:"
 Enter
 Type "time ferry spawn agent"
 Enter
@@ -40,7 +41,7 @@ Type "time cargo build"
 Enter
 Wait
 Sleep 1s
-Type "# The agent edits a crate: only it and its dependents rebuild, incrementally."
+Type "# The agent edits a crate; it and its dependents rebuild incrementally:"
 Enter
 Type `printf '/// Demo.\npub fn demo() {}\n' >> crates/ide-db/src/lib.rs`
 Enter
