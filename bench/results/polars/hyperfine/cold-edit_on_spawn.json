@@ -1,0 +1,23 @@
+{
+  "results": [
+    {
+      "command": "cold/edit_on_spawn",
+      "mean": 71.01254791642,
+      "stddev": null,
+      "median": 71.01254791642,
+      "user": 272.5873659,
+      "system": 42.76923702,
+      "min": 71.01254791642,
+      "max": 71.01254791642,
+      "times": [
+        71.01254791642
+      ],
+      "memory_usage_byte": [
+        2503278592
+      ],
+      "exit_codes": [
+        0
+      ]
+    }
+  ]
+}

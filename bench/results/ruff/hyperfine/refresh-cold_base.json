@@ -1,0 +1,23 @@
+{
+  "results": [
+    {
+      "command": "refresh/cold_base",
+      "mean": 162.94276696628,
+      "stddev": null,
+      "median": 162.94276696628,
+      "user": 1114.0210924599999,
+      "system": 120.30463046,
+      "min": 162.94276696628,
+      "max": 162.94276696628,
+      "times": [
+        162.94276696628
+      ],
+      "memory_usage_byte": [
+        3763576832
+      ],
+      "exit_codes": [
+        0
+      ]
+    }
+  ]
+}

@@ -1,0 +1,1659 @@
+{
+  "schema": 1,
+  "name": "rust-analyzer",
+  "workspace": {
+    "source": "https://github.com/rust-lang/rust-analyzer",
+    "commit": "0c4d74686b21f2b3bd8872b6d3cf36ad2e740d49",
+    "edit_file": "crates/ide-db/src/lib.rs",
+    "edit_package": "ide-db",
+    "edit_crate_root": "crates/ide-db/src/lib.rs",
+    "build_command": "cargo build"
+  },
+  "runs": 3,
+  "cold_runs": 2,
+  "agents": 3,
+  "scenarios_selected": [
+    "ferry-overlay"
+  ],
+  "env": {
+    "date": "2026-10-27T05:29:34Z",
+    "cpu_model": "AMD Ryzen 5 3600X 6-Core Processor",
+    "logical_cpus": 12,
+    "physical_cores": 6,
+    "cpu_governor": "powersave",
+    "ram_bytes": 33576783872,
+    "mem_available_bytes": 28572270592,
+    "swap_used_bytes": 1248067584,
+    "os": "NixOS 26.11 (Zokor)",
+    "bench_fs": "btrfs",
+    "bench_mount": {
+      "target": "/home",
+      "source": "/dev/nvme1n1p3[/@home]",
+      "fstype": "btrfs",
+      "options": "rw,noatime,nodiratime,compress=zstd:1,ssd,discard=async,space_cache=v2,subvolid=257,subvol=/@home"
+    },
+    "kernel": "6.18.55",
+    "bench_free_bytes": 30849855488,
+    "rustc": "rustc 1.99.0 (b940084d7 2026-09-28)\nbinary: rustc\ncommit-hash: b940084d7eb6a299eb4bfeb8e34901bc051e7ac4\ncommit-date: 2026-09-28\nhost: x86_64-unknown-linux-gnu\nrelease: 1.99.0\nLLVM version: 23.1.1",
+    "cargo": "cargo 1.99.0 (5f94df478 2026-08-27)",
+    "ferry": "ferry 0.1.2",
+    "ferry_path": "/home/pat/Projects/ferry/target/release/ferry",
+    "ferry_commit": "971cc07b42467a47e25bab5db68ec486d38eb675",
+    "ferry_source_dirty": false,
+    "kache": "kache 1.2.2",
+    "hyperfine": "hyperfine 1.21.0",
+    "git": "git version 2.55.0",
+    "cp": "cp (GNU coreutils) 9.11",
+    "btrfs_progs": "btrfs-progs v7.1",
+    "bash": "5.3.15(1)-release",
+    "jq": "jq-1.8.2",
+    "ci": null,
+    "loadavg_before": "6.68 5.92 6.65",
+    "loadavg_after": "21.16 12.10 8.66",
+    "mem_available_after_bytes": 28789915648,
+    "swap_used_after_bytes": 1246748672,
+    "date_end": "2026-10-27T05:37:26Z",
+    "idle_note": "idle means no other heavy jobs; judge from loadavg_before/after (1, 5, 15 min) against logical_cpus"
+  },
+  "scenarios": {
+    "ferry-overlay": {
+      "base_disk": {
+        "path": "/home/pat/Projects/ferry/bench/work/rust-analyzer/ferry/home/repo-25e595aa1344c5a4/bases/0c4d74686b21f2b3bd8872b6d3cf36ad2e740d49-42c69dbf/target",
+        "du_bytes": 4167520256,
+        "btrfs_total_bytes": 3676180480,
+        "btrfs_exclusive_bytes": 3676180480,
+        "btrfs_shared_bytes": 0
+      },
+      "base": {
+        "runs": 2,
+        "times": [
+          60.716370461,
+          59.554887752999996
+        ],
+        "median": 60.135629107,
+        "mean": 60.135629107,
+        "min": 59.554887752999996,
+        "max": 60.716370461,
+        "stddev": 0.8212922990577155,
+        "exit_codes": [
+          0,
+          0
+        ],
+        "crates": [
+          280,
+          281
+        ],
+        "checks_ok": [
+          null,
+          null
+        ],
+        "per_run": [
+          {
+            "crates": 280,
+            "crate_list": [
+              "stable_deref_trait (lib)",
+              "equivalent (lib)",
+              "unicode_ident (lib)",
+              "cfg_if (lib)",
+              "pin_project_lite (lib)",
+              "foldhash (lib)",
+              "once_cell (lib)",
+              "smallvec (lib)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "rustc_hash (lib)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "allocator_api2 (lib)",
+              "either (lib)",
+              "build-script-build (custom-build)",
+              "itoa (lib)",
+              "build-script-build (custom-build)",
+              "autocfg (lib)",
+              "jod_thread (lib)",
+              "build-script-build (custom-build)",
+              "crossbeam_utils (lib)",
+              "tracing_core (lib)",
+              "scopeguard (lib)",
+              "build-script-build (custom-build)",
+              "memchr (lib)",
+              "text_size (lib)",
+              "memoffset (lib)",
+              "crossbeam_epoch (lib)",
+              "build-script-build (custom-build)",
+              "hashbrown (lib)",
+              "crossbeam_deque (lib)",
+              "quote (lib)",
+              "lock_api (lib)",
+              "proc_macro2 (lib)",
+              "nohash_hasher (lib)",
+              "unicode_properties (lib)",
+              "crossbeam_channel (lib)",
+              "bitflags (lib)",
+              "edition (lib)",
+              "ra_ap_rustc_lexer (lib)",
+              "build-script-build (custom-build)",
+              "rustc_literal_escaper (lib)",
+              "thin_vec (lib)",
+              "build-script-build (custom-build)",
+              "countme (lib)",
+              "rustc_hash (lib)",
+              "hashbrown (lib)",
+              "arrayvec (lib)",
+              "drop_bomb (lib)",
+              "rayon_core (lib)",
+              "typeid (lib)",
+              "libc (lib)",
+              "fst (lib)",
+              "itertools (lib)",
+              "crossbeam_queue (lib)",
+              "salsa_macro_rules (lib)",
+              "hashlink (lib)",
+              "parking_lot_core (lib)",
+              "intrusive_collections (lib)",
+              "boxcar (lib)",
+              "portable_atomic (lib)",
+              "build-script-build (custom-build)",
+              "inventory (lib)",
+              "la_arena (lib)",
+              "parking_lot (lib)",
+              "log (lib)",
+              "smol_str (lib)",
+              "build-script-build (custom-build)",
+              "dashmap (lib)",
+              "zmij (lib)",
+              "powerfmt (lib)",
+              "num_conv (lib)",
+              "time_core (lib)",
+              "serde_core (lib)",
+              "num_threads (lib)",
+              "rustc_stable_hash (lib)",
+              "cov_mark (lib)",
+              "ra_ap_rustc_hashes (lib)",
+              "build-script-build (custom-build)",
+              "semver (lib)",
+              "camino (lib)",
+              "lazy_static (lib)",
+              "paths (lib)",
+              "winnow (lib)",
+              "ena (lib)",
+              "build-script-build (custom-build)",
+              "ra_ap_rustc_ast_ir (lib)",
+              "tracing_log (lib)",
+              "indexmap (lib)",
+              "thread_local (lib)",
+              "foldhash (lib)",
+              "rustc_apfloat (lib)",
+              "perf_event_open_sys (lib)",
+              "sharded_slab (lib)",
+              "ra_ap_rustc_parse_format (lib)",
+              "oorandom (lib)",
+              "fixedbitset (lib)",
+              "nu_ansi_term (lib)",
+              "typed_arena (lib)",
+              "rayon (lib)",
+              "deranged (lib)",
+              "perf_event (lib)",
+              "writeable (lib)",
+              "hashbrown (lib)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "litemap (lib)",
+              "profile (lib)",
+              "utf8_iter (lib)",
+              "build-script-build (custom-build)",
+              "icu_properties_data (lib)",
+              "icu_normalizer_data (lib)",
+              "line_index (lib)",
+              "inotify_sys (lib)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "cfg_aliases (lib)",
+              "percent_encoding (lib)",
+              "build-script-build (custom-build)",
+              "winnow (lib)",
+              "same_file (lib)",
+              "serde_json (lib)",
+              "rowan (lib)",
+              "form_urlencoded (lib)",
+              "walkdir (lib)",
+              "dissimilar (lib)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "time (lib)",
+              "anyhow (lib)",
+              "inotify (lib)",
+              "serde_spanned (lib)",
+              "toml_parser (lib)",
+              "toolchain (lib)",
+              "toml_datetime (lib)",
+              "cargo_platform (lib)",
+              "build-script-build (custom-build)",
+              "toml_writer (lib)",
+              "mio (lib)",
+              "petgraph (lib)",
+              "unicase (lib)",
+              "synstructure (lib)",
+              "notify_types (lib)",
+              "option_ext (lib)",
+              "build-script-build (custom-build)",
+              "anstyle (lib)",
+              "simd_adler32 (lib)",
+              "adler2 (lib)",
+              "clap_lex (lib)",
+              "crc32fast (lib)",
+              "memchr (lib)",
+              "dirs_sys (lib)",
+              "xflags_macros (proc-macro)",
+              "serde_core (lib)",
+              "tracing_tree (lib)",
+              "syn (lib)",
+              "notify (lib)",
+              "tracing_subscriber (lib)",
+              "semver (lib)",
+              "camino (lib)",
+              "syn (lib)",
+              "pulldown_cmark (lib)",
+              "toml (lib)",
+              "ra_ap_rustc_index_macros (proc-macro)",
+              "ra_ap_rustc_index (lib)",
+              "serde_json (lib)",
+              "yoke_derive (proc-macro)",
+              "miniz_oxide (lib)",
+              "tracing_attributes (proc-macro)",
+              "nix (lib)",
+              "zerofrom_derive (proc-macro)",
+              "zerofrom (lib)",
+              "zerovec_derive (proc-macro)",
+              "ra_ap_rustc_type_ir_macros (proc-macro)",
+              "tracing (lib)",
+              "yoke (lib)",
+              "thiserror_impl (proc-macro)",
+              "displaydoc (proc-macro)",
+              "thiserror (lib)",
+              "zerotrie (lib)",
+              "macros (proc-macro)",
+              "zerovec (lib)",
+              "ra_ap_rustc_pattern_analysis (lib)",
+              "ra_ap_rustc_abi (lib)",
+              "tinystr (lib)",
+              "potential_utf (lib)",
+              "cobs (lib)",
+              "thiserror_impl (proc-macro)",
+              "clap_builder (lib)",
+              "thiserror (lib)",
+              "salsa_macros (proc-macro)",
+              "cargo_platform (lib)",
+              "xflags (lib)",
+              "pulldown_cmark_to_cmark (lib)",
+              "icu_collections (lib)",
+              "protobuf_support (lib)",
+              "stdx (lib)",
+              "dot (lib)",
+              "parser (lib)",
+              "serde_derive (proc-macro)",
+              "clap (lib)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "process_wrap (lib)",
+              "test_utils (lib)",
+              "dirs (lib)",
+              "vfs (lib)",
+              "icu_provider (lib)",
+              "icu_locale_core (lib)",
+              "write_json (lib)",
+              "tenthash (lib)",
+              "flate2 (lib)",
+              "num_cpus (lib)",
+              "base64 (lib)",
+              "build-script-build (custom-build)",
+              "serde (lib)",
+              "serde (lib)",
+              "xshell_macros (proc-macro)",
+              "vfs_notify (lib)",
+              "icu_normalizer (lib)",
+              "triomphe (lib)",
+              "postcard (lib)",
+              "xshell (lib)",
+              "idna_adapter (lib)",
+              "zip (lib)",
+              "icu_properties (lib)",
+              "lsp_server (lib)",
+              "proc_macro_srv (lib)",
+              "ungrammar (lib)",
+              "ungrammar (lib)",
+              "idna (lib)",
+              "cargo_metadata (lib)",
+              "line_index (lib)",
+              "cargo_metadata (lib)",
+              "ra_ap_rustc_type_ir (lib)",
+              "ungrammar2json (bin)",
+              "url (lib)",
+              "la_arena (lib)",
+              "text_size (lib)",
+              "smol_str (lib)",
+              "build-script-build (custom-build)",
+              "proc_macro_test (lib)",
+              "lsp_server (lib)",
+              "scip (lib)",
+              "ra_ap_rustc_next_trait_solver (lib)",
+              "salsa (lib)",
+              "intern (lib)",
+              "protobuf (lib)",
+              "xtask (bin)",
+              "span (lib)",
+              "syntax (lib)",
+              "tt (lib)",
+              "syntax_bridge (lib)",
+              "cfg (lib)",
+              "mbe (lib)",
+              "proc_macro_srv_cli (lib)",
+              "proc_macro_api (lib)",
+              "base_db (lib)",
+              "rust-analyzer-proc-macro-srv (bin)",
+              "test_fixture (lib)",
+              "project_model (lib)",
+              "hir_expand (lib)",
+              "gen_lsp_types (lib)",
+              "hir_def (lib)",
+              "hir_ide (lib)",
+              "hir_ty (lib)",
+              "hir (lib)",
+              "load_cargo (lib)",
+              "ide_ssr (lib)",
+              "ide_db (lib)",
+              "ide_diagnostics (lib)",
+              "ide_completion (lib)",
+              "ide_assists (lib)",
+              "ide (lib)",
+              "rust_analyzer (lib)",
+              "rust-analyzer (bin)"
+            ],
+            "verify": null,
+            "kache": null,
+            "agents": null,
+            "ferry_report": {
+              "base": {
+                "id": "0c4d74686b21f2b3bd8872b6d3cf36ad2e740d49-42c69dbf",
+                "commit": "0c4d74686b21f2b3bd8872b6d3cf36ad2e740d49",
+                "created_unix": 1793079035,
+                "build_secs": 60.649162025,
+                "freshness": "mtime",
+                "isolation": "namespace",
+                "toolchain": {
+                  "release": "1.99.0",
+                  "channel": "stable",
+                  "host": "x86_64-unknown-linux-gnu",
+                  "rustc_verbose": "rustc 1.99.0 (b940084d7 2026-09-28)\nbinary: rustc\ncommit-hash: b940084d7eb6a299eb4bfeb8e34901bc051e7ac4\ncommit-date: 2026-09-28\nhost: x86_64-unknown-linux-gnu\nrelease: 1.99.0\nLLVM version: 23.1.1",
+                  "cargo_version": "cargo 1.99.0 (5f94df478 2026-08-27)"
+                },
+                "commands": [
+                  "cargo build  --message-format=json"
+                ],
+                "ferry_version": "0.1.2",
+                "dirtied": [],
+                "remap_paths": false,
+                "unit_inputs": "458dc235d2f1fcbc",
+                "seeded_from": null,
+                "command_secs": [
+                  60.227416426
+                ],
+                "incomplete": [],
+                "observed": true,
+                "pruned": null
+              },
+              "reused": false,
+              "warnings": []
+            }
+          },
+          {
+            "crates": 281,
+            "crate_list": [
+              "equivalent (lib)",
+              "stable_deref_trait (lib)",
+              "unicode_ident (lib)",
+              "pin_project_lite (lib)",
+              "cfg_if (lib)",
+              "once_cell (lib)",
+              "foldhash (lib)",
+              "build-script-build (custom-build)",
+              "smallvec (lib)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "rustc_hash (lib)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "allocator_api2 (lib)",
+              "either (lib)",
+              "jod_thread (lib)",
+              "itoa (lib)",
+              "autocfg (lib)",
+              "build-script-build (custom-build)",
+              "tracing_core (lib)",
+              "crossbeam_utils (lib)",
+              "build-script-build (custom-build)",
+              "memchr (lib)",
+              "build-script-build (custom-build)",
+              "scopeguard (lib)",
+              "build-script-build (custom-build)",
+              "text_size (lib)",
+              "memoffset (lib)",
+              "hashbrown (lib)",
+              "crossbeam_epoch (lib)",
+              "quote (lib)",
+              "lock_api (lib)",
+              "proc_macro2 (lib)",
+              "crossbeam_channel (lib)",
+              "unicode_properties (lib)",
+              "nohash_hasher (lib)",
+              "crossbeam_deque (lib)",
+              "rustc_literal_escaper (lib)",
+              "build-script-build (custom-build)",
+              "bitflags (lib)",
+              "build-script-build (custom-build)",
+              "edition (lib)",
+              "ra_ap_rustc_lexer (lib)",
+              "thin_vec (lib)",
+              "drop_bomb (lib)",
+              "hashbrown (lib)",
+              "rustc_hash (lib)",
+              "arrayvec (lib)",
+              "countme (lib)",
+              "build-script-build (custom-build)",
+              "typeid (lib)",
+              "fst (lib)",
+              "hashlink (lib)",
+              "libc (lib)",
+              "itertools (lib)",
+              "rayon_core (lib)",
+              "inventory (lib)",
+              "intrusive_collections (lib)",
+              "crossbeam_queue (lib)",
+              "salsa_macro_rules (lib)",
+              "parking_lot_core (lib)",
+              "build-script-build (custom-build)",
+              "portable_atomic (lib)",
+              "boxcar (lib)",
+              "la_arena (lib)",
+              "smol_str (lib)",
+              "log (lib)",
+              "build-script-build (custom-build)",
+              "parking_lot (lib)",
+              "zmij (lib)",
+              "powerfmt (lib)",
+              "rustc_stable_hash (lib)",
+              "num_threads (lib)",
+              "dashmap (lib)",
+              "time_core (lib)",
+              "ra_ap_rustc_hashes (lib)",
+              "num_conv (lib)",
+              "lazy_static (lib)",
+              "build-script-build (custom-build)",
+              "serde_core (lib)",
+              "cov_mark (lib)",
+              "build-script-build (custom-build)",
+              "camino (lib)",
+              "semver (lib)",
+              "ena (lib)",
+              "winnow (lib)",
+              "tracing_log (lib)",
+              "rustc_apfloat (lib)",
+              "ra_ap_rustc_ast_ir (lib)",
+              "sharded_slab (lib)",
+              "thread_local (lib)",
+              "indexmap (lib)",
+              "paths (lib)",
+              "foldhash (lib)",
+              "perf_event_open_sys (lib)",
+              "oorandom (lib)",
+              "ra_ap_rustc_parse_format (lib)",
+              "deranged (lib)",
+              "fixedbitset (lib)",
+              "nu_ansi_term (lib)",
+              "typed_arena (lib)",
+              "perf_event (lib)",
+              "writeable (lib)",
+              "build-script-build (custom-build)",
+              "hashbrown (lib)",
+              "litemap (lib)",
+              "profile (lib)",
+              "build-script-build (custom-build)",
+              "utf8_iter (lib)",
+              "build-script-build (custom-build)",
+              "icu_normalizer_data (lib)",
+              "rayon (lib)",
+              "line_index (lib)",
+              "icu_properties_data (lib)",
+              "inotify_sys (lib)",
+              "build-script-build (custom-build)",
+              "same_file (lib)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "rowan (lib)",
+              "percent_encoding (lib)",
+              "cfg_aliases (lib)",
+              "build-script-build (custom-build)",
+              "dissimilar (lib)",
+              "serde_json (lib)",
+              "form_urlencoded (lib)",
+              "winnow (lib)",
+              "time (lib)",
+              "build-script-build (custom-build)",
+              "walkdir (lib)",
+              "synstructure (lib)",
+              "toolchain (lib)",
+              "anyhow (lib)",
+              "build-script-build (custom-build)",
+              "serde_spanned (lib)",
+              "inotify (lib)",
+              "cargo_platform (lib)",
+              "toml_datetime (lib)",
+              "build-script-build (custom-build)",
+              "mio (lib)",
+              "toml_parser (lib)",
+              "build-script-build (custom-build)",
+              "toml_writer (lib)",
+              "notify_types (lib)",
+              "option_ext (lib)",
+              "unicase (lib)",
+              "anstyle (lib)",
+              "simd_adler32 (lib)",
+              "petgraph (lib)",
+              "adler2 (lib)",
+              "clap_lex (lib)",
+              "dirs_sys (lib)",
+              "tracing_tree (lib)",
+              "memchr (lib)",
+              "crc32fast (lib)",
+              "serde_core (lib)",
+              "syn (lib)",
+              "tracing_subscriber (lib)",
+              "xflags_macros (proc-macro)",
+              "cargo_platform (lib)",
+              "notify (lib)",
+              "camino (lib)",
+              "syn (lib)",
+              "ra_ap_rustc_index_macros (proc-macro)",
+              "pulldown_cmark (lib)",
+              "toml (lib)",
+              "ra_ap_rustc_index (lib)",
+              "zerofrom_derive (proc-macro)",
+              "tracing_attributes (proc-macro)",
+              "yoke_derive (proc-macro)",
+              "ra_ap_rustc_type_ir_macros (proc-macro)",
+              "zerofrom (lib)",
+              "displaydoc (proc-macro)",
+              "zerovec_derive (proc-macro)",
+              "tracing (lib)",
+              "yoke (lib)",
+              "nix (lib)",
+              "miniz_oxide (lib)",
+              "zerotrie (lib)",
+              "ra_ap_rustc_pattern_analysis (lib)",
+              "thiserror_impl (proc-macro)",
+              "zerovec (lib)",
+              "thiserror (lib)",
+              "macros (proc-macro)",
+              "tinystr (lib)",
+              "potential_utf (lib)",
+              "ra_ap_rustc_abi (lib)",
+              "cobs (lib)",
+              "clap_builder (lib)",
+              "derive_where (proc-macro)",
+              "semver (lib)",
+              "icu_collections (lib)",
+              "salsa_macros (proc-macro)",
+              "pulldown_cmark_to_cmark (lib)",
+              "xflags (lib)",
+              "stdx (lib)",
+              "parser (lib)",
+              "serde_derive (proc-macro)",
+              "test_utils (lib)",
+              "build-script-build (custom-build)",
+              "vfs (lib)",
+              "thiserror_impl (proc-macro)",
+              "icu_provider (lib)",
+              "icu_locale_core (lib)",
+              "thiserror (lib)",
+              "build-script-build (custom-build)",
+              "clap (lib)",
+              "dot (lib)",
+              "dirs (lib)",
+              "serde_json (lib)",
+              "write_json (lib)",
+              "num_cpus (lib)",
+              "process_wrap (lib)",
+              "xshell_macros (proc-macro)",
+              "flate2 (lib)",
+              "protobuf_support (lib)",
+              "icu_normalizer (lib)",
+              "tenthash (lib)",
+              "serde (lib)",
+              "triomphe (lib)",
+              "serde (lib)",
+              "vfs_notify (lib)",
+              "build-script-build (custom-build)",
+              "postcard (lib)",
+              "base64 (lib)",
+              "xshell (lib)",
+              "icu_properties (lib)",
+              "idna_adapter (lib)",
+              "lsp_server (lib)",
+              "ungrammar (lib)",
+              "proc_macro_srv (lib)",
+              "ungrammar (lib)",
+              "zip (lib)",
+              "ungrammar2json (bin)",
+              "idna (lib)",
+              "cargo_metadata (lib)",
+              "la_arena (lib)",
+              "cargo_metadata (lib)",
+              "ra_ap_rustc_type_ir (lib)",
+              "text_size (lib)",
+              "line_index (lib)",
+              "url (lib)",
+              "smol_str (lib)",
+              "build-script-build (custom-build)",
+              "proc_macro_test (lib)",
+              "lsp_server (lib)",
+              "ra_ap_rustc_next_trait_solver (lib)",
+              "scip (lib)",
+              "salsa (lib)",
+              "intern (lib)",
+              "protobuf (lib)",
+              "span (lib)",
+              "xtask (bin)",
+              "syntax (lib)",
+              "tt (lib)",
+              "syntax_bridge (lib)",
+              "cfg (lib)",
+              "mbe (lib)",
+              "proc_macro_srv_cli (lib)",
+              "proc_macro_api (lib)",
+              "base_db (lib)",
+              "rust-analyzer-proc-macro-srv (bin)",
+              "test_fixture (lib)",
+              "project_model (lib)",
+              "hir_expand (lib)",
+              "gen_lsp_types (lib)",
+              "hir_def (lib)",
+              "hir_ide (lib)",
+              "hir_ty (lib)",
+              "hir (lib)",
+              "load_cargo (lib)",
+              "ide_ssr (lib)",
+              "ide_db (lib)",
+              "ide_diagnostics (lib)",
+              "ide_completion (lib)",
+              "ide_assists (lib)",
+              "ide (lib)",
+              "rust_analyzer (lib)",
+              "rust-analyzer (bin)"
+            ],
+            "verify": null,
+            "kache": null,
+            "agents": null,
+            "ferry_report": {
+              "base": {
+                "id": "0c4d74686b21f2b3bd8872b6d3cf36ad2e740d49-42c69dbf",
+                "commit": "0c4d74686b21f2b3bd8872b6d3cf36ad2e740d49",
+                "created_unix": 1793079096,
+                "build_secs": 59.48399148,
+                "freshness": "mtime",
+                "isolation": "namespace",
+                "toolchain": {
+                  "release": "1.99.0",
+                  "channel": "stable",
+                  "host": "x86_64-unknown-linux-gnu",
+                  "rustc_verbose": "rustc 1.99.0 (b940084d7 2026-09-28)\nbinary: rustc\ncommit-hash: b940084d7eb6a299eb4bfeb8e34901bc051e7ac4\ncommit-date: 2026-09-28\nhost: x86_64-unknown-linux-gnu\nrelease: 1.99.0\nLLVM version: 23.1.1",
+                  "cargo_version": "cargo 1.99.0 (5f94df478 2026-08-27)"
+                },
+                "commands": [
+                  "cargo build  --message-format=json"
+                ],
+                "ferry_version": "0.1.2",
+                "dirtied": [],
+                "remap_paths": false,
+                "unit_inputs": "458dc235d2f1fcbc",
+                "seeded_from": null,
+                "command_secs": [
+                  58.972309308
+                ],
+                "incomplete": [],
+                "observed": true,
+                "pruned": null
+              },
+              "reused": false,
+              "warnings": []
+            }
+          }
+        ],
+        "hyperfine": "hyperfine/ferry-overlay-base.json",
+        "load_before": "6.68 5.92 6.65",
+        "load_after": "5.79 6.06 6.63"
+      },
+      "concurrent": {
+        "runs": 3,
+        "times": [
+          9.90478615684,
+          45.77421711184,
+          82.56447329484
+        ],
+        "median": 45.77421711184,
+        "mean": 46.08115885450667,
+        "min": 9.90478615684,
+        "max": 82.56447329484,
+        "stddev": 36.33081603367937,
+        "exit_codes": [
+          0,
+          0,
+          0
+        ],
+        "crates": [
+          null,
+          null,
+          null
+        ],
+        "checks_ok": [
+          true,
+          true,
+          true
+        ],
+        "per_run": [
+          {
+            "crates": null,
+            "crate_list": null,
+            "verify": null,
+            "kache": null,
+            "agents": [
+              {
+                "agent": 1,
+                "rc": 0,
+                "start": 1793079260.536512443,
+                "end": 1793079270.431903976,
+                "elapsed": 9.895391702651978,
+                "crates": 9,
+                "crate_list": [
+                  "ide_ssr (lib)",
+                  "ide_db (lib)",
+                  "load_cargo (lib)",
+                  "ide_diagnostics (lib)",
+                  "ide_completion (lib)",
+                  "ide_assists (lib)",
+                  "ide (lib)",
+                  "rust_analyzer (lib)",
+                  "rust-analyzer (bin)"
+                ],
+                "build_dir_lock_waits": 0,
+                "package_cache_lock_waits": 4,
+                "verify": {
+                  "rlib": "/home/pat/Projects/ferry/bench/work/rust-analyzer/ferry/home/repo-25e595aa1344c5a4/mnt/target/debug/libide_db.rlib",
+                  "found": [
+                    "FERRY_MARK[ferry_overlay_concurrent_r0_a1]"
+                  ],
+                  "expected": [
+                    "FERRY_MARK[ferry_overlay_concurrent_r0_a1]"
+                  ],
+                  "ok": true
+                }
+              },
+              {
+                "agent": 2,
+                "rc": 0,
+                "start": 1793079260.536501143,
+                "end": 1793079270.431729055,
+                "elapsed": 9.895227909088135,
+                "crates": 9,
+                "crate_list": [
+                  "ide_ssr (lib)",
+                  "ide_db (lib)",
+                  "load_cargo (lib)",
+                  "ide_diagnostics (lib)",
+                  "ide_completion (lib)",
+                  "ide_assists (lib)",
+                  "ide (lib)",
+                  "rust_analyzer (lib)",
+                  "rust-analyzer (bin)"
+                ],
+                "build_dir_lock_waits": 0,
+                "package_cache_lock_waits": 3,
+                "verify": {
+                  "rlib": "/home/pat/Projects/ferry/bench/work/rust-analyzer/ferry/home/repo-25e595aa1344c5a4/mnt/target/debug/libide_db.rlib",
+                  "found": [
+                    "FERRY_MARK[ferry_overlay_concurrent_r0_a2]"
+                  ],
+                  "expected": [
+                    "FERRY_MARK[ferry_overlay_concurrent_r0_a2]"
+                  ],
+                  "ok": true
+                }
+              },
+              {
+                "agent": 3,
+                "rc": 0,
+                "start": 1793079260.536603114,
+                "end": 1793079270.419915651,
+                "elapsed": 9.883312463760376,
+                "crates": 9,
+                "crate_list": [
+                  "ide_db (lib)",
+                  "ide_ssr (lib)",
+                  "load_cargo (lib)",
+                  "ide_diagnostics (lib)",
+                  "ide_completion (lib)",
+                  "ide_assists (lib)",
+                  "ide (lib)",
+                  "rust_analyzer (lib)",
+                  "rust-analyzer (bin)"
+                ],
+                "build_dir_lock_waits": 0,
+                "package_cache_lock_waits": 3,
+                "verify": {
+                  "rlib": "/home/pat/Projects/ferry/bench/work/rust-analyzer/ferry/home/repo-25e595aa1344c5a4/mnt/target/debug/libide_db.rlib",
+                  "found": [
+                    "FERRY_MARK[ferry_overlay_concurrent_r0_a3]"
+                  ],
+                  "expected": [
+                    "FERRY_MARK[ferry_overlay_concurrent_r0_a3]"
+                  ],
+                  "ok": true
+                }
+              }
+            ],
+            "ferry_report": null
+          },
+          {
+            "crates": null,
+            "crate_list": null,
+            "verify": null,
+            "kache": null,
+            "agents": [
+              {
+                "agent": 1,
+                "rc": 0,
+                "start": 1793079275.433541845,
+                "end": 1793079321.197254077,
+                "elapsed": 45.76371240615845,
+                "crates": 9,
+                "crate_list": [
+                  "ide_db (lib)",
+                  "ide_ssr (lib)",
+                  "load_cargo (lib)",
+                  "ide_diagnostics (lib)",
+                  "ide_completion (lib)",
+                  "ide_assists (lib)",
+                  "ide (lib)",
+                  "rust_analyzer (lib)",
+                  "rust-analyzer (bin)"
+                ],
+                "build_dir_lock_waits": 0,
+                "package_cache_lock_waits": 3,
+                "verify": {
+                  "rlib": "/home/pat/Projects/ferry/bench/work/rust-analyzer/ferry/home/repo-25e595aa1344c5a4/mnt/target/debug/libide_db.rlib",
+                  "found": [
+                    "FERRY_MARK[ferry_overlay_concurrent_r1_a1]"
+                  ],
+                  "expected": [
+                    "FERRY_MARK[ferry_overlay_concurrent_r1_a1]"
+                  ],
+                  "ok": true
+                }
+              },
+              {
+                "agent": 2,
+                "rc": 0,
+                "start": 1793079275.433464835,
+                "end": 1793079300.584430759,
+                "elapsed": 25.150965929031372,
+                "crates": 9,
+                "crate_list": [
+                  "ide_db (lib)",
+                  "ide_ssr (lib)",
+                  "load_cargo (lib)",
+                  "ide_diagnostics (lib)",
+                  "ide_completion (lib)",
+                  "ide_assists (lib)",
+                  "ide (lib)",
+                  "rust_analyzer (lib)",
+                  "rust-analyzer (bin)"
+                ],
+                "build_dir_lock_waits": 0,
+                "package_cache_lock_waits": 3,
+                "verify": {
+                  "rlib": "/home/pat/Projects/ferry/bench/work/rust-analyzer/ferry/home/repo-25e595aa1344c5a4/mnt/target/debug/libide_db.rlib",
+                  "found": [
+                    "FERRY_MARK[ferry_overlay_concurrent_r1_a2]"
+                  ],
+                  "expected": [
+                    "FERRY_MARK[ferry_overlay_concurrent_r1_a2]"
+                  ],
+                  "ok": true
+                }
+              },
+              {
+                "agent": 3,
+                "rc": 0,
+                "start": 1793079275.433464815,
+                "end": 1793079321.053887647,
+                "elapsed": 45.62042284011841,
+                "crates": 9,
+                "crate_list": [
+                  "ide_db (lib)",
+                  "ide_ssr (lib)",
+                  "load_cargo (lib)",
+                  "ide_diagnostics (lib)",
+                  "ide_completion (lib)",
+                  "ide_assists (lib)",
+                  "ide (lib)",
+                  "rust_analyzer (lib)",
+                  "rust-analyzer (bin)"
+                ],
+                "build_dir_lock_waits": 0,
+                "package_cache_lock_waits": 4,
+                "verify": {
+                  "rlib": "/home/pat/Projects/ferry/bench/work/rust-analyzer/ferry/home/repo-25e595aa1344c5a4/mnt/target/debug/libide_db.rlib",
+                  "found": [
+                    "FERRY_MARK[ferry_overlay_concurrent_r1_a3]"
+                  ],
+                  "expected": [
+                    "FERRY_MARK[ferry_overlay_concurrent_r1_a3]"
+                  ],
+                  "ok": true
+                }
+              }
+            ],
+            "ferry_report": null
+          },
+          {
+            "crates": null,
+            "crate_list": null,
+            "verify": null,
+            "kache": null,
+            "agents": [
+              {
+                "agent": 1,
+                "rc": 0,
+                "start": 1793079359.551982400,
+                "end": 1793079442.107177360,
+                "elapsed": 82.55519509315491,
+                "crates": 9,
+                "crate_list": [
+                  "ide_ssr (lib)",
+                  "load_cargo (lib)",
+                  "ide_db (lib)",
+                  "ide_diagnostics (lib)",
+                  "ide_completion (lib)",
+                  "ide_assists (lib)",
+                  "ide (lib)",
+                  "rust_analyzer (lib)",
+                  "rust-analyzer (bin)"
+                ],
+                "build_dir_lock_waits": 0,
+                "package_cache_lock_waits": 4,
+                "verify": {
+                  "rlib": "/home/pat/Projects/ferry/bench/work/rust-analyzer/ferry/home/repo-25e595aa1344c5a4/mnt/target/debug/libide_db.rlib",
+                  "found": [
+                    "FERRY_MARK[ferry_overlay_concurrent_r2_a1]"
+                  ],
+                  "expected": [
+                    "FERRY_MARK[ferry_overlay_concurrent_r2_a1]"
+                  ],
+                  "ok": true
+                }
+              },
+              {
+                "agent": 2,
+                "rc": 0,
+                "start": 1793079359.552257171,
+                "end": 1793079442.107146790,
+                "elapsed": 82.5548894405365,
+                "crates": 9,
+                "crate_list": [
+                  "ide_ssr (lib)",
+                  "ide_db (lib)",
+                  "load_cargo (lib)",
+                  "ide_diagnostics (lib)",
+                  "ide_completion (lib)",
+                  "ide_assists (lib)",
+                  "ide (lib)",
+                  "rust_analyzer (lib)",
+                  "rust-analyzer (bin)"
+                ],
+                "build_dir_lock_waits": 0,
+                "package_cache_lock_waits": 3,
+                "verify": {
+                  "rlib": "/home/pat/Projects/ferry/bench/work/rust-analyzer/ferry/home/repo-25e595aa1344c5a4/mnt/target/debug/libide_db.rlib",
+                  "found": [
+                    "FERRY_MARK[ferry_overlay_concurrent_r2_a2]"
+                  ],
+                  "expected": [
+                    "FERRY_MARK[ferry_overlay_concurrent_r2_a2]"
+                  ],
+                  "ok": true
+                }
+              },
+              {
+                "agent": 3,
+                "rc": 0,
+                "start": 1793079359.552222011,
+                "end": 1793079406.934460162,
+                "elapsed": 47.382238149642944,
+                "crates": 9,
+                "crate_list": [
+                  "ide_ssr (lib)",
+                  "load_cargo (lib)",
+                  "ide_db (lib)",
+                  "ide_diagnostics (lib)",
+                  "ide_completion (lib)",
+                  "ide_assists (lib)",
+                  "ide (lib)",
+                  "rust_analyzer (lib)",
+                  "rust-analyzer (bin)"
+                ],
+                "build_dir_lock_waits": 0,
+                "package_cache_lock_waits": 3,
+                "verify": {
+                  "rlib": "/home/pat/Projects/ferry/bench/work/rust-analyzer/ferry/home/repo-25e595aa1344c5a4/mnt/target/debug/libide_db.rlib",
+                  "found": [
+                    "FERRY_MARK[ferry_overlay_concurrent_r2_a3]"
+                  ],
+                  "expected": [
+                    "FERRY_MARK[ferry_overlay_concurrent_r2_a3]"
+                  ],
+                  "ok": true
+                }
+              }
+            ],
+            "ferry_report": null
+          }
+        ],
+        "hyperfine": "hyperfine/ferry-overlay-concurrent.json",
+        "load_before": "4.15 5.19 6.20",
+        "load_after": "22.83 12.27 8.69"
+      },
+      "disk_after_second_edit": {
+        "path": "/home/pat/Projects/ferry/bench/work/rust-analyzer/ferry/home/repo-25e595aa1344c5a4/agents/bench/upper",
+        "du_bytes": 1989820416,
+        "btrfs_total_bytes": 1989332992,
+        "btrfs_exclusive_bytes": 1687773184,
+        "btrfs_shared_bytes": 280494080,
+        "ferry_private_bytes": 1989820416
+      },
+      "disk_after_spawn": {
+        "path": "/home/pat/Projects/ferry/bench/work/rust-analyzer/ferry/home/repo-25e595aa1344c5a4/agents/bench/upper",
+        "du_bytes": 0,
+        "btrfs_total_bytes": 0,
+        "btrfs_exclusive_bytes": 0,
+        "btrfs_shared_bytes": 0
+      },
+      "edit_on_spawn": {
+        "runs": 3,
+        "times": [
+          7.30948959244,
+          7.2758829914400005,
+          7.84696345844
+        ],
+        "median": 7.30948959244,
+        "mean": 7.477445347440001,
+        "min": 7.2758829914400005,
+        "max": 7.84696345844,
+        "stddev": 0.3204529242735187,
+        "exit_codes": [
+          0,
+          0,
+          0
+        ],
+        "crates": [
+          9,
+          9,
+          9
+        ],
+        "checks_ok": [
+          true,
+          true,
+          true
+        ],
+        "per_run": [
+          {
+            "crates": 9,
+            "crate_list": [
+              "ide_ssr (lib)",
+              "ide_db (lib)",
+              "load_cargo (lib)",
+              "ide_diagnostics (lib)",
+              "ide_completion (lib)",
+              "ide_assists (lib)",
+              "ide (lib)",
+              "rust_analyzer (lib)",
+              "rust-analyzer (bin)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/rust-analyzer/ferry/home/repo-25e595aa1344c5a4/mnt/target/debug/libide_db.rlib",
+              "found": [
+                "FERRY_MARK[ferry_overlay_edit_on_spawn_r0]"
+              ],
+              "expected": [
+                "FERRY_MARK[ferry_overlay_edit_on_spawn_r0]"
+              ],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          },
+          {
+            "crates": 9,
+            "crate_list": [
+              "ide_ssr (lib)",
+              "ide_db (lib)",
+              "load_cargo (lib)",
+              "ide_diagnostics (lib)",
+              "ide_completion (lib)",
+              "ide_assists (lib)",
+              "ide (lib)",
+              "rust_analyzer (lib)",
+              "rust-analyzer (bin)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/rust-analyzer/ferry/home/repo-25e595aa1344c5a4/mnt/target/debug/libide_db.rlib",
+              "found": [
+                "FERRY_MARK[ferry_overlay_edit_on_spawn_r1]"
+              ],
+              "expected": [
+                "FERRY_MARK[ferry_overlay_edit_on_spawn_r1]"
+              ],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          },
+          {
+            "crates": 9,
+            "crate_list": [
+              "ide_ssr (lib)",
+              "load_cargo (lib)",
+              "ide_db (lib)",
+              "ide_diagnostics (lib)",
+              "ide_completion (lib)",
+              "ide_assists (lib)",
+              "ide (lib)",
+              "rust_analyzer (lib)",
+              "rust-analyzer (bin)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/rust-analyzer/ferry/home/repo-25e595aa1344c5a4/mnt/target/debug/libide_db.rlib",
+              "found": [
+                "FERRY_MARK[ferry_overlay_edit_on_spawn_r2]"
+              ],
+              "expected": [
+                "FERRY_MARK[ferry_overlay_edit_on_spawn_r2]"
+              ],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          }
+        ],
+        "hyperfine": "hyperfine/ferry-overlay-edit_on_spawn.json",
+        "load_before": "5.48 5.99 6.61",
+        "load_after": "5.20 5.83 6.53"
+      },
+      "first_edit": {
+        "runs": 3,
+        "times": [
+          7.78730993082,
+          8.411579853820001,
+          7.15148486282
+        ],
+        "median": 7.78730993082,
+        "mean": 7.7834582158200005,
+        "min": 7.15148486282,
+        "max": 8.411579853820001,
+        "stddev": 0.6300563255512589,
+        "exit_codes": [
+          0,
+          0,
+          0
+        ],
+        "crates": [
+          9,
+          9,
+          9
+        ],
+        "checks_ok": [
+          true,
+          true,
+          true
+        ],
+        "per_run": [
+          {
+            "crates": 9,
+            "crate_list": [
+              "ide_ssr (lib)",
+              "ide_db (lib)",
+              "load_cargo (lib)",
+              "ide_diagnostics (lib)",
+              "ide_completion (lib)",
+              "ide_assists (lib)",
+              "ide (lib)",
+              "rust_analyzer (lib)",
+              "rust-analyzer (bin)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/rust-analyzer/ferry/home/repo-25e595aa1344c5a4/mnt/target/debug/libide_db.rlib",
+              "found": [
+                "FERRY_MARK[ferry_overlay_first_edit_r0]"
+              ],
+              "expected": [
+                "FERRY_MARK[ferry_overlay_first_edit_r0]"
+              ],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          },
+          {
+            "crates": 9,
+            "crate_list": [
+              "ide_ssr (lib)",
+              "load_cargo (lib)",
+              "ide_db (lib)",
+              "ide_diagnostics (lib)",
+              "ide_completion (lib)",
+              "ide_assists (lib)",
+              "ide (lib)",
+              "rust_analyzer (lib)",
+              "rust-analyzer (bin)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/rust-analyzer/ferry/home/repo-25e595aa1344c5a4/mnt/target/debug/libide_db.rlib",
+              "found": [
+                "FERRY_MARK[ferry_overlay_first_edit_r1]"
+              ],
+              "expected": [
+                "FERRY_MARK[ferry_overlay_first_edit_r1]"
+              ],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          },
+          {
+            "crates": 9,
+            "crate_list": [
+              "ide_ssr (lib)",
+              "load_cargo (lib)",
+              "ide_db (lib)",
+              "ide_diagnostics (lib)",
+              "ide_completion (lib)",
+              "ide_assists (lib)",
+              "ide (lib)",
+              "rust_analyzer (lib)",
+              "rust-analyzer (bin)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/rust-analyzer/ferry/home/repo-25e595aa1344c5a4/mnt/target/debug/libide_db.rlib",
+              "found": [
+                "FERRY_MARK[ferry_overlay_first_edit_r2]"
+              ],
+              "expected": [
+                "FERRY_MARK[ferry_overlay_first_edit_r2]"
+              ],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          }
+        ],
+        "hyperfine": "hyperfine/ferry-overlay-first_edit.json",
+        "load_before": "5.20 5.83 6.53",
+        "load_after": "3.61 5.38 6.36"
+      },
+      "second_edit": {
+        "runs": 3,
+        "times": [
+          47.62989432426,
+          7.2199382842599995,
+          7.29472856326
+        ],
+        "median": 7.29472856326,
+        "mean": 20.71485372392667,
+        "min": 7.2199382842599995,
+        "max": 47.62989432426,
+        "stddev": 23.309138900539676,
+        "exit_codes": [
+          0,
+          0,
+          0
+        ],
+        "crates": [
+          9,
+          9,
+          9
+        ],
+        "checks_ok": [
+          true,
+          true,
+          true
+        ],
+        "per_run": [
+          {
+            "crates": 9,
+            "crate_list": [
+              "ide_ssr (lib)",
+              "ide_db (lib)",
+              "load_cargo (lib)",
+              "ide_diagnostics (lib)",
+              "ide_completion (lib)",
+              "ide_assists (lib)",
+              "ide (lib)",
+              "rust_analyzer (lib)",
+              "rust-analyzer (bin)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/rust-analyzer/ferry/home/repo-25e595aa1344c5a4/mnt/target/debug/libide_db.rlib",
+              "found": [
+                "FERRY_MARK[ferry_overlay_second_edit_r0_a]",
+                "FERRY_MARK[ferry_overlay_second_edit_r0_b]"
+              ],
+              "expected": [
+                "FERRY_MARK[ferry_overlay_second_edit_r0_a]",
+                "FERRY_MARK[ferry_overlay_second_edit_r0_b]"
+              ],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          },
+          {
+            "crates": 9,
+            "crate_list": [
+              "ide_ssr (lib)",
+              "ide_db (lib)",
+              "load_cargo (lib)",
+              "ide_diagnostics (lib)",
+              "ide_completion (lib)",
+              "ide_assists (lib)",
+              "ide (lib)",
+              "rust_analyzer (lib)",
+              "rust-analyzer (bin)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/rust-analyzer/ferry/home/repo-25e595aa1344c5a4/mnt/target/debug/libide_db.rlib",
+              "found": [
+                "FERRY_MARK[ferry_overlay_second_edit_r1_a]",
+                "FERRY_MARK[ferry_overlay_second_edit_r1_b]"
+              ],
+              "expected": [
+                "FERRY_MARK[ferry_overlay_second_edit_r1_a]",
+                "FERRY_MARK[ferry_overlay_second_edit_r1_b]"
+              ],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          },
+          {
+            "crates": 9,
+            "crate_list": [
+              "ide_ssr (lib)",
+              "ide_db (lib)",
+              "load_cargo (lib)",
+              "ide_diagnostics (lib)",
+              "ide_completion (lib)",
+              "ide_assists (lib)",
+              "ide (lib)",
+              "rust_analyzer (lib)",
+              "rust-analyzer (bin)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/rust-analyzer/ferry/home/repo-25e595aa1344c5a4/mnt/target/debug/libide_db.rlib",
+              "found": [
+                "FERRY_MARK[ferry_overlay_second_edit_r2_a]",
+                "FERRY_MARK[ferry_overlay_second_edit_r2_b]"
+              ],
+              "expected": [
+                "FERRY_MARK[ferry_overlay_second_edit_r2_a]",
+                "FERRY_MARK[ferry_overlay_second_edit_r2_b]"
+              ],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          }
+        ],
+        "hyperfine": "hyperfine/ferry-overlay-second_edit.json",
+        "load_before": "3.61 5.38 6.36",
+        "load_after": "4.15 5.19 6.20"
+      },
+      "spawn_build": {
+        "runs": 3,
+        "times": [
+          0.24167724286000003,
+          0.24454501586000002,
+          0.23876542886000002
+        ],
+        "median": 0.24167724286000003,
+        "mean": 0.2416625625266667,
+        "min": 0.23876542886000002,
+        "max": 0.24454501586000002,
+        "stddev": 0.002889821466247066,
+        "exit_codes": [
+          0,
+          0,
+          0
+        ],
+        "crates": [
+          0,
+          0,
+          0
+        ],
+        "checks_ok": [
+          true,
+          true,
+          true
+        ],
+        "per_run": [
+          {
+            "crates": 0,
+            "crate_list": [],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/rust-analyzer/ferry/home/repo-25e595aa1344c5a4/mnt/target/debug/libide_db.rlib",
+              "found": [],
+              "expected": [],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          },
+          {
+            "crates": 0,
+            "crate_list": [],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/rust-analyzer/ferry/home/repo-25e595aa1344c5a4/mnt/target/debug/libide_db.rlib",
+              "found": [],
+              "expected": [],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          },
+          {
+            "crates": 0,
+            "crate_list": [],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/rust-analyzer/ferry/home/repo-25e595aa1344c5a4/mnt/target/debug/libide_db.rlib",
+              "found": [],
+              "expected": [],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          }
+        ],
+        "hyperfine": "hyperfine/ferry-overlay-spawn_build.json",
+        "load_before": "5.48 5.99 6.61",
+        "load_after": "5.48 5.99 6.61"
+      },
+      "spawn": {
+        "runs": 3,
+        "times": [
+          0.43401033328000005,
+          0.44371585028000005,
+          0.44388661028000004
+        ],
+        "median": 0.44371585028000005,
+        "mean": 0.44053759794666675,
+        "min": 0.43401033328000005,
+        "max": 0.44388661028000004,
+        "stddev": 0.00565342177499046,
+        "exit_codes": [
+          0,
+          0,
+          0
+        ],
+        "crates": [
+          null,
+          null,
+          null
+        ],
+        "checks_ok": [
+          null,
+          null,
+          null
+        ],
+        "per_run": [
+          {
+            "crates": null,
+            "crate_list": null,
+            "verify": null,
+            "kache": null,
+            "agents": null,
+            "ferry_report": {
+              "agent": {
+                "name": "bench",
+                "state": "ready",
+                "base": "0c4d74686b21f2b3bd8872b6d3cf36ad2e740d49-42c69dbf",
+                "from": "0c4d74686b21f2b3bd8872b6d3cf36ad2e740d49",
+                "branch": "ferry/bench",
+                "worktree": "/home/pat/Projects/ferry/bench/work/rust-analyzer/ferry/wt/repo-25e595aa1344c5a4/bench",
+                "backend": "overlay",
+                "isolation": "namespace",
+                "freshness": "mtime",
+                "created_unix": 1793079098,
+                "stamp": {
+                  "tracked": 2363,
+                  "stamped": 2360,
+                  "skipped": 3,
+                  "dirs": 250,
+                  "dirs_stamped": 250
+                },
+                "origin": "cli"
+              },
+              "backend_reason": "overlayfs works in the namespace sandbox on btrfs",
+              "fork": {
+                "files": 0,
+                "bytes": 0,
+                "elapsed_secs": 0.0000332
+              },
+              "elapsed_secs": 0.428426531,
+              "warnings": []
+            }
+          },
+          {
+            "crates": null,
+            "crate_list": null,
+            "verify": null,
+            "kache": null,
+            "agents": null,
+            "ferry_report": {
+              "agent": {
+                "name": "bench",
+                "state": "ready",
+                "base": "0c4d74686b21f2b3bd8872b6d3cf36ad2e740d49-42c69dbf",
+                "from": "0c4d74686b21f2b3bd8872b6d3cf36ad2e740d49",
+                "branch": "ferry/bench",
+                "worktree": "/home/pat/Projects/ferry/bench/work/rust-analyzer/ferry/wt/repo-25e595aa1344c5a4/bench",
+                "backend": "overlay",
+                "isolation": "namespace",
+                "freshness": "mtime",
+                "created_unix": 1793079098,
+                "stamp": {
+                  "tracked": 2363,
+                  "stamped": 2360,
+                  "skipped": 3,
+                  "dirs": 250,
+                  "dirs_stamped": 250
+                },
+                "origin": "cli"
+              },
+              "backend_reason": "overlayfs works in the namespace sandbox on btrfs",
+              "fork": {
+                "files": 0,
+                "bytes": 0,
+                "elapsed_secs": 0.00004079
+              },
+              "elapsed_secs": 0.437843376,
+              "warnings": []
+            }
+          },
+          {
+            "crates": null,
+            "crate_list": null,
+            "verify": null,
+            "kache": null,
+            "agents": null,
+            "ferry_report": {
+              "agent": {
+                "name": "bench",
+                "state": "ready",
+                "base": "0c4d74686b21f2b3bd8872b6d3cf36ad2e740d49-42c69dbf",
+                "from": "0c4d74686b21f2b3bd8872b6d3cf36ad2e740d49",
+                "branch": "ferry/bench",
+                "worktree": "/home/pat/Projects/ferry/bench/work/rust-analyzer/ferry/wt/repo-25e595aa1344c5a4/bench",
+                "backend": "overlay",
+                "isolation": "namespace",
+                "freshness": "mtime",
+                "created_unix": 1793079099,
+                "stamp": {
+                  "tracked": 2363,
+                  "stamped": 2360,
+                  "skipped": 3,
+                  "dirs": 250,
+                  "dirs_stamped": 250
+                },
+                "origin": "cli"
+              },
+              "backend_reason": "overlayfs works in the namespace sandbox on btrfs",
+              "fork": {
+                "files": 0,
+                "bytes": 0,
+                "elapsed_secs": 0.00003653
+              },
+              "elapsed_secs": 0.43845822,
+              "warnings": []
+            }
+          }
+        ],
+        "hyperfine": "hyperfine/ferry-overlay-spawn.json",
+        "load_before": "5.79 6.06 6.63",
+        "load_after": "5.48 5.99 6.61"
+      }
+    }
+  }
+}

@@ -68,23 +68,32 @@ machine supports.
 
 ## How fast
 
-ripgrep, a new agent's first edit and build:
+- A new agent's **first build: 0.2 to 0.5 s** where a new worktree takes 71 to
+  92 s. That's **170× to 430× faster** on rust-analyzer, polars and uv
+  (ruff: 3.2 s against 132 s, 41×).
+- Its **first edit: 6× to 36× faster** than in a new worktree:
 
 <!-- bench:start -->
-| New agent, then one edit | Time | |
-|---|---:|---:|
-| New git worktree, cold | 7.06 s | |
-| Copied warm target dir | 3.67 s | |
-| kache, warm cache | 2.86 s | |
-| **Ferry** | **1.13 s** | **6.2× faster than cold** |
+| A new agent's first edit | Build units | New `git worktree` | kache | **Ferry** | |
+|---|---:|---:|---:|---:|---:|
+| ruff | 505 | 142 s | 40.3 s | **10.0 s** | **14×** |
+| uv | 624 | 79.5 s | 40.6 s | **9.0 s** | **8.8×** |
+| rust-analyzer | 281 | 74.0 s | 26.0 s | **7.7 s** | **9.6×** |
+| polars | 212 | 71.0 s | 9.6 s | **2.0 s** | **36×** |
+| ripgrep | 44 | 7.1 s | 2.9 s | **1.1 s** | **6.3×** |
 <!-- bench:end -->
 
-- The agent's first build without an edit: **0.06 s**, 0 crates compiled.
-- Three agents with different edits building at once: **1.41 s**, against
-  6.66 s for three worktrees sharing one target dir.
+- **Refreshing the base after a commit:** 3 to 14 s on the large workspaces,
+  seeded from the previous
+  base, against 71 to 163 s cold.
+- **Later edits aren't faster.** Once an agent has built, an edit takes about
+  as long as in any warm checkout. Ferry's gain is in starting agents.
 
-Measured on a 6-core Ryzen 3600X, btrfs, rustc 1.99. Every scenario, step and
-machine detail: [benchmarks](https://patwrall.github.io/ferry/benchmarks.html).
+<img src="bench/results/chart.svg" alt="Chart: a new agent's first edit with a new git worktree, a copied target, kache and Ferry, for ripgrep, rust-analyzer, polars, uv and ruff" width="760">
+
+Medians on a 6-core Ryzen 3600X with btrfs and rustc 1.99 (polars: its pinned
+nightly), Ferry 0.1.2 (ripgrep: an earlier build). Every scenario and step:
+[benchmarks](https://patwrall.github.io/ferry/benchmarks.html).
 
 ## How it works
 

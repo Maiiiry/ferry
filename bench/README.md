@@ -207,6 +207,17 @@ depend on the runner label (`env.json` records them for each run), so:
   a much larger share of the workspace's compile time); a crate near the top
   such as `ide` rebuilds only itself and `rust-analyzer`.
 
+- **uv** at `f8bec5e` (astral-sh/uv, 2026-10-27), edit
+  `crates/uv-resolver/src/lib.rs`. 624 units cold; the edit rebuilds 15.
+- **ruff** at `8aeb8e2` (astral-sh/ruff, 2026-10-26), edit
+  `crates/ruff_linter/src/lib.rs`. 505 units cold; the edit rebuilds 14. Its
+  build needs `make` (tikv-jemalloc-sys), as uv's does.
+- **polars** at `d0a98d9` (pola-rs/polars, 2026-10-26), edit
+  `crates/polars-lazy/src/lib.rs`, `--build-args "-p polars-sql"` (the
+  workspace root also builds Python bindings). 212 units cold. It pins
+  `nightly-2026-09-01`; run it through rustup's proxies so that toolchain
+  is used.
+
 ## Caveats
 
 - This is a desktop machine (a btrfs `/home` with zstd compression, other

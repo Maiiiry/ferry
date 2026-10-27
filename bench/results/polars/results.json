@@ -1,0 +1,3226 @@
+{
+  "schema": 1,
+  "name": "polars",
+  "workspace": {
+    "source": "/home/pat/Projects/ferry/target/probe/polars",
+    "commit": "d0a98d9c509ddad852337db66261d2d16f1a419e",
+    "edit_file": "crates/polars-lazy/src/lib.rs",
+    "edit_package": "polars-lazy",
+    "edit_crate_root": "crates/polars-lazy/src/lib.rs",
+    "build_command": "cargo build -p polars-sql"
+  },
+  "runs": 2,
+  "cold_runs": 1,
+  "agents": 3,
+  "scenarios_selected": [
+    "cold",
+    "naive",
+    "kache",
+    "ferry-reflink",
+    "refresh"
+  ],
+  "env": {
+    "date": "2026-10-27T05:47:19Z",
+    "cpu_model": "AMD Ryzen 5 3600X 6-Core Processor",
+    "logical_cpus": 12,
+    "physical_cores": 6,
+    "cpu_governor": "powersave",
+    "ram_bytes": 33576783872,
+    "mem_available_bytes": 28782284800,
+    "swap_used_bytes": 1231855616,
+    "os": "NixOS 26.11 (Zokor)",
+    "bench_fs": "btrfs",
+    "bench_mount": {
+      "target": "/home",
+      "source": "/dev/nvme1n1p3[/@home]",
+      "fstype": "btrfs",
+      "options": "rw,noatime,nodiratime,compress=zstd:1,ssd,discard=async,space_cache=v2,subvolid=257,subvol=/@home"
+    },
+    "kernel": "6.18.55",
+    "bench_free_bytes": 30497792000,
+    "rustc": "rustc 1.100.0-nightly (0dfb098f3 2026-08-31)\nbinary: rustc\ncommit-hash: 0dfb098f3aeecbe38c2566ca090193280e7349e7\ncommit-date: 2026-08-31\nhost: x86_64-unknown-linux-gnu\nrelease: 1.100.0-nightly\nLLVM version: 23.1.0",
+    "cargo": "cargo 1.100.0-nightly (e8cb624d5 2026-08-22)",
+    "ferry": "ferry 0.1.2",
+    "ferry_path": "/home/pat/Projects/ferry/target/release/ferry",
+    "ferry_commit": "24e0b9f0fa75efd09c3921392f40b32c576bc8d3",
+    "ferry_source_dirty": false,
+    "kache": "kache 1.2.2",
+    "hyperfine": "hyperfine 1.21.0",
+    "git": "git version 2.55.0",
+    "cp": "cp (GNU coreutils) 9.11",
+    "btrfs_progs": "btrfs-progs v7.1",
+    "bash": "5.3.15(1)-release",
+    "jq": "jq-1.8.2",
+    "ci": null,
+    "loadavg_before": "9.05 10.28 9.31",
+    "loadavg_after": "4.10 4.95 6.23",
+    "mem_available_after_bytes": 28708773888,
+    "swap_used_after_bytes": 1230704640,
+    "date_end": "2026-10-27T06:04:44Z",
+    "idle_note": "idle means no other heavy jobs; judge from loadavg_before/after (1, 5, 15 min) against logical_cpus"
+  },
+  "scenarios": {
+    "cold": {
+      "edit_on_spawn": {
+        "runs": 1,
+        "times": [
+          71.01254791642
+        ],
+        "median": 71.01254791642,
+        "mean": 71.01254791642,
+        "min": 71.01254791642,
+        "max": 71.01254791642,
+        "stddev": null,
+        "exit_codes": [
+          0
+        ],
+        "crates": [
+          212
+        ],
+        "checks_ok": [
+          true
+        ],
+        "per_run": [
+          {
+            "crates": 212,
+            "crate_list": [
+              "cfg_if (lib)",
+              "unicode_ident (lib)",
+              "shlex (lib)",
+              "find_msvc_tools (lib)",
+              "version_check (lib)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "equivalent (lib)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "cpufeatures (lib)",
+              "build-script-build (custom-build)",
+              "autocfg (lib)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "allocator_api2 (lib)",
+              "build-script-build (custom-build)",
+              "foldhash (lib)",
+              "memchr (lib)",
+              "pkg_config (lib)",
+              "crossbeam_utils (lib)",
+              "build-script-build (custom-build)",
+              "memchr (lib)",
+              "rand_core (lib)",
+              "proc_macro2 (lib)",
+              "crossbeam_epoch (lib)",
+              "smallvec (lib)",
+              "quote (lib)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "array_init_cursor (lib)",
+              "scopeguard (lib)",
+              "hashbrown (lib)",
+              "build-script-build (custom-build)",
+              "libc (lib)",
+              "errno (lib)",
+              "lock_api (lib)",
+              "parking_lot_core (lib)",
+              "jobserver (lib)",
+              "libm (lib)",
+              "signal_hook_registry (lib)",
+              "futures_sink (lib)",
+              "crossbeam_deque (lib)",
+              "pin_project_lite (lib)",
+              "futures_core (lib)",
+              "num_traits (lib)",
+              "build-script-build (custom-build)",
+              "futures_channel (lib)",
+              "planus (lib)",
+              "getrandom (lib)",
+              "signal_hook (lib)",
+              "futures_io (lib)",
+              "parking_lot (lib)",
+              "build-script-build (custom-build)",
+              "rayon_core (lib)",
+              "slab (lib)",
+              "simdutf8 (lib)",
+              "aho_corasick (lib)",
+              "either (lib)",
+              "futures_task (lib)",
+              "rustversion (proc-macro)",
+              "foldhash (lib)",
+              "chacha20 (lib)",
+              "build-script-build (custom-build)",
+              "castaway (lib)",
+              "serde_core (lib)",
+              "build-script-build (custom-build)",
+              "cc (lib)",
+              "itoa (lib)",
+              "mio (lib)",
+              "socket2 (lib)",
+              "ryu (lib)",
+              "rand (lib)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "static_assertions (lib)",
+              "bitflags (lib)",
+              "regex_syntax (lib)",
+              "sysinfo (lib)",
+              "memmap2 (lib)",
+              "uuid (lib)",
+              "slotmap (lib)",
+              "iana_time_zone (lib)",
+              "build-script-build (custom-build)",
+              "heck (lib)",
+              "siphasher (lib)",
+              "build-script-build (custom-build)",
+              "object (lib)",
+              "phf_shared (lib)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "syn (lib)",
+              "phf (lib)",
+              "syn (lib)",
+              "build-script-build (custom-build)",
+              "ar_archive_writer (lib)",
+              "rayon (lib)",
+              "build-script-build (custom-build)",
+              "regex (lib)",
+              "raw_cpuid (lib)",
+              "psm (lib)",
+              "chrono (lib)",
+              "stacker (lib)",
+              "num_derive (proc-macro)",
+              "debug_unsafe (lib)",
+              "atoi_simd (lib)",
+              "bytemuck_derive (proc-macro)",
+              "futures_macro (proc-macro)",
+              "streaming_iterator (lib)",
+              "zerocopy_derive (proc-macro)",
+              "bytemuck (lib)",
+              "hashbrown (lib)",
+              "regex_automata (lib)",
+              "dyn_clone (lib)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "zmij (lib)",
+              "fast_float2 (lib)",
+              "strength_reduce (lib)",
+              "indexmap (lib)",
+              "boxcar (lib)",
+              "ethnum (lib)",
+              "atomic_waker (lib)",
+              "build-script-build (custom-build)",
+              "crossbeam_channel (lib)",
+              "xxhash_rust (lib)",
+              "tinyvec_macros (lib)",
+              "strum_macros (proc-macro)",
+              "hex (lib)",
+              "rand_distr (lib)",
+              "const_oid (lib)",
+              "build-script-build (custom-build)",
+              "tinyvec (lib)",
+              "serde_derive (proc-macro)",
+              "unicode_segmentation (lib)",
+              "recursive_proc_macro_impl (proc-macro)",
+              "unicode_reverse (lib)",
+              "crossbeam_queue (lib)",
+              "strum (lib)",
+              "unicode_normalization (lib)",
+              "build-script-build (custom-build)",
+              "typenum (lib)",
+              "tokio (lib)",
+              "async_trait (proc-macro)",
+              "percent_encoding (lib)",
+              "recursive (lib)",
+              "serde (lib)",
+              "base64 (lib)",
+              "glob (lib)",
+              "futures_util (lib)",
+              "arrayref (lib)",
+              "futures (lib)",
+              "futures_executor (lib)",
+              "hybrid_array (lib)",
+              "constant_time_eq (lib)",
+              "compact_str (lib)",
+              "block_buffer (lib)",
+              "arrayvec (lib)",
+              "bytes (lib)",
+              "now (lib)",
+              "murmur3 (lib)",
+              "thread_local (lib)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "log (lib)",
+              "blake3 (lib)",
+              "sqlparser_derive (proc-macro)",
+              "digest (lib)",
+              "digest (lib)",
+              "digest_io (lib)",
+              "crypto_common (lib)",
+              "sha2 (lib)",
+              "zerocopy (lib)",
+              "chrono_tz (lib)",
+              "build-script-build (custom-build)",
+              "half (lib)",
+              "polars_descriptions (lib)",
+              "polars_arrow_format (lib)",
+              "polars_error (lib)",
+              "polars_observer (lib)",
+              "polars_config (lib)",
+              "zstd_sys (lib)",
+              "zstd_safe (lib)",
+              "zstd (lib)",
+              "polars_schema (lib)",
+              "polars_buffer (lib)",
+              "polars_utils (lib)",
+              "argminmax (lib)",
+              "polars_async (lib)",
+              "lz4_sys (lib)",
+              "lz4 (lib)",
+              "sqlparser (lib)",
+              "polars_dtype (lib)",
+              "polars_arrow (lib)",
+              "polars_row (lib)",
+              "polars_compute (lib)",
+              "polars_defs (lib)",
+              "polars_io (lib)",
+              "polars_ooc (lib)",
+              "polars_testing (lib)",
+              "polars_core (lib)",
+              "polars_time (lib)",
+              "polars_plan (lib)",
+              "polars_ops (lib)",
+              "polars_mem_engine (lib)",
+              "polars_lazy (lib)",
+              "polars_expr (lib)",
+              "polars_sql (lib)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/polars/wt/cold/target/debug/build/polars-lazy/9cbfb41e4f44acea/out/libpolars_lazy-9cbfb41e4f44acea.rlib",
+              "found": [
+                "FERRY_MARK[cold_edit_on_spawn_r0]"
+              ],
+              "expected": [
+                "FERRY_MARK[cold_edit_on_spawn_r0]"
+              ],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          }
+        ],
+        "hyperfine": "hyperfine/cold-edit_on_spawn.json",
+        "load_before": "5.20 8.94 8.91",
+        "load_after": "5.85 8.31 8.70"
+      },
+      "first_edit": {
+        "runs": 1,
+        "times": [
+          1.53650224394
+        ],
+        "median": 1.53650224394,
+        "mean": 1.53650224394,
+        "min": 1.53650224394,
+        "max": 1.53650224394,
+        "stddev": null,
+        "exit_codes": [
+          0
+        ],
+        "crates": [
+          2
+        ],
+        "checks_ok": [
+          true
+        ],
+        "per_run": [
+          {
+            "crates": 2,
+            "crate_list": [
+              "polars_lazy (lib)",
+              "polars_sql (lib)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/polars/wt/cold/target/debug/build/polars-lazy/9cbfb41e4f44acea/out/libpolars_lazy-9cbfb41e4f44acea.rlib",
+              "found": [
+                "FERRY_MARK[cold_first_edit_r0]"
+              ],
+              "expected": [
+                "FERRY_MARK[cold_first_edit_r0]"
+              ],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          }
+        ],
+        "hyperfine": "hyperfine/cold-first_edit.json",
+        "load_before": "5.85 8.31 8.70",
+        "load_after": "4.59 7.56 8.42"
+      },
+      "spawn_build": {
+        "runs": 1,
+        "times": [
+          71.24101289542
+        ],
+        "median": 71.24101289542,
+        "mean": 71.24101289542,
+        "min": 71.24101289542,
+        "max": 71.24101289542,
+        "stddev": null,
+        "exit_codes": [
+          0
+        ],
+        "crates": [
+          212
+        ],
+        "checks_ok": [
+          true
+        ],
+        "per_run": [
+          {
+            "crates": 212,
+            "crate_list": [
+              "cfg_if (lib)",
+              "unicode_ident (lib)",
+              "shlex (lib)",
+              "find_msvc_tools (lib)",
+              "version_check (lib)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "equivalent (lib)",
+              "build-script-build (custom-build)",
+              "cpufeatures (lib)",
+              "build-script-build (custom-build)",
+              "autocfg (lib)",
+              "build-script-build (custom-build)",
+              "foldhash (lib)",
+              "allocator_api2 (lib)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "memchr (lib)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "crossbeam_utils (lib)",
+              "memchr (lib)",
+              "proc_macro2 (lib)",
+              "array_init_cursor (lib)",
+              "pkg_config (lib)",
+              "quote (lib)",
+              "crossbeam_epoch (lib)",
+              "hashbrown (lib)",
+              "rand_core (lib)",
+              "smallvec (lib)",
+              "build-script-build (custom-build)",
+              "scopeguard (lib)",
+              "build-script-build (custom-build)",
+              "libc (lib)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "lock_api (lib)",
+              "errno (lib)",
+              "parking_lot_core (lib)",
+              "jobserver (lib)",
+              "signal_hook_registry (lib)",
+              "libm (lib)",
+              "crossbeam_deque (lib)",
+              "pin_project_lite (lib)",
+              "futures_core (lib)",
+              "futures_sink (lib)",
+              "futures_channel (lib)",
+              "num_traits (lib)",
+              "build-script-build (custom-build)",
+              "planus (lib)",
+              "getrandom (lib)",
+              "signal_hook (lib)",
+              "parking_lot (lib)",
+              "rayon_core (lib)",
+              "slab (lib)",
+              "futures_task (lib)",
+              "futures_io (lib)",
+              "simdutf8 (lib)",
+              "build-script-build (custom-build)",
+              "aho_corasick (lib)",
+              "either (lib)",
+              "rustversion (proc-macro)",
+              "castaway (lib)",
+              "chacha20 (lib)",
+              "serde_core (lib)",
+              "foldhash (lib)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "static_assertions (lib)",
+              "mio (lib)",
+              "cc (lib)",
+              "socket2 (lib)",
+              "bitflags (lib)",
+              "itoa (lib)",
+              "ryu (lib)",
+              "build-script-build (custom-build)",
+              "rand (lib)",
+              "build-script-build (custom-build)",
+              "regex_syntax (lib)",
+              "memmap2 (lib)",
+              "uuid (lib)",
+              "sysinfo (lib)",
+              "slotmap (lib)",
+              "build-script-build (custom-build)",
+              "iana_time_zone (lib)",
+              "siphasher (lib)",
+              "heck (lib)",
+              "phf_shared (lib)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "syn (lib)",
+              "object (lib)",
+              "build-script-build (custom-build)",
+              "syn (lib)",
+              "ar_archive_writer (lib)",
+              "rayon (lib)",
+              "build-script-build (custom-build)",
+              "raw_cpuid (lib)",
+              "num_derive (proc-macro)",
+              "regex (lib)",
+              "chrono (lib)",
+              "psm (lib)",
+              "stacker (lib)",
+              "phf (lib)",
+              "debug_unsafe (lib)",
+              "build-script-build (custom-build)",
+              "atoi_simd (lib)",
+              "zerocopy_derive (proc-macro)",
+              "futures_macro (proc-macro)",
+              "regex_automata (lib)",
+              "hashbrown (lib)",
+              "streaming_iterator (lib)",
+              "strum_macros (proc-macro)",
+              "bytemuck_derive (proc-macro)",
+              "dyn_clone (lib)",
+              "ethnum (lib)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "boxcar (lib)",
+              "bytemuck (lib)",
+              "fast_float2 (lib)",
+              "indexmap (lib)",
+              "zmij (lib)",
+              "strength_reduce (lib)",
+              "atomic_waker (lib)",
+              "build-script-build (custom-build)",
+              "xxhash_rust (lib)",
+              "crossbeam_channel (lib)",
+              "const_oid (lib)",
+              "hex (lib)",
+              "tinyvec_macros (lib)",
+              "rand_distr (lib)",
+              "build-script-build (custom-build)",
+              "serde_derive (proc-macro)",
+              "tinyvec (lib)",
+              "unicode_segmentation (lib)",
+              "unicode_reverse (lib)",
+              "recursive_proc_macro_impl (proc-macro)",
+              "crossbeam_queue (lib)",
+              "typenum (lib)",
+              "serde (lib)",
+              "build-script-build (custom-build)",
+              "tokio (lib)",
+              "base64 (lib)",
+              "unicode_normalization (lib)",
+              "strum (lib)",
+              "async_trait (proc-macro)",
+              "percent_encoding (lib)",
+              "glob (lib)",
+              "compact_str (lib)",
+              "recursive (lib)",
+              "bytes (lib)",
+              "hybrid_array (lib)",
+              "constant_time_eq (lib)",
+              "arrayvec (lib)",
+              "futures_util (lib)",
+              "block_buffer (lib)",
+              "futures (lib)",
+              "arrayref (lib)",
+              "futures_executor (lib)",
+              "now (lib)",
+              "murmur3 (lib)",
+              "thread_local (lib)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "log (lib)",
+              "sqlparser_derive (proc-macro)",
+              "blake3 (lib)",
+              "digest (lib)",
+              "digest (lib)",
+              "crypto_common (lib)",
+              "digest_io (lib)",
+              "zerocopy (lib)",
+              "sha2 (lib)",
+              "half (lib)",
+              "chrono_tz (lib)",
+              "polars_descriptions (lib)",
+              "build-script-build (custom-build)",
+              "polars_error (lib)",
+              "polars_arrow_format (lib)",
+              "polars_observer (lib)",
+              "polars_config (lib)",
+              "zstd_sys (lib)",
+              "zstd_safe (lib)",
+              "zstd (lib)",
+              "polars_buffer (lib)",
+              "polars_schema (lib)",
+              "polars_utils (lib)",
+              "argminmax (lib)",
+              "polars_async (lib)",
+              "lz4_sys (lib)",
+              "lz4 (lib)",
+              "sqlparser (lib)",
+              "polars_dtype (lib)",
+              "polars_arrow (lib)",
+              "polars_row (lib)",
+              "polars_compute (lib)",
+              "polars_defs (lib)",
+              "polars_io (lib)",
+              "polars_ooc (lib)",
+              "polars_testing (lib)",
+              "polars_core (lib)",
+              "polars_time (lib)",
+              "polars_plan (lib)",
+              "polars_ops (lib)",
+              "polars_mem_engine (lib)",
+              "polars_lazy (lib)",
+              "polars_expr (lib)",
+              "polars_sql (lib)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/polars/wt/cold/target/debug/build/polars-lazy/9cbfb41e4f44acea/out/libpolars_lazy-9cbfb41e4f44acea.rlib",
+              "found": [],
+              "expected": [],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          }
+        ],
+        "hyperfine": "hyperfine/cold-spawn_build.json",
+        "load_before": "9.05 10.28 9.31",
+        "load_after": "5.20 8.94 8.91"
+      },
+      "target_disk": {
+        "path": "/home/pat/Projects/ferry/bench/work/polars/wt/cold/target",
+        "du_bytes": 4202713088,
+        "btrfs_total_bytes": 4107329536,
+        "btrfs_exclusive_bytes": 4106985472,
+        "btrfs_shared_bytes": 311296
+      }
+    },
+    "ferry-reflink": {
+      "base_disk": {
+        "path": "/home/pat/Projects/ferry/bench/work/polars/ferry/home/repo-dbab723ff42fe45c/bases/d0a98d9c509ddad852337db66261d2d16f1a419e-9b64aff6/target",
+        "du_bytes": 4112474112,
+        "btrfs_total_bytes": 3630686208,
+        "btrfs_exclusive_bytes": 3630342144,
+        "btrfs_shared_bytes": 311296
+      },
+      "concurrent": {
+        "runs": 2,
+        "times": [
+          2.5799802091,
+          2.5813966941
+        ],
+        "median": 2.5806884516,
+        "mean": 2.5806884516,
+        "min": 2.5799802091,
+        "max": 2.5813966941,
+        "stddev": 0.001001606148949043,
+        "exit_codes": [
+          0,
+          0
+        ],
+        "crates": [
+          null,
+          null
+        ],
+        "checks_ok": [
+          true,
+          true
+        ],
+        "per_run": [
+          {
+            "crates": null,
+            "crate_list": null,
+            "verify": null,
+            "kache": null,
+            "agents": [
+              {
+                "agent": 1,
+                "rc": 0,
+                "start": 1793080989.016542891,
+                "end": 1793080991.587070590,
+                "elapsed": 2.5705277919769287,
+                "crates": 2,
+                "crate_list": [
+                  "polars_lazy (lib)",
+                  "polars_sql (lib)"
+                ],
+                "build_dir_lock_waits": 0,
+                "package_cache_lock_waits": 3,
+                "verify": {
+                  "rlib": "/home/pat/Projects/ferry/bench/work/polars/ferry/home/repo-dbab723ff42fe45c/mnt/target/debug/build/polars-lazy/9cbfb41e4f44acea/out/libpolars_lazy-9cbfb41e4f44acea.rlib",
+                  "found": [
+                    "FERRY_MARK[ferry_reflink_concurrent_r0_a1]"
+                  ],
+                  "expected": [
+                    "FERRY_MARK[ferry_reflink_concurrent_r0_a1]"
+                  ],
+                  "ok": true
+                }
+              },
+              {
+                "agent": 2,
+                "rc": 0,
+                "start": 1793080989.016967713,
+                "end": 1793080991.490399726,
+                "elapsed": 2.4734318256378174,
+                "crates": 2,
+                "crate_list": [
+                  "polars_lazy (lib)",
+                  "polars_sql (lib)"
+                ],
+                "build_dir_lock_waits": 0,
+                "package_cache_lock_waits": 3,
+                "verify": {
+                  "rlib": "/home/pat/Projects/ferry/bench/work/polars/ferry/home/repo-dbab723ff42fe45c/mnt/target/debug/build/polars-lazy/9cbfb41e4f44acea/out/libpolars_lazy-9cbfb41e4f44acea.rlib",
+                  "found": [
+                    "FERRY_MARK[ferry_reflink_concurrent_r0_a2]"
+                  ],
+                  "expected": [
+                    "FERRY_MARK[ferry_reflink_concurrent_r0_a2]"
+                  ],
+                  "ok": true
+                }
+              },
+              {
+                "agent": 3,
+                "rc": 0,
+                "start": 1793080989.016768632,
+                "end": 1793080991.537731204,
+                "elapsed": 2.5209624767303467,
+                "crates": 2,
+                "crate_list": [
+                  "polars_lazy (lib)",
+                  "polars_sql (lib)"
+                ],
+                "build_dir_lock_waits": 0,
+                "package_cache_lock_waits": 4,
+                "verify": {
+                  "rlib": "/home/pat/Projects/ferry/bench/work/polars/ferry/home/repo-dbab723ff42fe45c/mnt/target/debug/build/polars-lazy/9cbfb41e4f44acea/out/libpolars_lazy-9cbfb41e4f44acea.rlib",
+                  "found": [
+                    "FERRY_MARK[ferry_reflink_concurrent_r0_a3]"
+                  ],
+                  "expected": [
+                    "FERRY_MARK[ferry_reflink_concurrent_r0_a3]"
+                  ],
+                  "ok": true
+                }
+              }
+            ],
+            "ferry_report": null
+          },
+          {
+            "crates": null,
+            "crate_list": null,
+            "verify": null,
+            "kache": null,
+            "agents": [
+              {
+                "agent": 1,
+                "rc": 0,
+                "start": 1793080997.244054822,
+                "end": 1793080999.776904047,
+                "elapsed": 2.5328493118286133,
+                "crates": 2,
+                "crate_list": [
+                  "polars_lazy (lib)",
+                  "polars_sql (lib)"
+                ],
+                "build_dir_lock_waits": 0,
+                "package_cache_lock_waits": 3,
+                "verify": {
+                  "rlib": "/home/pat/Projects/ferry/bench/work/polars/ferry/home/repo-dbab723ff42fe45c/mnt/target/debug/build/polars-lazy/9cbfb41e4f44acea/out/libpolars_lazy-9cbfb41e4f44acea.rlib",
+                  "found": [
+                    "FERRY_MARK[ferry_reflink_concurrent_r1_a1]"
+                  ],
+                  "expected": [
+                    "FERRY_MARK[ferry_reflink_concurrent_r1_a1]"
+                  ],
+                  "ok": true
+                }
+              },
+              {
+                "agent": 2,
+                "rc": 0,
+                "start": 1793080997.244224883,
+                "end": 1793080999.816108536,
+                "elapsed": 2.5718836784362793,
+                "crates": 2,
+                "crate_list": [
+                  "polars_lazy (lib)",
+                  "polars_sql (lib)"
+                ],
+                "build_dir_lock_waits": 0,
+                "package_cache_lock_waits": 3,
+                "verify": {
+                  "rlib": "/home/pat/Projects/ferry/bench/work/polars/ferry/home/repo-dbab723ff42fe45c/mnt/target/debug/build/polars-lazy/9cbfb41e4f44acea/out/libpolars_lazy-9cbfb41e4f44acea.rlib",
+                  "found": [
+                    "FERRY_MARK[ferry_reflink_concurrent_r1_a2]"
+                  ],
+                  "expected": [
+                    "FERRY_MARK[ferry_reflink_concurrent_r1_a2]"
+                  ],
+                  "ok": true
+                }
+              },
+              {
+                "agent": 3,
+                "rc": 0,
+                "start": 1793080997.244279843,
+                "end": 1793080999.767507383,
+                "elapsed": 2.5232274532318115,
+                "crates": 2,
+                "crate_list": [
+                  "polars_lazy (lib)",
+                  "polars_sql (lib)"
+                ],
+                "build_dir_lock_waits": 0,
+                "package_cache_lock_waits": 4,
+                "verify": {
+                  "rlib": "/home/pat/Projects/ferry/bench/work/polars/ferry/home/repo-dbab723ff42fe45c/mnt/target/debug/build/polars-lazy/9cbfb41e4f44acea/out/libpolars_lazy-9cbfb41e4f44acea.rlib",
+                  "found": [
+                    "FERRY_MARK[ferry_reflink_concurrent_r1_a3]"
+                  ],
+                  "expected": [
+                    "FERRY_MARK[ferry_reflink_concurrent_r1_a3]"
+                  ],
+                  "ok": true
+                }
+              }
+            ],
+            "ferry_report": null
+          }
+        ],
+        "hyperfine": "hyperfine/ferry-reflink-concurrent.json",
+        "load_before": "5.58 5.42 6.51",
+        "load_after": "4.80 5.25 6.44"
+      },
+      "disk_after_second_edit": {
+        "path": "/home/pat/Projects/ferry/bench/work/polars/ferry/home/repo-dbab723ff42fe45c/agents/bench/target",
+        "du_bytes": 4199759872,
+        "btrfs_total_bytes": 4104495104,
+        "btrfs_exclusive_bytes": 152928256,
+        "btrfs_shared_bytes": 2541154304,
+        "ferry_private_bytes": 403443712
+      },
+      "disk_after_spawn": {
+        "path": "/home/pat/Projects/ferry/bench/work/polars/ferry/home/repo-dbab723ff42fe45c/agents/bench/target",
+        "du_bytes": 4112474112,
+        "btrfs_total_bytes": 4105412608,
+        "btrfs_exclusive_bytes": 0,
+        "btrfs_shared_bytes": 2643628032
+      },
+      "edit_on_spawn": {
+        "runs": 2,
+        "times": [
+          2.0027204826,
+          1.9941287026
+        ],
+        "median": 1.9984245926000002,
+        "mean": 1.9984245926000002,
+        "min": 1.9941287026,
+        "max": 2.0027204826,
+        "stddev": 0.006075305900462911,
+        "exit_codes": [
+          0,
+          0
+        ],
+        "crates": [
+          2,
+          2
+        ],
+        "checks_ok": [
+          true,
+          true
+        ],
+        "per_run": [
+          {
+            "crates": 2,
+            "crate_list": [
+              "polars_lazy (lib)",
+              "polars_sql (lib)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/polars/ferry/home/repo-dbab723ff42fe45c/mnt/target/debug/build/polars-lazy/9cbfb41e4f44acea/out/libpolars_lazy-9cbfb41e4f44acea.rlib",
+              "found": [
+                "FERRY_MARK[ferry_reflink_edit_on_spawn_r0]"
+              ],
+              "expected": [
+                "FERRY_MARK[ferry_reflink_edit_on_spawn_r0]"
+              ],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          },
+          {
+            "crates": 2,
+            "crate_list": [
+              "polars_lazy (lib)",
+              "polars_sql (lib)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/polars/ferry/home/repo-dbab723ff42fe45c/mnt/target/debug/build/polars-lazy/9cbfb41e4f44acea/out/libpolars_lazy-9cbfb41e4f44acea.rlib",
+              "found": [
+                "FERRY_MARK[ferry_reflink_edit_on_spawn_r1]"
+              ],
+              "expected": [
+                "FERRY_MARK[ferry_reflink_edit_on_spawn_r1]"
+              ],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          }
+        ],
+        "hyperfine": "hyperfine/ferry-reflink-edit_on_spawn.json",
+        "load_before": "6.91 5.62 6.61",
+        "load_after": "6.44 5.54 6.58"
+      },
+      "first_edit": {
+        "runs": 2,
+        "times": [
+          2.22387607134,
+          2.68853718434
+        ],
+        "median": 2.45620662784,
+        "mean": 2.45620662784,
+        "min": 2.22387607134,
+        "max": 2.68853718434,
+        "stddev": 0.32856502395598863,
+        "exit_codes": [
+          0,
+          0
+        ],
+        "crates": [
+          2,
+          2
+        ],
+        "checks_ok": [
+          true,
+          true
+        ],
+        "per_run": [
+          {
+            "crates": 2,
+            "crate_list": [
+              "polars_lazy (lib)",
+              "polars_sql (lib)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/polars/ferry/home/repo-dbab723ff42fe45c/mnt/target/debug/build/polars-lazy/9cbfb41e4f44acea/out/libpolars_lazy-9cbfb41e4f44acea.rlib",
+              "found": [
+                "FERRY_MARK[ferry_reflink_first_edit_r0]"
+              ],
+              "expected": [
+                "FERRY_MARK[ferry_reflink_first_edit_r0]"
+              ],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          },
+          {
+            "crates": 2,
+            "crate_list": [
+              "polars_lazy (lib)",
+              "polars_sql (lib)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/polars/ferry/home/repo-dbab723ff42fe45c/mnt/target/debug/build/polars-lazy/9cbfb41e4f44acea/out/libpolars_lazy-9cbfb41e4f44acea.rlib",
+              "found": [
+                "FERRY_MARK[ferry_reflink_first_edit_r1]"
+              ],
+              "expected": [
+                "FERRY_MARK[ferry_reflink_first_edit_r1]"
+              ],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          }
+        ],
+        "hyperfine": "hyperfine/ferry-reflink-first_edit.json",
+        "load_before": "6.44 5.54 6.58",
+        "load_after": "5.91 5.46 6.54"
+      },
+      "second_edit": {
+        "runs": 2,
+        "times": [
+          1.61002944326,
+          1.6272537842600001
+        ],
+        "median": 1.61864161376,
+        "mean": 1.61864161376,
+        "min": 1.61002944326,
+        "max": 1.6272537842600001,
+        "stddev": 0.012179448322569581,
+        "exit_codes": [
+          0,
+          0
+        ],
+        "crates": [
+          2,
+          2
+        ],
+        "checks_ok": [
+          true,
+          true
+        ],
+        "per_run": [
+          {
+            "crates": 2,
+            "crate_list": [
+              "polars_lazy (lib)",
+              "polars_sql (lib)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/polars/ferry/home/repo-dbab723ff42fe45c/mnt/target/debug/build/polars-lazy/9cbfb41e4f44acea/out/libpolars_lazy-9cbfb41e4f44acea.rlib",
+              "found": [
+                "FERRY_MARK[ferry_reflink_second_edit_r0_a]",
+                "FERRY_MARK[ferry_reflink_second_edit_r0_b]"
+              ],
+              "expected": [
+                "FERRY_MARK[ferry_reflink_second_edit_r0_a]",
+                "FERRY_MARK[ferry_reflink_second_edit_r0_b]"
+              ],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          },
+          {
+            "crates": 2,
+            "crate_list": [
+              "polars_lazy (lib)",
+              "polars_sql (lib)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/polars/ferry/home/repo-dbab723ff42fe45c/mnt/target/debug/build/polars-lazy/9cbfb41e4f44acea/out/libpolars_lazy-9cbfb41e4f44acea.rlib",
+              "found": [
+                "FERRY_MARK[ferry_reflink_second_edit_r1_a]",
+                "FERRY_MARK[ferry_reflink_second_edit_r1_b]"
+              ],
+              "expected": [
+                "FERRY_MARK[ferry_reflink_second_edit_r1_a]",
+                "FERRY_MARK[ferry_reflink_second_edit_r1_b]"
+              ],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          }
+        ],
+        "hyperfine": "hyperfine/ferry-reflink-second_edit.json",
+        "load_before": "5.91 5.46 6.54",
+        "load_after": "5.58 5.42 6.51"
+      },
+      "spawn_build": {
+        "runs": 2,
+        "times": [
+          0.26244416366,
+          0.25860298066
+        ],
+        "median": 0.26052357216,
+        "mean": 0.26052357216,
+        "min": 0.25860298066,
+        "max": 0.26244416366,
+        "stddev": 0.0027161265470785046,
+        "exit_codes": [
+          0,
+          0
+        ],
+        "crates": [
+          0,
+          0
+        ],
+        "checks_ok": [
+          true,
+          true
+        ],
+        "per_run": [
+          {
+            "crates": 0,
+            "crate_list": [],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/polars/ferry/home/repo-dbab723ff42fe45c/mnt/target/debug/build/polars-lazy/9cbfb41e4f44acea/out/libpolars_lazy-9cbfb41e4f44acea.rlib",
+              "found": [],
+              "expected": [],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          },
+          {
+            "crates": 0,
+            "crate_list": [],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/polars/ferry/home/repo-dbab723ff42fe45c/mnt/target/debug/build/polars-lazy/9cbfb41e4f44acea/out/libpolars_lazy-9cbfb41e4f44acea.rlib",
+              "found": [],
+              "expected": [],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          }
+        ],
+        "hyperfine": "hyperfine/ferry-reflink-spawn_build.json",
+        "load_before": "7.43 5.70 6.64",
+        "load_after": "6.91 5.62 6.61"
+      },
+      "spawn": {
+        "runs": 2,
+        "times": [
+          0.8040442266000001,
+          0.7952440056000001
+        ],
+        "median": 0.7996441161000001,
+        "mean": 0.7996441161000001,
+        "min": 0.7952440056000001,
+        "max": 0.8040442266000001,
+        "stddev": 0.006222695945040258,
+        "exit_codes": [
+          0,
+          0
+        ],
+        "crates": [
+          null,
+          null
+        ],
+        "checks_ok": [
+          null,
+          null
+        ],
+        "per_run": [
+          {
+            "crates": null,
+            "crate_list": null,
+            "verify": null,
+            "kache": null,
+            "agents": null,
+            "ferry_report": {
+              "agent": {
+                "name": "bench",
+                "state": "ready",
+                "base": "d0a98d9c509ddad852337db66261d2d16f1a419e-9b64aff6",
+                "from": "d0a98d9c509ddad852337db66261d2d16f1a419e",
+                "branch": "ferry/bench",
+                "worktree": "/home/pat/Projects/ferry/bench/work/polars/ferry/wt/repo-dbab723ff42fe45c/bench",
+                "backend": "reflink",
+                "isolation": "namespace",
+                "freshness": "checksum",
+                "created_unix": 1793080948,
+                "stamp": {
+                  "tracked": 3560,
+                  "stamped": 3557,
+                  "skipped": 3,
+                  "dirs": 619,
+                  "dirs_stamped": 619
+                },
+                "origin": "cli"
+              },
+              "backend_reason": "btrfs supports copy-on-write clones",
+              "fork": {
+                "files": 5863,
+                "bytes": 4099406037,
+                "elapsed_secs": 0.327139175
+              },
+              "elapsed_secs": 0.79797717,
+              "warnings": []
+            }
+          },
+          {
+            "crates": null,
+            "crate_list": null,
+            "verify": null,
+            "kache": null,
+            "agents": null,
+            "ferry_report": {
+              "agent": {
+                "name": "bench",
+                "state": "ready",
+                "base": "d0a98d9c509ddad852337db66261d2d16f1a419e-9b64aff6",
+                "from": "d0a98d9c509ddad852337db66261d2d16f1a419e",
+                "branch": "ferry/bench",
+                "worktree": "/home/pat/Projects/ferry/bench/work/polars/ferry/wt/repo-dbab723ff42fe45c/bench",
+                "backend": "reflink",
+                "isolation": "namespace",
+                "freshness": "checksum",
+                "created_unix": 1793080950,
+                "stamp": {
+                  "tracked": 3560,
+                  "stamped": 3557,
+                  "skipped": 3,
+                  "dirs": 619,
+                  "dirs_stamped": 619
+                },
+                "origin": "cli"
+              },
+              "backend_reason": "btrfs supports copy-on-write clones",
+              "fork": {
+                "files": 5863,
+                "bytes": 4099406037,
+                "elapsed_secs": 0.321752135
+              },
+              "elapsed_secs": 0.789216179,
+              "warnings": []
+            }
+          }
+        ],
+        "hyperfine": "hyperfine/ferry-reflink-spawn.json",
+        "load_before": "7.20 5.63 6.62",
+        "load_after": "7.43 5.70 6.64"
+      }
+    },
+    "kache": {
+      "edit_on_spawn": {
+        "runs": 2,
+        "times": [
+          9.65039899042,
+          9.61951467042
+        ],
+        "median": 9.634956830419998,
+        "mean": 9.634956830419998,
+        "min": 9.61951467042,
+        "max": 9.65039899042,
+        "stddev": 0.021838512104335447,
+        "exit_codes": [
+          0,
+          0
+        ],
+        "crates": [
+          212,
+          212
+        ],
+        "checks_ok": [
+          true,
+          true
+        ],
+        "per_run": [
+          {
+            "crates": 212,
+            "crate_list": [
+              "unicode_ident (lib)",
+              "version_check (lib)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "find_msvc_tools (lib)",
+              "shlex (lib)",
+              "cfg_if (lib)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "autocfg (lib)",
+              "build-script-build (custom-build)",
+              "equivalent (lib)",
+              "memchr (lib)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "allocator_api2 (lib)",
+              "proc_macro2 (lib)",
+              "libc (lib)",
+              "serde_core (lib)",
+              "build-script-build (custom-build)",
+              "pkg_config (lib)",
+              "cpufeatures (lib)",
+              "quote (lib)",
+              "jobserver (lib)",
+              "crossbeam_utils (lib)",
+              "syn (lib)",
+              "build-script-build (custom-build)",
+              "object (lib)",
+              "cc (lib)",
+              "syn (lib)",
+              "foldhash (lib)",
+              "ar_archive_writer (lib)",
+              "build-script-build (custom-build)",
+              "memchr (lib)",
+              "libm (lib)",
+              "aho_corasick (lib)",
+              "serde_derive (proc-macro)",
+              "crossbeam_epoch (lib)",
+              "build-script-build (custom-build)",
+              "num_traits (lib)",
+              "scopeguard (lib)",
+              "errno (lib)",
+              "hashbrown (lib)",
+              "smallvec (lib)",
+              "build-script-build (custom-build)",
+              "serde (lib)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "rand_core (lib)",
+              "parking_lot_core (lib)",
+              "regex_syntax (lib)",
+              "build-script-build (custom-build)",
+              "array_init_cursor (lib)",
+              "regex_automata (lib)",
+              "lock_api (lib)",
+              "signal_hook_registry (lib)",
+              "pin_project_lite (lib)",
+              "futures_core (lib)",
+              "crossbeam_deque (lib)",
+              "rustversion (proc-macro)",
+              "build-script-build (custom-build)",
+              "futures_sink (lib)",
+              "build-script-build (custom-build)",
+              "psm (lib)",
+              "rayon_core (lib)",
+              "signal_hook (lib)",
+              "parking_lot (lib)",
+              "futures_channel (lib)",
+              "zerocopy_derive (proc-macro)",
+              "getrandom (lib)",
+              "regex (lib)",
+              "bytemuck_derive (proc-macro)",
+              "slab (lib)",
+              "simdutf8 (lib)",
+              "futures_macro (proc-macro)",
+              "either (lib)",
+              "futures_task (lib)",
+              "futures_io (lib)",
+              "zerocopy (lib)",
+              "stacker (lib)",
+              "rayon (lib)",
+              "bytemuck (lib)",
+              "build-script-build (custom-build)",
+              "zstd_sys (lib)",
+              "chacha20 (lib)",
+              "castaway (lib)",
+              "sysinfo (lib)",
+              "foldhash (lib)",
+              "build-script-build (custom-build)",
+              "futures_util (lib)",
+              "half (lib)",
+              "socket2 (lib)",
+              "rand (lib)",
+              "hashbrown (lib)",
+              "mio (lib)",
+              "futures_executor (lib)",
+              "static_assertions (lib)",
+              "ryu (lib)",
+              "itoa (lib)",
+              "polars_arrow_format (lib)",
+              "bitflags (lib)",
+              "slotmap (lib)",
+              "zstd_safe (lib)",
+              "planus (lib)",
+              "indexmap (lib)",
+              "futures (lib)",
+              "zstd (lib)",
+              "tokio (lib)",
+              "raw_cpuid (lib)",
+              "compact_str (lib)",
+              "argminmax (lib)",
+              "num_derive (proc-macro)",
+              "bytes (lib)",
+              "memmap2 (lib)",
+              "heck (lib)",
+              "build-script-build (custom-build)",
+              "siphasher (lib)",
+              "iana_time_zone (lib)",
+              "phf_shared (lib)",
+              "chrono (lib)",
+              "build-script-build (custom-build)",
+              "strum_macros (proc-macro)",
+              "debug_unsafe (lib)",
+              "dyn_clone (lib)",
+              "phf (lib)",
+              "streaming_iterator (lib)",
+              "lz4_sys (lib)",
+              "uuid (lib)",
+              "ethnum (lib)",
+              "build-script-build (custom-build)",
+              "atoi_simd (lib)",
+              "build-script-build (custom-build)",
+              "chrono_tz (lib)",
+              "lz4 (lib)",
+              "boxcar (lib)",
+              "strength_reduce (lib)",
+              "crossbeam_channel (lib)",
+              "typenum (lib)",
+              "fast_float2 (lib)",
+              "atomic_waker (lib)",
+              "zmij (lib)",
+              "rand_distr (lib)",
+              "xxhash_rust (lib)",
+              "hybrid_array (lib)",
+              "hex (lib)",
+              "const_oid (lib)",
+              "block_buffer (lib)",
+              "crypto_common (lib)",
+              "tinyvec_macros (lib)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "polars_error (lib)",
+              "unicode_segmentation (lib)",
+              "tinyvec (lib)",
+              "digest (lib)",
+              "recursive_proc_macro_impl (proc-macro)",
+              "async_trait (proc-macro)",
+              "unicode_normalization (lib)",
+              "build-script-build (custom-build)",
+              "crossbeam_queue (lib)",
+              "build-script-build (custom-build)",
+              "strum (lib)",
+              "unicode_reverse (lib)",
+              "glob (lib)",
+              "build-script-build (custom-build)",
+              "percent_encoding (lib)",
+              "sha2 (lib)",
+              "digest (lib)",
+              "recursive (lib)",
+              "constant_time_eq (lib)",
+              "arrayref (lib)",
+              "arrayvec (lib)",
+              "digest_io (lib)",
+              "build-script-build (custom-build)",
+              "base64 (lib)",
+              "now (lib)",
+              "thread_local (lib)",
+              "sqlparser_derive (proc-macro)",
+              "murmur3 (lib)",
+              "build-script-build (custom-build)",
+              "log (lib)",
+              "blake3 (lib)",
+              "polars_config (lib)",
+              "sqlparser (lib)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "polars_descriptions (lib)",
+              "polars_utils (lib)",
+              "polars_observer (lib)",
+              "polars_schema (lib)",
+              "polars_buffer (lib)",
+              "polars_async (lib)",
+              "polars_arrow (lib)",
+              "polars_dtype (lib)",
+              "polars_compute (lib)",
+              "polars_row (lib)",
+              "polars_core (lib)",
+              "polars_defs (lib)",
+              "polars_io (lib)",
+              "polars_ooc (lib)",
+              "polars_ops (lib)",
+              "polars_testing (lib)",
+              "polars_time (lib)",
+              "polars_plan (lib)",
+              "polars_expr (lib)",
+              "polars_mem_engine (lib)",
+              "polars_lazy (lib)",
+              "polars_sql (lib)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/polars/wt/kache/target/debug/build/polars-lazy/9cbfb41e4f44acea/out/libpolars_lazy-9cbfb41e4f44acea.rlib",
+              "found": [
+                "FERRY_MARK[kache_edit_on_spawn_r0]"
+              ],
+              "expected": [
+                "FERRY_MARK[kache_edit_on_spawn_r0]"
+              ],
+              "ok": true
+            },
+            "kache": {
+              "events": 252,
+              "by_result": {
+                "local_hit": 246,
+                "miss": 2,
+                "passthrough": 4
+              },
+              "compiled": [
+                {
+                  "crate": "polars_lazy",
+                  "result": "miss",
+                  "reason": null,
+                  "ms": 511
+                },
+                {
+                  "crate": "polars_sql",
+                  "result": "miss",
+                  "reason": null,
+                  "ms": 4763
+                }
+              ]
+            },
+            "agents": null,
+            "ferry_report": null
+          },
+          {
+            "crates": 212,
+            "crate_list": [
+              "unicode_ident (lib)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "shlex (lib)",
+              "version_check (lib)",
+              "cfg_if (lib)",
+              "build-script-build (custom-build)",
+              "memchr (lib)",
+              "build-script-build (custom-build)",
+              "find_msvc_tools (lib)",
+              "build-script-build (custom-build)",
+              "autocfg (lib)",
+              "build-script-build (custom-build)",
+              "equivalent (lib)",
+              "allocator_api2 (lib)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "libc (lib)",
+              "memchr (lib)",
+              "jobserver (lib)",
+              "proc_macro2 (lib)",
+              "build-script-build (custom-build)",
+              "cpufeatures (lib)",
+              "build-script-build (custom-build)",
+              "quote (lib)",
+              "cc (lib)",
+              "foldhash (lib)",
+              "serde_core (lib)",
+              "object (lib)",
+              "pkg_config (lib)",
+              "ar_archive_writer (lib)",
+              "build-script-build (custom-build)",
+              "syn (lib)",
+              "syn (lib)",
+              "errno (lib)",
+              "aho_corasick (lib)",
+              "libm (lib)",
+              "hashbrown (lib)",
+              "build-script-build (custom-build)",
+              "regex_syntax (lib)",
+              "build-script-build (custom-build)",
+              "smallvec (lib)",
+              "scopeguard (lib)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "serde_derive (proc-macro)",
+              "array_init_cursor (lib)",
+              "rand_core (lib)",
+              "build-script-build (custom-build)",
+              "parking_lot_core (lib)",
+              "lock_api (lib)",
+              "build-script-build (custom-build)",
+              "planus (lib)",
+              "serde (lib)",
+              "regex_automata (lib)",
+              "crossbeam_utils (lib)",
+              "signal_hook_registry (lib)",
+              "build-script-build (custom-build)",
+              "futures_core (lib)",
+              "pin_project_lite (lib)",
+              "build-script-build (custom-build)",
+              "getrandom (lib)",
+              "crossbeam_epoch (lib)",
+              "signal_hook (lib)",
+              "futures_sink (lib)",
+              "rustversion (proc-macro)",
+              "regex (lib)",
+              "num_traits (lib)",
+              "polars_arrow_format (lib)",
+              "psm (lib)",
+              "crossbeam_deque (lib)",
+              "parking_lot (lib)",
+              "futures_macro (proc-macro)",
+              "slab (lib)",
+              "zerocopy_derive (proc-macro)",
+              "either (lib)",
+              "futures_io (lib)",
+              "futures_channel (lib)",
+              "simdutf8 (lib)",
+              "futures_task (lib)",
+              "rayon_core (lib)",
+              "stacker (lib)",
+              "bytemuck_derive (proc-macro)",
+              "zerocopy (lib)",
+              "zstd_sys (lib)",
+              "build-script-build (custom-build)",
+              "chacha20 (lib)",
+              "foldhash (lib)",
+              "rayon (lib)",
+              "castaway (lib)",
+              "build-script-build (custom-build)",
+              "sysinfo (lib)",
+              "rand (lib)",
+              "bytemuck (lib)",
+              "mio (lib)",
+              "socket2 (lib)",
+              "static_assertions (lib)",
+              "hashbrown (lib)",
+              "bitflags (lib)",
+              "half (lib)",
+              "itoa (lib)",
+              "ryu (lib)",
+              "raw_cpuid (lib)",
+              "zstd_safe (lib)",
+              "slotmap (lib)",
+              "argminmax (lib)",
+              "zstd (lib)",
+              "compact_str (lib)",
+              "uuid (lib)",
+              "bytes (lib)",
+              "tokio (lib)",
+              "num_derive (proc-macro)",
+              "memmap2 (lib)",
+              "heck (lib)",
+              "build-script-build (custom-build)",
+              "iana_time_zone (lib)",
+              "siphasher (lib)",
+              "chrono (lib)",
+              "indexmap (lib)",
+              "phf_shared (lib)",
+              "futures_executor (lib)",
+              "build-script-build (custom-build)",
+              "strum_macros (proc-macro)",
+              "phf (lib)",
+              "futures_util (lib)",
+              "lz4_sys (lib)",
+              "debug_unsafe (lib)",
+              "futures (lib)",
+              "dyn_clone (lib)",
+              "polars_error (lib)",
+              "lz4 (lib)",
+              "build-script-build (custom-build)",
+              "chrono_tz (lib)",
+              "atoi_simd (lib)",
+              "build-script-build (custom-build)",
+              "typenum (lib)",
+              "strength_reduce (lib)",
+              "streaming_iterator (lib)",
+              "boxcar (lib)",
+              "fast_float2 (lib)",
+              "crossbeam_channel (lib)",
+              "hybrid_array (lib)",
+              "atomic_waker (lib)",
+              "zmij (lib)",
+              "xxhash_rust (lib)",
+              "rand_distr (lib)",
+              "ethnum (lib)",
+              "block_buffer (lib)",
+              "crypto_common (lib)",
+              "build-script-build (custom-build)",
+              "const_oid (lib)",
+              "tinyvec_macros (lib)",
+              "hex (lib)",
+              "unicode_segmentation (lib)",
+              "build-script-build (custom-build)",
+              "crossbeam_queue (lib)",
+              "build-script-build (custom-build)",
+              "tinyvec (lib)",
+              "async_trait (proc-macro)",
+              "digest (lib)",
+              "unicode_reverse (lib)",
+              "recursive_proc_macro_impl (proc-macro)",
+              "unicode_normalization (lib)",
+              "sha2 (lib)",
+              "glob (lib)",
+              "strum (lib)",
+              "polars_config (lib)",
+              "base64 (lib)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "percent_encoding (lib)",
+              "recursive (lib)",
+              "arrayref (lib)",
+              "digest (lib)",
+              "digest_io (lib)",
+              "arrayvec (lib)",
+              "constant_time_eq (lib)",
+              "build-script-build (custom-build)",
+              "now (lib)",
+              "blake3 (lib)",
+              "murmur3 (lib)",
+              "thread_local (lib)",
+              "sqlparser_derive (proc-macro)",
+              "build-script-build (custom-build)",
+              "log (lib)",
+              "sqlparser (lib)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "polars_utils (lib)",
+              "polars_descriptions (lib)",
+              "polars_buffer (lib)",
+              "polars_observer (lib)",
+              "polars_schema (lib)",
+              "polars_async (lib)",
+              "polars_arrow (lib)",
+              "polars_dtype (lib)",
+              "polars_compute (lib)",
+              "polars_row (lib)",
+              "polars_core (lib)",
+              "polars_defs (lib)",
+              "polars_io (lib)",
+              "polars_ooc (lib)",
+              "polars_ops (lib)",
+              "polars_testing (lib)",
+              "polars_time (lib)",
+              "polars_plan (lib)",
+              "polars_expr (lib)",
+              "polars_mem_engine (lib)",
+              "polars_lazy (lib)",
+              "polars_sql (lib)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/polars/wt/kache/target/debug/build/polars-lazy/9cbfb41e4f44acea/out/libpolars_lazy-9cbfb41e4f44acea.rlib",
+              "found": [
+                "FERRY_MARK[kache_edit_on_spawn_r1]"
+              ],
+              "expected": [
+                "FERRY_MARK[kache_edit_on_spawn_r1]"
+              ],
+              "ok": true
+            },
+            "kache": {
+              "events": 252,
+              "by_result": {
+                "local_hit": 246,
+                "miss": 2,
+                "passthrough": 4
+              },
+              "compiled": [
+                {
+                  "crate": "polars_lazy",
+                  "result": "miss",
+                  "reason": null,
+                  "ms": 519
+                },
+                {
+                  "crate": "polars_sql",
+                  "result": "miss",
+                  "reason": null,
+                  "ms": 4652
+                }
+              ]
+            },
+            "agents": null,
+            "ferry_report": null
+          }
+        ],
+        "hyperfine": "hyperfine/kache-edit_on_spawn.json",
+        "load_before": "5.66 5.24 6.74",
+        "load_after": "4.41 4.98 6.62"
+      },
+      "first_edit": {
+        "runs": 2,
+        "times": [
+          6.327159857680001,
+          6.535662339680001
+        ],
+        "median": 6.431411098680001,
+        "mean": 6.431411098680001,
+        "min": 6.327159857680001,
+        "max": 6.535662339680001,
+        "stddev": 0.14743351891642614,
+        "exit_codes": [
+          0,
+          0
+        ],
+        "crates": [
+          2,
+          2
+        ],
+        "checks_ok": [
+          true,
+          true
+        ],
+        "per_run": [
+          {
+            "crates": 2,
+            "crate_list": [
+              "polars_lazy (lib)",
+              "polars_sql (lib)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/polars/wt/kache/target/debug/build/polars-lazy/9cbfb41e4f44acea/out/libpolars_lazy-9cbfb41e4f44acea.rlib",
+              "found": [
+                "FERRY_MARK[kache_first_edit_r0]"
+              ],
+              "expected": [
+                "FERRY_MARK[kache_first_edit_r0]"
+              ],
+              "ok": true
+            },
+            "kache": {
+              "events": 2,
+              "by_result": {
+                "passthrough": 2
+              },
+              "compiled": [
+                {
+                  "crate": "polars_lazy",
+                  "result": "passthrough",
+                  "reason": "adaptive seed",
+                  "ms": 729
+                },
+                {
+                  "crate": "polars_sql",
+                  "result": "passthrough",
+                  "reason": "adaptive seed",
+                  "ms": 5519
+                }
+              ]
+            },
+            "agents": null,
+            "ferry_report": null
+          },
+          {
+            "crates": 2,
+            "crate_list": [
+              "polars_lazy (lib)",
+              "polars_sql (lib)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/polars/wt/kache/target/debug/build/polars-lazy/9cbfb41e4f44acea/out/libpolars_lazy-9cbfb41e4f44acea.rlib",
+              "found": [
+                "FERRY_MARK[kache_first_edit_r1]"
+              ],
+              "expected": [
+                "FERRY_MARK[kache_first_edit_r1]"
+              ],
+              "ok": true
+            },
+            "kache": {
+              "events": 2,
+              "by_result": {
+                "passthrough": 2
+              },
+              "compiled": [
+                {
+                  "crate": "polars_lazy",
+                  "result": "passthrough",
+                  "reason": "adaptive seed",
+                  "ms": 941
+                },
+                {
+                  "crate": "polars_sql",
+                  "result": "passthrough",
+                  "reason": "adaptive seed",
+                  "ms": 5504
+                }
+              ]
+            },
+            "agents": null,
+            "ferry_report": null
+          }
+        ],
+        "hyperfine": "hyperfine/kache-first_edit.json",
+        "load_before": "4.41 4.98 6.62",
+        "load_after": "4.29 4.93 6.56"
+      },
+      "second_edit": {
+        "runs": 2,
+        "times": [
+          1.61699382842,
+          1.62477351642
+        ],
+        "median": 1.62088367242,
+        "mean": 1.62088367242,
+        "min": 1.61699382842,
+        "max": 1.62477351642,
+        "stddev": 0.0055010701403154965,
+        "exit_codes": [
+          0,
+          0
+        ],
+        "crates": [
+          2,
+          2
+        ],
+        "checks_ok": [
+          true,
+          true
+        ],
+        "per_run": [
+          {
+            "crates": 2,
+            "crate_list": [
+              "polars_lazy (lib)",
+              "polars_sql (lib)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/polars/wt/kache/target/debug/build/polars-lazy/9cbfb41e4f44acea/out/libpolars_lazy-9cbfb41e4f44acea.rlib",
+              "found": [
+                "FERRY_MARK[kache_second_edit_r0_a]",
+                "FERRY_MARK[kache_second_edit_r0_b]"
+              ],
+              "expected": [
+                "FERRY_MARK[kache_second_edit_r0_a]",
+                "FERRY_MARK[kache_second_edit_r0_b]"
+              ],
+              "ok": true
+            },
+            "kache": {
+              "events": 2,
+              "by_result": {
+                "passthrough": 2
+              },
+              "compiled": [
+                {
+                  "crate": "polars_lazy",
+                  "result": "passthrough",
+                  "reason": "adaptive active",
+                  "ms": 179
+                },
+                {
+                  "crate": "polars_sql",
+                  "result": "passthrough",
+                  "reason": "adaptive active",
+                  "ms": 1252
+                }
+              ]
+            },
+            "agents": null,
+            "ferry_report": null
+          },
+          {
+            "crates": 2,
+            "crate_list": [
+              "polars_lazy (lib)",
+              "polars_sql (lib)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/polars/wt/kache/target/debug/build/polars-lazy/9cbfb41e4f44acea/out/libpolars_lazy-9cbfb41e4f44acea.rlib",
+              "found": [
+                "FERRY_MARK[kache_second_edit_r1_a]",
+                "FERRY_MARK[kache_second_edit_r1_b]"
+              ],
+              "expected": [
+                "FERRY_MARK[kache_second_edit_r1_a]",
+                "FERRY_MARK[kache_second_edit_r1_b]"
+              ],
+              "ok": true
+            },
+            "kache": {
+              "events": 2,
+              "by_result": {
+                "passthrough": 2
+              },
+              "compiled": [
+                {
+                  "crate": "polars_lazy",
+                  "result": "passthrough",
+                  "reason": "adaptive active",
+                  "ms": 188
+                },
+                {
+                  "crate": "polars_sql",
+                  "result": "passthrough",
+                  "reason": "adaptive active",
+                  "ms": 1248
+                }
+              ]
+            },
+            "agents": null,
+            "ferry_report": null
+          }
+        ],
+        "hyperfine": "hyperfine/kache-second_edit.json",
+        "load_before": "4.29 4.93 6.56",
+        "load_after": "3.43 4.69 6.44"
+      },
+      "spawn_build": {
+        "runs": 2,
+        "times": [
+          2.3253093361999997,
+          2.3047066332
+        ],
+        "median": 2.3150079847,
+        "mean": 2.3150079847,
+        "min": 2.3047066332,
+        "max": 2.3253093361999997,
+        "stddev": 0.01456831100207227,
+        "exit_codes": [
+          0,
+          0
+        ],
+        "crates": [
+          212,
+          212
+        ],
+        "checks_ok": [
+          true,
+          true
+        ],
+        "per_run": [
+          {
+            "crates": 212,
+            "crate_list": [
+              "version_check (lib)",
+              "cfg_if (lib)",
+              "find_msvc_tools (lib)",
+              "build-script-build (custom-build)",
+              "unicode_ident (lib)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "shlex (lib)",
+              "memchr (lib)",
+              "autocfg (lib)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "equivalent (lib)",
+              "memchr (lib)",
+              "libc (lib)",
+              "build-script-build (custom-build)",
+              "allocator_api2 (lib)",
+              "serde_core (lib)",
+              "build-script-build (custom-build)",
+              "jobserver (lib)",
+              "cpufeatures (lib)",
+              "proc_macro2 (lib)",
+              "crossbeam_utils (lib)",
+              "pkg_config (lib)",
+              "quote (lib)",
+              "build-script-build (custom-build)",
+              "num_traits (lib)",
+              "libm (lib)",
+              "foldhash (lib)",
+              "cc (lib)",
+              "errno (lib)",
+              "build-script-build (custom-build)",
+              "aho_corasick (lib)",
+              "array_init_cursor (lib)",
+              "syn (lib)",
+              "crossbeam_epoch (lib)",
+              "ar_archive_writer (lib)",
+              "rand_core (lib)",
+              "syn (lib)",
+              "hashbrown (lib)",
+              "object (lib)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "serde_derive (proc-macro)",
+              "regex_syntax (lib)",
+              "build-script-build (custom-build)",
+              "smallvec (lib)",
+              "scopeguard (lib)",
+              "crossbeam_deque (lib)",
+              "build-script-build (custom-build)",
+              "planus (lib)",
+              "serde (lib)",
+              "parking_lot_core (lib)",
+              "lock_api (lib)",
+              "regex_automata (lib)",
+              "futures_core (lib)",
+              "signal_hook_registry (lib)",
+              "pin_project_lite (lib)",
+              "build-script-build (custom-build)",
+              "futures_sink (lib)",
+              "build-script-build (custom-build)",
+              "regex (lib)",
+              "signal_hook (lib)",
+              "rustversion (proc-macro)",
+              "rayon_core (lib)",
+              "psm (lib)",
+              "parking_lot (lib)",
+              "futures_channel (lib)",
+              "polars_arrow_format (lib)",
+              "getrandom (lib)",
+              "slab (lib)",
+              "futures_io (lib)",
+              "zerocopy_derive (proc-macro)",
+              "bytemuck_derive (proc-macro)",
+              "futures_macro (proc-macro)",
+              "futures_task (lib)",
+              "either (lib)",
+              "build-script-build (custom-build)",
+              "simdutf8 (lib)",
+              "stacker (lib)",
+              "chacha20 (lib)",
+              "zstd_sys (lib)",
+              "build-script-build (custom-build)",
+              "zerocopy (lib)",
+              "rayon (lib)",
+              "foldhash (lib)",
+              "castaway (lib)",
+              "bytemuck (lib)",
+              "socket2 (lib)",
+              "rand (lib)",
+              "futures_util (lib)",
+              "futures_executor (lib)",
+              "sysinfo (lib)",
+              "ryu (lib)",
+              "half (lib)",
+              "itoa (lib)",
+              "mio (lib)",
+              "hashbrown (lib)",
+              "static_assertions (lib)",
+              "indexmap (lib)",
+              "zstd_safe (lib)",
+              "futures (lib)",
+              "zstd (lib)",
+              "argminmax (lib)",
+              "raw_cpuid (lib)",
+              "bitflags (lib)",
+              "slotmap (lib)",
+              "uuid (lib)",
+              "compact_str (lib)",
+              "tokio (lib)",
+              "num_derive (proc-macro)",
+              "memmap2 (lib)",
+              "bytes (lib)",
+              "build-script-build (custom-build)",
+              "heck (lib)",
+              "siphasher (lib)",
+              "polars_error (lib)",
+              "iana_time_zone (lib)",
+              "phf_shared (lib)",
+              "build-script-build (custom-build)",
+              "phf (lib)",
+              "strum_macros (proc-macro)",
+              "dyn_clone (lib)",
+              "debug_unsafe (lib)",
+              "ethnum (lib)",
+              "streaming_iterator (lib)",
+              "chrono (lib)",
+              "atoi_simd (lib)",
+              "lz4_sys (lib)",
+              "strength_reduce (lib)",
+              "build-script-build (custom-build)",
+              "chrono_tz (lib)",
+              "build-script-build (custom-build)",
+              "boxcar (lib)",
+              "lz4 (lib)",
+              "typenum (lib)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "hybrid_array (lib)",
+              "fast_float2 (lib)",
+              "crossbeam_channel (lib)",
+              "atomic_waker (lib)",
+              "build-script-build (custom-build)",
+              "zmij (lib)",
+              "rand_distr (lib)",
+              "polars_config (lib)",
+              "xxhash_rust (lib)",
+              "crypto_common (lib)",
+              "block_buffer (lib)",
+              "tinyvec_macros (lib)",
+              "const_oid (lib)",
+              "hex (lib)",
+              "tinyvec (lib)",
+              "build-script-build (custom-build)",
+              "recursive_proc_macro_impl (proc-macro)",
+              "unicode_segmentation (lib)",
+              "digest (lib)",
+              "async_trait (proc-macro)",
+              "unicode_reverse (lib)",
+              "glob (lib)",
+              "build-script-build (custom-build)",
+              "unicode_normalization (lib)",
+              "percent_encoding (lib)",
+              "sha2 (lib)",
+              "crossbeam_queue (lib)",
+              "build-script-build (custom-build)",
+              "digest (lib)",
+              "strum (lib)",
+              "recursive (lib)",
+              "constant_time_eq (lib)",
+              "base64 (lib)",
+              "arrayvec (lib)",
+              "arrayref (lib)",
+              "digest_io (lib)",
+              "polars_utils (lib)",
+              "build-script-build (custom-build)",
+              "thread_local (lib)",
+              "now (lib)",
+              "blake3 (lib)",
+              "murmur3 (lib)",
+              "sqlparser_derive (proc-macro)",
+              "log (lib)",
+              "sqlparser (lib)",
+              "polars_descriptions (lib)",
+              "polars_async (lib)",
+              "polars_schema (lib)",
+              "build-script-build (custom-build)",
+              "polars_buffer (lib)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "polars_observer (lib)",
+              "polars_arrow (lib)",
+              "polars_dtype (lib)",
+              "polars_compute (lib)",
+              "polars_row (lib)",
+              "polars_core (lib)",
+              "polars_defs (lib)",
+              "polars_io (lib)",
+              "polars_ops (lib)",
+              "polars_ooc (lib)",
+              "polars_plan (lib)",
+              "polars_testing (lib)",
+              "polars_time (lib)",
+              "polars_expr (lib)",
+              "polars_mem_engine (lib)",
+              "polars_lazy (lib)",
+              "polars_sql (lib)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/polars/wt/kache/target/debug/build/polars-lazy/9cbfb41e4f44acea/out/libpolars_lazy-9cbfb41e4f44acea.rlib",
+              "found": [],
+              "expected": [],
+              "ok": true
+            },
+            "kache": {
+              "events": 252,
+              "by_result": {
+                "local_hit": 248,
+                "passthrough": 4
+              },
+              "compiled": []
+            },
+            "agents": null,
+            "ferry_report": null
+          },
+          {
+            "crates": 212,
+            "crate_list": [
+              "unicode_ident (lib)",
+              "shlex (lib)",
+              "build-script-build (custom-build)",
+              "cfg_if (lib)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "version_check (lib)",
+              "build-script-build (custom-build)",
+              "autocfg (lib)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "find_msvc_tools (lib)",
+              "build-script-build (custom-build)",
+              "libc (lib)",
+              "proc_macro2 (lib)",
+              "memchr (lib)",
+              "jobserver (lib)",
+              "build-script-build (custom-build)",
+              "allocator_api2 (lib)",
+              "equivalent (lib)",
+              "crossbeam_utils (lib)",
+              "quote (lib)",
+              "serde_core (lib)",
+              "memchr (lib)",
+              "cpufeatures (lib)",
+              "pkg_config (lib)",
+              "build-script-build (custom-build)",
+              "foldhash (lib)",
+              "syn (lib)",
+              "syn (lib)",
+              "object (lib)",
+              "libm (lib)",
+              "cc (lib)",
+              "build-script-build (custom-build)",
+              "errno (lib)",
+              "aho_corasick (lib)",
+              "ar_archive_writer (lib)",
+              "serde_derive (proc-macro)",
+              "hashbrown (lib)",
+              "num_traits (lib)",
+              "build-script-build (custom-build)",
+              "array_init_cursor (lib)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "crossbeam_epoch (lib)",
+              "rand_core (lib)",
+              "serde (lib)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "smallvec (lib)",
+              "regex_syntax (lib)",
+              "scopeguard (lib)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "lock_api (lib)",
+              "crossbeam_deque (lib)",
+              "signal_hook_registry (lib)",
+              "planus (lib)",
+              "futures_sink (lib)",
+              "regex_automata (lib)",
+              "build-script-build (custom-build)",
+              "futures_core (lib)",
+              "pin_project_lite (lib)",
+              "parking_lot_core (lib)",
+              "build-script-build (custom-build)",
+              "rustversion (proc-macro)",
+              "psm (lib)",
+              "futures_channel (lib)",
+              "signal_hook (lib)",
+              "parking_lot (lib)",
+              "regex (lib)",
+              "polars_arrow_format (lib)",
+              "getrandom (lib)",
+              "rayon_core (lib)",
+              "bytemuck_derive (proc-macro)",
+              "futures_macro (proc-macro)",
+              "futures_io (lib)",
+              "build-script-build (custom-build)",
+              "either (lib)",
+              "slab (lib)",
+              "zerocopy_derive (proc-macro)",
+              "futures_task (lib)",
+              "chacha20 (lib)",
+              "simdutf8 (lib)",
+              "bytemuck (lib)",
+              "zstd_sys (lib)",
+              "rayon (lib)",
+              "build-script-build (custom-build)",
+              "foldhash (lib)",
+              "castaway (lib)",
+              "zerocopy (lib)",
+              "socket2 (lib)",
+              "hashbrown (lib)",
+              "rand (lib)",
+              "half (lib)",
+              "sysinfo (lib)",
+              "futures_util (lib)",
+              "mio (lib)",
+              "zstd_safe (lib)",
+              "ryu (lib)",
+              "futures_executor (lib)",
+              "static_assertions (lib)",
+              "bitflags (lib)",
+              "zstd (lib)",
+              "itoa (lib)",
+              "slotmap (lib)",
+              "futures (lib)",
+              "raw_cpuid (lib)",
+              "compact_str (lib)",
+              "indexmap (lib)",
+              "argminmax (lib)",
+              "bytes (lib)",
+              "uuid (lib)",
+              "num_derive (proc-macro)",
+              "polars_error (lib)",
+              "heck (lib)",
+              "memmap2 (lib)",
+              "stacker (lib)",
+              "tokio (lib)",
+              "siphasher (lib)",
+              "build-script-build (custom-build)",
+              "phf_shared (lib)",
+              "iana_time_zone (lib)",
+              "debug_unsafe (lib)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "strum_macros (proc-macro)",
+              "phf (lib)",
+              "chrono (lib)",
+              "dyn_clone (lib)",
+              "atoi_simd (lib)",
+              "build-script-build (custom-build)",
+              "streaming_iterator (lib)",
+              "strength_reduce (lib)",
+              "lz4_sys (lib)",
+              "ethnum (lib)",
+              "boxcar (lib)",
+              "chrono_tz (lib)",
+              "lz4 (lib)",
+              "fast_float2 (lib)",
+              "crossbeam_channel (lib)",
+              "atomic_waker (lib)",
+              "zmij (lib)",
+              "polars_config (lib)",
+              "rand_distr (lib)",
+              "xxhash_rust (lib)",
+              "build-script-build (custom-build)",
+              "tinyvec_macros (lib)",
+              "const_oid (lib)",
+              "build-script-build (custom-build)",
+              "hex (lib)",
+              "tinyvec (lib)",
+              "build-script-build (custom-build)",
+              "unicode_segmentation (lib)",
+              "build-script-build (custom-build)",
+              "async_trait (proc-macro)",
+              "typenum (lib)",
+              "recursive_proc_macro_impl (proc-macro)",
+              "unicode_reverse (lib)",
+              "unicode_normalization (lib)",
+              "crossbeam_queue (lib)",
+              "hybrid_array (lib)",
+              "strum (lib)",
+              "base64 (lib)",
+              "build-script-build (custom-build)",
+              "glob (lib)",
+              "percent_encoding (lib)",
+              "build-script-build (custom-build)",
+              "crypto_common (lib)",
+              "block_buffer (lib)",
+              "recursive (lib)",
+              "digest (lib)",
+              "arrayref (lib)",
+              "digest (lib)",
+              "constant_time_eq (lib)",
+              "polars_utils (lib)",
+              "sha2 (lib)",
+              "arrayvec (lib)",
+              "digest_io (lib)",
+              "build-script-build (custom-build)",
+              "now (lib)",
+              "thread_local (lib)",
+              "murmur3 (lib)",
+              "sqlparser_derive (proc-macro)",
+              "log (lib)",
+              "blake3 (lib)",
+              "sqlparser (lib)",
+              "polars_descriptions (lib)",
+              "polars_async (lib)",
+              "polars_schema (lib)",
+              "polars_buffer (lib)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "polars_observer (lib)",
+              "polars_arrow (lib)",
+              "polars_dtype (lib)",
+              "polars_compute (lib)",
+              "polars_row (lib)",
+              "polars_core (lib)",
+              "polars_defs (lib)",
+              "polars_io (lib)",
+              "polars_ops (lib)",
+              "polars_plan (lib)",
+              "polars_ooc (lib)",
+              "polars_time (lib)",
+              "polars_testing (lib)",
+              "polars_expr (lib)",
+              "polars_mem_engine (lib)",
+              "polars_lazy (lib)",
+              "polars_sql (lib)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/polars/wt/kache/target/debug/build/polars-lazy/9cbfb41e4f44acea/out/libpolars_lazy-9cbfb41e4f44acea.rlib",
+              "found": [],
+              "expected": [],
+              "ok": true
+            },
+            "kache": {
+              "events": 252,
+              "by_result": {
+                "local_hit": 248,
+                "passthrough": 4
+              },
+              "compiled": []
+            },
+            "agents": null,
+            "ferry_report": null
+          }
+        ],
+        "hyperfine": "hyperfine/kache-spawn_build.json",
+        "load_before": "5.98 5.29 6.76",
+        "load_after": "5.66 5.24 6.74"
+      },
+      "store_disk": {
+        "path": "/home/pat/Projects/ferry/bench/work/polars/kache/cache",
+        "du_bytes": 1878056960,
+        "btrfs_total_bytes": 1871523840,
+        "btrfs_exclusive_bytes": 133230592,
+        "btrfs_shared_bytes": 1000669184
+      },
+      "warm_build": {
+        "note": "single untimed-by-hyperfine build that fills the kache store",
+        "seconds": 62.827006340026855,
+        "crates": 212
+      }
+    },
+    "naive": {
+      "edit_on_spawn": {
+        "runs": 2,
+        "times": [
+          54.947891653039996,
+          54.657127009039996
+        ],
+        "median": 54.80250933104,
+        "mean": 54.80250933104,
+        "min": 54.657127009039996,
+        "max": 54.947891653039996,
+        "stddev": 0.2056016515016919,
+        "exit_codes": [
+          0,
+          0
+        ],
+        "crates": [
+          34,
+          34
+        ],
+        "checks_ok": [
+          true,
+          true
+        ],
+        "per_run": [
+          {
+            "crates": 34,
+            "crate_list": [
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "polars_error (lib)",
+              "build-script-build (custom-build)",
+              "polars_config (lib)",
+              "polars_schema (lib)",
+              "polars_buffer (lib)",
+              "polars_utils (lib)",
+              "polars_observer (lib)",
+              "polars_descriptions (lib)",
+              "polars_async (lib)",
+              "polars_dtype (lib)",
+              "polars_arrow (lib)",
+              "polars_row (lib)",
+              "polars_compute (lib)",
+              "polars_defs (lib)",
+              "polars_io (lib)",
+              "polars_ooc (lib)",
+              "polars_testing (lib)",
+              "polars_core (lib)",
+              "polars_time (lib)",
+              "polars_plan (lib)",
+              "polars_ops (lib)",
+              "polars_mem_engine (lib)",
+              "polars_lazy (lib)",
+              "polars_expr (lib)",
+              "polars_sql (lib)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/polars/wt/naive/target/debug/build/polars-lazy/9cbfb41e4f44acea/out/libpolars_lazy-9cbfb41e4f44acea.rlib",
+              "found": [
+                "FERRY_MARK[naive_edit_on_spawn_r0]"
+              ],
+              "expected": [
+                "FERRY_MARK[naive_edit_on_spawn_r0]"
+              ],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          },
+          {
+            "crates": 34,
+            "crate_list": [
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "polars_error (lib)",
+              "build-script-build (custom-build)",
+              "polars_config (lib)",
+              "polars_descriptions (lib)",
+              "polars_observer (lib)",
+              "polars_schema (lib)",
+              "polars_buffer (lib)",
+              "polars_utils (lib)",
+              "polars_async (lib)",
+              "polars_dtype (lib)",
+              "polars_arrow (lib)",
+              "polars_row (lib)",
+              "polars_compute (lib)",
+              "polars_defs (lib)",
+              "polars_io (lib)",
+              "polars_ooc (lib)",
+              "polars_testing (lib)",
+              "polars_core (lib)",
+              "polars_time (lib)",
+              "polars_plan (lib)",
+              "polars_ops (lib)",
+              "polars_mem_engine (lib)",
+              "polars_lazy (lib)",
+              "polars_expr (lib)",
+              "polars_sql (lib)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/polars/wt/naive/target/debug/build/polars-lazy/9cbfb41e4f44acea/out/libpolars_lazy-9cbfb41e4f44acea.rlib",
+              "found": [
+                "FERRY_MARK[naive_edit_on_spawn_r1]"
+              ],
+              "expected": [
+                "FERRY_MARK[naive_edit_on_spawn_r1]"
+              ],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          }
+        ],
+        "hyperfine": "hyperfine/naive-edit_on_spawn.json",
+        "load_before": "3.83 5.91 7.62",
+        "load_after": "4.52 5.38 7.18"
+      },
+      "first_edit": {
+        "runs": 2,
+        "times": [
+          1.52790400648,
+          1.6173426544799998
+        ],
+        "median": 1.57262333048,
+        "mean": 1.57262333048,
+        "min": 1.52790400648,
+        "max": 1.6173426544799998,
+        "stddev": 0.0632426745009565,
+        "exit_codes": [
+          0,
+          0
+        ],
+        "crates": [
+          2,
+          2
+        ],
+        "checks_ok": [
+          true,
+          true
+        ],
+        "per_run": [
+          {
+            "crates": 2,
+            "crate_list": [
+              "polars_lazy (lib)",
+              "polars_sql (lib)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/polars/wt/naive/target/debug/build/polars-lazy/9cbfb41e4f44acea/out/libpolars_lazy-9cbfb41e4f44acea.rlib",
+              "found": [
+                "FERRY_MARK[naive_first_edit_r0]"
+              ],
+              "expected": [
+                "FERRY_MARK[naive_first_edit_r0]"
+              ],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          },
+          {
+            "crates": 2,
+            "crate_list": [
+              "polars_lazy (lib)",
+              "polars_sql (lib)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/polars/wt/naive/target/debug/build/polars-lazy/9cbfb41e4f44acea/out/libpolars_lazy-9cbfb41e4f44acea.rlib",
+              "found": [
+                "FERRY_MARK[naive_first_edit_r1]"
+              ],
+              "expected": [
+                "FERRY_MARK[naive_first_edit_r1]"
+              ],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          }
+        ],
+        "hyperfine": "hyperfine/naive-first_edit.json",
+        "load_before": "4.52 5.38 7.18",
+        "load_after": "4.53 4.90 6.75"
+      },
+      "spawn_build": {
+        "runs": 2,
+        "times": [
+          55.38954589518,
+          57.81838981918
+        ],
+        "median": 56.603967857179995,
+        "mean": 56.603967857179995,
+        "min": 55.38954589518,
+        "max": 57.81838981918,
+        "stddev": 1.7174520091041425,
+        "exit_codes": [
+          0,
+          0
+        ],
+        "crates": [
+          34,
+          34
+        ],
+        "checks_ok": [
+          true,
+          true
+        ],
+        "per_run": [
+          {
+            "crates": 34,
+            "crate_list": [
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "polars_error (lib)",
+              "build-script-build (custom-build)",
+              "polars_config (lib)",
+              "polars_descriptions (lib)",
+              "polars_observer (lib)",
+              "polars_schema (lib)",
+              "polars_buffer (lib)",
+              "polars_utils (lib)",
+              "polars_async (lib)",
+              "polars_dtype (lib)",
+              "polars_arrow (lib)",
+              "polars_row (lib)",
+              "polars_compute (lib)",
+              "polars_defs (lib)",
+              "polars_io (lib)",
+              "polars_ooc (lib)",
+              "polars_testing (lib)",
+              "polars_core (lib)",
+              "polars_time (lib)",
+              "polars_plan (lib)",
+              "polars_ops (lib)",
+              "polars_mem_engine (lib)",
+              "polars_lazy (lib)",
+              "polars_expr (lib)",
+              "polars_sql (lib)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/polars/wt/naive/target/debug/build/polars-lazy/9cbfb41e4f44acea/out/libpolars_lazy-9cbfb41e4f44acea.rlib",
+              "found": [],
+              "expected": [],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          },
+          {
+            "crates": 34,
+            "crate_list": [
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "polars_error (lib)",
+              "build-script-build (custom-build)",
+              "polars_config (lib)",
+              "polars_schema (lib)",
+              "polars_buffer (lib)",
+              "polars_utils (lib)",
+              "polars_observer (lib)",
+              "polars_descriptions (lib)",
+              "polars_async (lib)",
+              "polars_dtype (lib)",
+              "polars_arrow (lib)",
+              "polars_row (lib)",
+              "polars_compute (lib)",
+              "polars_defs (lib)",
+              "polars_io (lib)",
+              "polars_ooc (lib)",
+              "polars_testing (lib)",
+              "polars_core (lib)",
+              "polars_time (lib)",
+              "polars_plan (lib)",
+              "polars_ops (lib)",
+              "polars_mem_engine (lib)",
+              "polars_lazy (lib)",
+              "polars_expr (lib)",
+              "polars_sql (lib)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/polars/wt/naive/target/debug/build/polars-lazy/9cbfb41e4f44acea/out/libpolars_lazy-9cbfb41e4f44acea.rlib",
+              "found": [],
+              "expected": [],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": null
+          }
+        ],
+        "hyperfine": "hyperfine/naive-spawn_build.json",
+        "load_before": "4.36 6.93 8.14",
+        "load_after": "3.83 5.91 7.62"
+      }
+    },
+    "refresh": {
+      "cold_base": {
+        "runs": 1,
+        "times": [
+          70.65811228838
+        ],
+        "median": 70.65811228838,
+        "mean": 70.65811228838,
+        "min": 70.65811228838,
+        "max": 70.65811228838,
+        "stddev": null,
+        "exit_codes": [
+          0
+        ],
+        "crates": [
+          211
+        ],
+        "checks_ok": [
+          true
+        ],
+        "per_run": [
+          {
+            "crates": 211,
+            "crate_list": [
+              "cfg_if (lib)",
+              "unicode_ident (lib)",
+              "shlex (lib)",
+              "find_msvc_tools (lib)",
+              "build-script-build (custom-build)",
+              "version_check (lib)",
+              "equivalent (lib)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "cpufeatures (lib)",
+              "autocfg (lib)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "allocator_api2 (lib)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "foldhash (lib)",
+              "memchr (lib)",
+              "crossbeam_utils (lib)",
+              "memchr (lib)",
+              "build-script-build (custom-build)",
+              "array_init_cursor (lib)",
+              "scopeguard (lib)",
+              "proc_macro2 (lib)",
+              "quote (lib)",
+              "rand_core (lib)",
+              "pkg_config (lib)",
+              "crossbeam_epoch (lib)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "smallvec (lib)",
+              "libc (lib)",
+              "build-script-build (custom-build)",
+              "hashbrown (lib)",
+              "errno (lib)",
+              "signal_hook_registry (lib)",
+              "jobserver (lib)",
+              "parking_lot_core (lib)",
+              "libm (lib)",
+              "crossbeam_deque (lib)",
+              "pin_project_lite (lib)",
+              "lock_api (lib)",
+              "futures_core (lib)",
+              "futures_sink (lib)",
+              "planus (lib)",
+              "num_traits (lib)",
+              "futures_channel (lib)",
+              "build-script-build (custom-build)",
+              "parking_lot (lib)",
+              "signal_hook (lib)",
+              "futures_io (lib)",
+              "getrandom (lib)",
+              "either (lib)",
+              "slab (lib)",
+              "futures_task (lib)",
+              "simdutf8 (lib)",
+              "rustversion (proc-macro)",
+              "aho_corasick (lib)",
+              "rayon_core (lib)",
+              "build-script-build (custom-build)",
+              "castaway (lib)",
+              "foldhash (lib)",
+              "chacha20 (lib)",
+              "build-script-build (custom-build)",
+              "serde_core (lib)",
+              "bitflags (lib)",
+              "build-script-build (custom-build)",
+              "mio (lib)",
+              "cc (lib)",
+              "socket2 (lib)",
+              "static_assertions (lib)",
+              "ryu (lib)",
+              "itoa (lib)",
+              "build-script-build (custom-build)",
+              "rand (lib)",
+              "build-script-build (custom-build)",
+              "uuid (lib)",
+              "sysinfo (lib)",
+              "slotmap (lib)",
+              "regex_syntax (lib)",
+              "memmap2 (lib)",
+              "siphasher (lib)",
+              "heck (lib)",
+              "build-script-build (custom-build)",
+              "phf_shared (lib)",
+              "iana_time_zone (lib)",
+              "build-script-build (custom-build)",
+              "object (lib)",
+              "syn (lib)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "syn (lib)",
+              "rayon (lib)",
+              "ar_archive_writer (lib)",
+              "raw_cpuid (lib)",
+              "build-script-build (custom-build)",
+              "num_derive (proc-macro)",
+              "psm (lib)",
+              "regex (lib)",
+              "futures_macro (proc-macro)",
+              "chrono (lib)",
+              "stacker (lib)",
+              "phf (lib)",
+              "debug_unsafe (lib)",
+              "build-script-build (custom-build)",
+              "atoi_simd (lib)",
+              "zerocopy_derive (proc-macro)",
+              "dyn_clone (lib)",
+              "hashbrown (lib)",
+              "regex_automata (lib)",
+              "bytemuck_derive (proc-macro)",
+              "strum_macros (proc-macro)",
+              "ethnum (lib)",
+              "streaming_iterator (lib)",
+              "bytemuck (lib)",
+              "build-script-build (custom-build)",
+              "build-script-build (custom-build)",
+              "strength_reduce (lib)",
+              "indexmap (lib)",
+              "boxcar (lib)",
+              "fast_float2 (lib)",
+              "zmij (lib)",
+              "atomic_waker (lib)",
+              "build-script-build (custom-build)",
+              "xxhash_rust (lib)",
+              "crossbeam_channel (lib)",
+              "tinyvec_macros (lib)",
+              "const_oid (lib)",
+              "hex (lib)",
+              "rand_distr (lib)",
+              "build-script-build (custom-build)",
+              "tinyvec (lib)",
+              "serde_derive (proc-macro)",
+              "unicode_segmentation (lib)",
+              "recursive_proc_macro_impl (proc-macro)",
+              "unicode_reverse (lib)",
+              "tokio (lib)",
+              "typenum (lib)",
+              "crossbeam_queue (lib)",
+              "strum (lib)",
+              "percent_encoding (lib)",
+              "unicode_normalization (lib)",
+              "build-script-build (custom-build)",
+              "futures_util (lib)",
+              "serde (lib)",
+              "futures_executor (lib)",
+              "futures (lib)",
+              "base64 (lib)",
+              "glob (lib)",
+              "async_trait (proc-macro)",
+              "recursive (lib)",
+              "hybrid_array (lib)",
+              "constant_time_eq (lib)",
+              "block_buffer (lib)",
+              "arrayvec (lib)",
+              "arrayref (lib)",
+              "now (lib)",
+              "compact_str (lib)",
+              "build-script-build (custom-build)",
+              "thread_local (lib)",
+              "murmur3 (lib)",
+              "log (lib)",
+              "build-script-build (custom-build)",
+              "sqlparser_derive (proc-macro)",
+              "blake3 (lib)",
+              "digest (lib)",
+              "crypto_common (lib)",
+              "digest (lib)",
+              "digest_io (lib)",
+              "sha2 (lib)",
+              "zerocopy (lib)",
+              "build-script-build (custom-build)",
+              "polars_descriptions (lib)",
+              "chrono_tz (lib)",
+              "half (lib)",
+              "polars_arrow_format (lib)",
+              "polars_observer (lib)",
+              "polars_error (lib)",
+              "polars_config (lib)",
+              "zstd_sys (lib)",
+              "zstd_safe (lib)",
+              "zstd (lib)",
+              "polars_schema (lib)",
+              "polars_buffer (lib)",
+              "polars_utils (lib)",
+              "polars_async (lib)",
+              "argminmax (lib)",
+              "lz4_sys (lib)",
+              "lz4 (lib)",
+              "sqlparser (lib)",
+              "polars_dtype (lib)",
+              "polars_arrow (lib)",
+              "polars_row (lib)",
+              "polars_compute (lib)",
+              "polars_defs (lib)",
+              "polars_io (lib)",
+              "polars_ooc (lib)",
+              "polars_testing (lib)",
+              "polars_core (lib)",
+              "polars_time (lib)",
+              "polars_plan (lib)",
+              "polars_ops (lib)",
+              "polars_mem_engine (lib)",
+              "polars_lazy (lib)",
+              "polars_expr (lib)",
+              "polars_sql (lib)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/polars/ferry/home/repo-dbab723ff42fe45c/bases/9951f491cb6526a12dc1f7143dfb19cd687d7e3a-9b64aff6/target/debug/build/polars-lazy/9cbfb41e4f44acea/out/libpolars_lazy-9cbfb41e4f44acea.rlib",
+              "found": [
+                "FERRY_MARK[refresh_commit_r0]"
+              ],
+              "expected": [
+                "FERRY_MARK[refresh_commit_r0]"
+              ],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": {
+              "base": {
+                "id": "9951f491cb6526a12dc1f7143dfb19cd687d7e3a-9b64aff6",
+                "commit": "9951f491cb6526a12dc1f7143dfb19cd687d7e3a",
+                "created_unix": 1793081081,
+                "build_secs": 70.588084007,
+                "freshness": "checksum",
+                "isolation": "namespace",
+                "toolchain": {
+                  "release": "1.100.0-nightly",
+                  "channel": "nightly",
+                  "host": "x86_64-unknown-linux-gnu",
+                  "rustc_verbose": "rustc 1.100.0-nightly (0dfb098f3 2026-08-31)\nbinary: rustc\ncommit-hash: 0dfb098f3aeecbe38c2566ca090193280e7349e7\ncommit-date: 2026-08-31\nhost: x86_64-unknown-linux-gnu\nrelease: 1.100.0-nightly\nLLVM version: 23.1.0",
+                  "cargo_version": "cargo 1.100.0-nightly (e8cb624d5 2026-08-22)"
+                },
+                "commands": [
+                  "cargo build -p polars-sql --message-format=json"
+                ],
+                "ferry_version": "0.1.2",
+                "dirtied": [],
+                "remap_paths": false,
+                "unit_inputs": "unseedable-9951f491cb6526a12dc1f7143dfb19cd687d7e3a",
+                "seeded_from": null,
+                "command_secs": [
+                  70.117363812
+                ],
+                "incomplete": [],
+                "observed": true,
+                "pruned": null
+              },
+              "reused": false,
+              "warnings": []
+            }
+          }
+        ],
+        "hyperfine": "hyperfine/refresh-cold_base.json",
+        "load_before": "4.21 5.11 6.38",
+        "load_after": "4.37 5.01 6.25"
+      },
+      "commits": {
+        "previous": "d0a98d9c509ddad852337db66261d2d16f1a419e",
+        "refreshed": "9951f491cb6526a12dc1f7143dfb19cd687d7e3a"
+      },
+      "seeded_base": {
+        "runs": 2,
+        "times": [
+          2.89222214392,
+          2.8880524479200003
+        ],
+        "median": 2.8901372959200002,
+        "mean": 2.8901372959200002,
+        "min": 2.8880524479200003,
+        "max": 2.89222214392,
+        "stddev": 0.0029484203170863834,
+        "exit_codes": [
+          0,
+          0
+        ],
+        "crates": [
+          2,
+          2
+        ],
+        "checks_ok": [
+          true,
+          true
+        ],
+        "per_run": [
+          {
+            "crates": 2,
+            "crate_list": [
+              "polars_lazy (lib)",
+              "polars_sql (lib)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/polars/ferry/home/repo-dbab723ff42fe45c/bases/9951f491cb6526a12dc1f7143dfb19cd687d7e3a-9b64aff6/target/debug/build/polars-lazy/9cbfb41e4f44acea/out/libpolars_lazy-9cbfb41e4f44acea.rlib",
+              "found": [
+                "FERRY_MARK[refresh_commit_r0]"
+              ],
+              "expected": [
+                "FERRY_MARK[refresh_commit_r0]"
+              ],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": {
+              "base": {
+                "id": "9951f491cb6526a12dc1f7143dfb19cd687d7e3a-9b64aff6",
+                "commit": "9951f491cb6526a12dc1f7143dfb19cd687d7e3a",
+                "created_unix": 1793081006,
+                "build_secs": 2.827582683,
+                "freshness": "checksum",
+                "isolation": "namespace",
+                "toolchain": {
+                  "release": "1.100.0-nightly",
+                  "channel": "nightly",
+                  "host": "x86_64-unknown-linux-gnu",
+                  "rustc_verbose": "rustc 1.100.0-nightly (0dfb098f3 2026-08-31)\nbinary: rustc\ncommit-hash: 0dfb098f3aeecbe38c2566ca090193280e7349e7\ncommit-date: 2026-08-31\nhost: x86_64-unknown-linux-gnu\nrelease: 1.100.0-nightly\nLLVM version: 23.1.0",
+                  "cargo_version": "cargo 1.100.0-nightly (e8cb624d5 2026-08-22)"
+                },
+                "commands": [
+                  "cargo build -p polars-sql --message-format=json"
+                ],
+                "ferry_version": "0.1.2",
+                "dirtied": [],
+                "remap_paths": false,
+                "unit_inputs": "unseedable-9951f491cb6526a12dc1f7143dfb19cd687d7e3a",
+                "seeded_from": "d0a98d9c509ddad852337db66261d2d16f1a419e-9b64aff6",
+                "command_secs": [
+                  1.991166886
+                ],
+                "incomplete": [],
+                "observed": true,
+                "pruned": {
+                  "units": 0,
+                  "bytes": 0
+                }
+              },
+              "reused": false,
+              "warnings": []
+            }
+          },
+          {
+            "crates": 2,
+            "crate_list": [
+              "polars_lazy (lib)",
+              "polars_sql (lib)"
+            ],
+            "verify": {
+              "rlib": "/home/pat/Projects/ferry/bench/work/polars/ferry/home/repo-dbab723ff42fe45c/bases/9951f491cb6526a12dc1f7143dfb19cd687d7e3a-9b64aff6/target/debug/build/polars-lazy/9cbfb41e4f44acea/out/libpolars_lazy-9cbfb41e4f44acea.rlib",
+              "found": [
+                "FERRY_MARK[refresh_commit_r0]"
+              ],
+              "expected": [
+                "FERRY_MARK[refresh_commit_r0]"
+              ],
+              "ok": true
+            },
+            "kache": null,
+            "agents": null,
+            "ferry_report": {
+              "base": {
+                "id": "9951f491cb6526a12dc1f7143dfb19cd687d7e3a-9b64aff6",
+                "commit": "9951f491cb6526a12dc1f7143dfb19cd687d7e3a",
+                "created_unix": 1793081009,
+                "build_secs": 2.823162628,
+                "freshness": "checksum",
+                "isolation": "namespace",
+                "toolchain": {
+                  "release": "1.100.0-nightly",
+                  "channel": "nightly",
+                  "host": "x86_64-unknown-linux-gnu",
+                  "rustc_verbose": "rustc 1.100.0-nightly (0dfb098f3 2026-08-31)\nbinary: rustc\ncommit-hash: 0dfb098f3aeecbe38c2566ca090193280e7349e7\ncommit-date: 2026-08-31\nhost: x86_64-unknown-linux-gnu\nrelease: 1.100.0-nightly\nLLVM version: 23.1.0",
+                  "cargo_version": "cargo 1.100.0-nightly (e8cb624d5 2026-08-22)"
+                },
+                "commands": [
+                  "cargo build -p polars-sql --message-format=json"
+                ],
+                "ferry_version": "0.1.2",
+                "dirtied": [],
+                "remap_paths": false,
+                "unit_inputs": "unseedable-9951f491cb6526a12dc1f7143dfb19cd687d7e3a",
+                "seeded_from": "d0a98d9c509ddad852337db66261d2d16f1a419e-9b64aff6",
+                "command_secs": [
+                  1.981713363
+                ],
+                "incomplete": [],
+                "observed": true,
+                "pruned": {
+                  "units": 0,
+                  "bytes": 0
+                }
+              },
+              "reused": false,
+              "warnings": []
+            }
+          }
+        ],
+        "hyperfine": "hyperfine/refresh-seeded_base.json",
+        "load_before": "4.80 5.25 6.44",
+        "load_after": "4.21 5.11 6.38"
+      }
+    }
+  }
+}

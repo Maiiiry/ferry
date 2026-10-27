@@ -1,0 +1,23 @@
+{
+  "results": [
+    {
+      "command": "cold/first_edit",
+      "mean": 1.53650224394,
+      "stddev": null,
+      "median": 1.53650224394,
+      "user": 0.96006224,
+      "system": 0.70458974,
+      "min": 1.53650224394,
+      "max": 1.53650224394,
+      "times": [
+        1.53650224394
+      ],
+      "memory_usage_byte": [
+        551653376
+      ],
+      "exit_codes": [
+        0
+      ]
+    }
+  ]
+}
