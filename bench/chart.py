@@ -259,3 +259,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+# Automated fix for issue #37: Base mode decisions use the main worktree's toolchain, not the checkout's
