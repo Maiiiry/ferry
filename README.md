@@ -22,6 +22,9 @@
   <img src="docs/src/demo.gif" alt="rust-analyzer: a new git worktree builds cold in about a minute (played 10x faster); a Ferry agent spawns in under a second, builds in 0.3 s and rebuilds an edit incrementally in about 7 s" width="760">
 </p>
 
+> **Are you an AI agent?** Read [AGENTS.md](AGENTS.md): how to install Ferry
+> and set it up for your user.
+
 ## Why
 
 Running several coding agents on one Rust repository means one git worktree
