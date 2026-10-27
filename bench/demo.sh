@@ -2,11 +2,12 @@
 # Records docs/src/demo.gif: a new git worktree building ripgrep cold, next to
 # a Ferry agent forked from a warm base. Needs vhs (with ttyd, ffmpeg and a
 # Chromium), git, cargo and a ferry binary (default: this checkout's release
-# build). The work dir defaults to target/demo.
+# build). The work dir defaults to /tmp/ferry-demo.
 set -euo pipefail
 
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-work=${DEMO_WORK:-$root/target/demo}
+# Short paths keep the recorded output readable.
+work=${DEMO_WORK:-/tmp/ferry-demo}
 ferry=${FERRY:-$root/target/release/ferry}
 rev=6892bc2b7efe5909cbbeec8f757ed2c4c76b1d30
 

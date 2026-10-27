@@ -229,7 +229,7 @@ depend on the runner label (`env.json` records them for each run), so:
 
 `bench/demo.sh` records `docs/src/demo.gif`, the README's demo, with
 [vhs](https://github.com/charmbracelet/vhs) from `bench/demo.tape`. It
-clones ripgrep at `6892bc2` into `target/demo`, builds a base there, then
+clones ripgrep at `6892bc2` into `/tmp/ferry-demo`, builds a base there, then
 records a new git worktree's cold build next to a Ferry agent's spawn,
 first build and first edit. The timings in the GIF are measured live, so
 they vary by machine; the benchmark results above are the numbers to cite.

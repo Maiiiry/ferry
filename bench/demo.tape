@@ -2,24 +2,24 @@
 Output docs/src/demo.gif
 
 Set Shell "bash"
-Set FontSize 15
-Set Width 1400
-Set Height 820
+Set FontSize 20
+Set Width 1000
+Set Height 640
 Set Padding 18
 Set Theme "Catppuccin Mocha"
 Set TypingSpeed 35ms
 Set WaitPattern /\$\s*$/
 Set WaitTimeout 120s
 
-# `time` prints and records each step's wall time; `summary` lists them.
+# `time` prints and records each step's wall time; `summary` compares them.
 Hide
 Type `cd "$DEMO_WORK/ripgrep" && export PS1='$ ' && TIMES=()`
 Enter
 Wait
-Type `t() { local s=$EPOCHREALTIME rc; "$@"; rc=$?; TIMES+=("$(awk "BEGIN { printf \"%.2fs\", $EPOCHREALTIME - $s }")"); echo "⏱  ${TIMES[-1]}"; return $rc; }; alias time='t '`
+Type `t() { local s=$EPOCHREALTIME rc; "$@"; rc=$?; TIMES+=("$(awk "BEGIN { printf \"%.2f\", $EPOCHREALTIME - $s }")"); echo "⏱  ${TIMES[-1]}s"; return $rc; }; alias time='t '`
 Enter
 Wait
-Type `summary() { echo; printf '  %-34s %s\n' "new git worktree, first build" "${TIMES[0]}" "ferry spawn" "${TIMES[1]}" "ferry agent, first build" "${TIMES[2]}" "ferry agent, first edit + build" "${TIMES[3]}"; }; clear`
+Type `summary() { clear; printf '\n  \e[1mripgrep, first build in a new worktree\e[0m\n\n    git worktree     %6.2fs\n    \e[1;32mferry agent      %6.2fs   %s× faster\e[0m\n\n  ferry spawn        %6.2fs\n  first edit         %6.2fs   incremental\n\n' "${TIMES[0]}" "${TIMES[2]}" "$(awk "BEGIN { printf \"%.0f\", ${TIMES[0]} / ${TIMES[2]} }")" "${TIMES[1]}" "${TIMES[3]}"; }; clear`
 Enter
 Wait
 Show
